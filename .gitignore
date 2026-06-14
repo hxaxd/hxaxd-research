@@ -209,6 +209,11 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Local research data and independent experiment repositories
+workspace/*
+!workspace/.gitkeep
+/labs/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
