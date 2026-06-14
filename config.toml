@@ -1,0 +1,7 @@
+[parse]
+device = "gpu"
+
+[translate]
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-v4-flash"
+api_key_env = "DEEPSEEK_API_KEY"
