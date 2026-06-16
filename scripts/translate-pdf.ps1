@@ -178,10 +178,7 @@ Test-Pdf2zhVersion -Executable $executable
 
 $apiKey = Resolve-PersistentEnvironmentValue -Name "PDF2ZH_DEEPSEEK_API_KEY"
 if (-not $apiKey) {
-    $apiKey = Resolve-PersistentEnvironmentValue -Name "DEEPSEEK_API_KEY"
-}
-if (-not $apiKey) {
-    throw "No DeepSeek API key was found in PDF2ZH_DEEPSEEK_API_KEY or DEEPSEEK_API_KEY."
+    throw "No DeepSeek API key was found in PDF2ZH_DEEPSEEK_API_KEY."
 }
 
 $temporaryDirectory = Join-Path $outputDirectory ".pdf2zh-$([guid]::NewGuid().ToString('N'))"
