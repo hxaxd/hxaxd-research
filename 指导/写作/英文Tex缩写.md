@@ -15,7 +15,7 @@
 
 - 将冗长从句压缩为短语
 - 在更简洁时把被动语态改为主动语态
-- 删除 `in order to` 等无信息填充词
+- 删除`in order to` 等无信息填充词
 - 合并重复主语, 已在近邻句明确的重复背景和同义强调
 
 ### 保护项
@@ -42,7 +42,7 @@
 
 > We use the module to reduce redundant context.
 
-不能删除 `under the same token budget` 这类公平性限定
+不能删除`under the same token budget` 这类公平性限定
 
 ## 4. 产出
 

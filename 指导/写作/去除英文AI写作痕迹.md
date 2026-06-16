@@ -12,11 +12,11 @@
 
 ### 识别重点
 
-- 无信息的强调, 如 `remarkably`, `pivotal`, `groundbreaking`
-- 机械过渡, 如 `First and foremost`, `It is worth noting that`
+- 无信息的强调, 如`remarkably`,`pivotal`,`groundbreaking`
+- 机械过渡, 如`First and foremost`,`It is worth noting that`
 - 连续三点式罗列, 对称句和每段相同节奏
 - 抽象名词堆叠, 具体动作和主语不清
-- 用 `leverage`, `delve`, `underscore` 等华丽词替代更准确常用词
+- 用`leverage`,`delve`,`underscore` 等华丽词替代更准确常用词
 - 破折号, 冒号和短句被过度用于制造节奏
 
 ### 修改原则
@@ -24,8 +24,8 @@
 - 先恢复信息主次和真实逻辑, 再替换词汇
 - 优先使用朴实, 精准, 领域常见的表达
 - 合并重复强调, 保留真正的限定和转折
-- 不把 `because`, `however`, `therefore` 等常用关系词当作禁词, 只删除没有真实
-  逻辑关系, 重复出现或替代了实质论证的机械过渡
+- 不把`because`,`however`,`therefore` 等常用关系词当作禁词, 只删除没有真实
+ 逻辑关系, 重复出现或替代了实质论证的机械过渡
 - 段落结构本来合理时只做局部修改
 - 保留专业术语, Tex 命令, 公式, 引用和必要结构
 - 原文自然时不修改, 并明确给出通过结论
