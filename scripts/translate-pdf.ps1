@@ -247,12 +247,8 @@ try {
 
     $mono = Get-Item -LiteralPath $monoTarget
     $dual = Get-Item -LiteralPath $dualTarget
-    $monoHash = (Get-FileHash -LiteralPath $monoTarget -Algorithm SHA256).Hash.ToLowerInvariant()
-    $dualHash = (Get-FileHash -LiteralPath $dualTarget -Algorithm SHA256).Hash.ToLowerInvariant()
-
-    Write-Output "pdf2zh-next=$ExpectedVersion"
-    Write-Output "mono=$($mono.FullName)`tbytes=$($mono.Length)`tsha256=$monoHash"
-    Write-Output "dual=$($dual.FullName)`tbytes=$($dual.Length)`tsha256=$dualHash"
+    Write-Output "mono=$($mono.FullName)`tbytes=$($mono.Length)"
+    Write-Output "dual=$($dual.FullName)`tbytes=$($dual.Length)"
 }
 finally {
     [Environment]::SetEnvironmentVariable(

@@ -59,6 +59,12 @@ foreach ($file in $mdFiles) {
             $seg = $seg -replace '（', ' ('
             $seg = $seg -replace '）', ') '
 
+            # Chinese double quotation marks → English double quotes
+            $leftQuote = [char]0x201C
+            $rightQuote = [char]0x201D
+            $seg = $seg -replace $leftQuote, ' "'
+            $seg = $seg -replace $rightQuote, '" '
+
             # Chinese period → remove
             $seg = $seg -replace '。', ''
 
@@ -66,10 +72,9 @@ foreach ($file in $mdFiles) {
             $seg = $seg -replace '？', '?'
             $seg = $seg -replace '！', '! '
 
-            # Clean up: space before comma, multiple spaces, trailing space
+            # Clean up: space before comma, multiple spaces
             $seg = $seg -replace ' ,', ','
             $seg = $seg -replace ' {2,}', ' '
-            $seg = $seg -replace ' $', ''
 
             $segments[$s] = $seg
         }
