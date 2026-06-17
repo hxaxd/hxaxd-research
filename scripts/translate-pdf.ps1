@@ -358,8 +358,9 @@ $results = $tasks | ForEach-Object -Parallel {
     }
 } -ThrottleLimit $Parallel
 
-$failed  = @($results | Where-Object { -not $_.Ok })
-$success = @($results | Where-Object { $_.Ok })
+$resultObjects = @($results | Where-Object { $_ -is [pscustomobject] -and $_.PSObject.Properties.Name -contains 'Ok' })
+$failed  = @($resultObjects | Where-Object { -not $_.Ok })
+$success = @($resultObjects | Where-Object { $_.Ok })
 
 $elapsed = [DateTime]::UtcNow - $started
 Write-Output ""
