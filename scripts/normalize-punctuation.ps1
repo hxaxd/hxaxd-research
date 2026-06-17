@@ -65,8 +65,9 @@ foreach ($file in $mdFiles) {
             $seg = $seg -replace $leftQuote, ' "'
             $seg = $seg -replace $rightQuote, '" '
 
-            # Chinese period → remove
-            $seg = $seg -replace '。', ''
+            # Chinese period → ", ", then strip trailing ", " from end-of-line periods
+            $seg = $seg -replace '。', ', '
+            $seg = $seg -replace ', $', ''
 
             # Chinese question/exclamation → English
             $seg = $seg -replace '？', '?'
