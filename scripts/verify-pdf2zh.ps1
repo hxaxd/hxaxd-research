@@ -24,7 +24,7 @@ function Get-Pdf2zhExecutable {
 $executable = Get-Pdf2zhExecutable
 if (-not $executable) {
     Write-Output "NOT FOUND: pdf2zh_next is not installed."
-    Write-Output "Run .\scripts\install-pdf2zh.ps1 or see 指导/学习/论文处理工具配置.md"
+    Write-Output "Run .\scripts\install-pdf2zh.ps1 or see 指导/学习/PDF 翻译脚本配置.md"
     exit 1
 }
 
@@ -40,7 +40,8 @@ if ($versionMatch.Success) {
     if ($version -eq $ExpectedVersion) {
         Write-Output "OK: pdf2zh_next $ExpectedVersion at $executable"
         exit 0
-    } else {
+    }
+    else {
         Write-Output "WRONG VERSION: pdf2zh_next $version (expected $ExpectedVersion) at $executable"
         Write-Output "Run .\scripts\install-pdf2zh.ps1 to install the correct version."
         exit 1
