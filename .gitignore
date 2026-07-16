@@ -5,6 +5,7 @@ env/
 __pycache__/
 *.py[codz]
 .cache/
+.tools/
 .pytest_cache/
 .ruff_cache/
 
