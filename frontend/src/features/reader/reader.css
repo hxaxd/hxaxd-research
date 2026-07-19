@@ -1,0 +1,137 @@
+.upload-card {
+  display: flex;
+  width: min(560px, calc(100% - 64px));
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  margin: auto;
+  border: 1px dashed #354252;
+  border-radius: 14px;
+  padding: 30px;
+  background: var(--surface);
+}
+
+.upload-card h3 {
+  margin: 6px 0;
+  font-size: 21px;
+}
+
+.upload-card p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.primary-button {
+  min-width: 110px;
+  padding: 10px 16px;
+}
+
+.upload-inline {
+  display: contents;
+}
+
+.reader-toolbar {
+  display: flex;
+  min-height: 49px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #11161e;
+}
+
+.toolbar-group {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #0d1218;
+}
+
+.segmented {
+  min-width: 47px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.segmented.active {
+  background: var(--surface-hover);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.pdf-viewer {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: #161b22;
+}
+
+.pdf-page-stage {
+  display: flex;
+  min-width: max-content;
+  justify-content: center;
+  padding: 28px 42px 80px;
+}
+
+.pdf-page-stage canvas {
+  display: block;
+  background: white;
+  box-shadow: 0 10px 42px rgb(0 0 0 / 45%);
+}
+
+.pdf-viewer--dark .pdf-page-stage canvas {
+  filter: invert(0.9) hue-rotate(180deg) brightness(0.88) contrast(0.92);
+}
+
+.pdf-viewer--sepia .pdf-page-stage canvas {
+  filter: sepia(0.18) brightness(0.93) contrast(0.96);
+}
+
+.pdf-page-controls {
+  position: sticky;
+  z-index: 3;
+  bottom: 16px;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 8px;
+  margin: -58px auto 16px;
+  border: 1px solid #3a4552;
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgb(15 20 27 / 94%);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 40%);
+  color: var(--text-muted);
+  backdrop-filter: blur(12px);
+}
+
+.pdf-page-controls button {
+  min-width: 30px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pdf-page-controls button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.control-separator {
+  width: 1px;
+  height: 17px;
+  background: var(--border);
+}
+

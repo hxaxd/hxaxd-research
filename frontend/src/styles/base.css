@@ -1,0 +1,108 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 880px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.16em;
+}
+
+.icon-button,
+.tree-add,
+.toolbar-button,
+.primary-toolbar-button,
+.primary-button,
+.segmented {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.icon-button:hover,
+.tree-add:hover,
+.toolbar-button:hover,
+.segmented:hover:not(:disabled) {
+  border-color: #3b4858;
+  background: var(--surface-hover);
+}
+
+.toolbar-button,
+.primary-toolbar-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
+  white-space: nowrap;
+}
+
+.primary-button,
+.primary-toolbar-button {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #07130e;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.inline-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
