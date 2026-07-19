@@ -18,12 +18,6 @@ backend/.venv/
 .env
 .env.*
 
-# Local research data and independent experiment repositories
-workspace/*
-!workspace/.gitkeep
-/labs/
-tmp/*
-
 # Editor and operating-system files
 .vscode/
 .idea/
