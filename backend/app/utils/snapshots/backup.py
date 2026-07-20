@@ -49,11 +49,13 @@ class SnapshotWriter:
             self._backup_database(database_copy)
             validate_database(database_copy)
             files = [self._stage_database(database_copy)]
-            files.extend(self._stage_artifacts(database_copy, stage))
+            files.extend(self._stage_resources(database_copy, stage))
             manifest = SnapshotManifest(
                 format=SNAPSHOT_FORMAT,
                 created_at=utc_now().isoformat(),
-                schema_sha256=sha256_file(self.schema_path),
+                schema_version=self._schema_version(database_copy),
+                contract_version="2.0",
+                schema_sha256=None,
                 files=tuple(sorted(files, key=lambda item: item.path)),
             )
             (stage / MANIFEST_PATH).write_text(manifest.to_json(), encoding="utf-8")
@@ -85,7 +87,18 @@ class SnapshotWriter:
             size=database_copy.stat().st_size,
         )
 
-    def _stage_artifacts(self, database_copy: Path, stage: Path) -> list[SnapshotFile]:
+    @staticmethod
+    def _schema_version(database_copy: Path) -> int:
+        connection = sqlite3.connect(database_copy)
+        try:
+            row = connection.execute(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
+            ).fetchone()
+        finally:
+            connection.close()
+        return int(row[0])
+
+    def _stage_resources(self, database_copy: Path, stage: Path) -> list[SnapshotFile]:
         connection = sqlite3.connect(database_copy)
         try:
             active_jobs = connection.execute(
@@ -94,7 +107,7 @@ class SnapshotWriter:
             if active_jobs:
                 raise SnapshotError("存在尚未结束的翻译任务，请等待任务结束后再备份")
             rows = connection.execute(
-                "SELECT relative_path, sha256, size FROM artifacts ORDER BY relative_path"
+                "SELECT relative_path, sha256, size FROM resources ORDER BY relative_path"
             ).fetchall()
         finally:
             connection.close()
@@ -112,7 +125,5 @@ class SnapshotWriter:
             actual_sha256 = sha256_file(target)
             if actual_size != expected_size or actual_sha256 != expected_sha256:
                 raise SnapshotError(f"文件与数据库记录不一致，快照已取消: {relative_path}")
-            files.append(
-                SnapshotFile(path=archive_path, sha256=actual_sha256, size=actual_size)
-            )
+            files.append(SnapshotFile(path=archive_path, sha256=actual_sha256, size=actual_size))
         return files

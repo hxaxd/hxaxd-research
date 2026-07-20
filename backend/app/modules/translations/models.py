@@ -5,12 +5,25 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from app.modules.resources.models import Resource
+
 
 class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class JobOperation(StrEnum):
+    COMPILE = "compile"
+    TRANSLATE = "translate"
+
+
+class JobRequest(BaseModel):
+    operation: JobOperation
+    input_resource_id: str
+    options: dict[str, int | str | bool] = Field(default_factory=dict)
 
 
 class TranslationRequest(BaseModel):
@@ -21,11 +34,17 @@ class TranslationRequest(BaseModel):
 class Job(BaseModel):
     id: str
     paper_id: str
-    job_type: str
+    operation: JobOperation
+    input_resource_id: str | None
     status: JobStatus
     progress: int
+    options: dict
+    tool: str | None
+    tool_version: str | None
     message: str
+    log_excerpt: str | None
     error_summary: str | None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    outputs: list[Resource] = Field(default_factory=list)

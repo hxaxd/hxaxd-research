@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from app.modules.artifacts.models import ArtifactKind
+from app.modules.resources.models import ResourceRepresentation
 from app.modules.translations.backend import Pdf2zhBackend
 from tests.sample_data import PDF
 
@@ -42,8 +42,8 @@ def test_translation_runs_pdf2zh_directly_and_commits_outputs(
     assert observed_command[observed_command.index("--qps") + 1] == "4"
     assert observed_command[observed_command.index("--pool-max-workers") + 1] == "3"
     assert result == {
-        ArtifactKind.CHINESE: output_directory / "中文译文.pdf",
-        ArtifactKind.BILINGUAL: output_directory / "双语对照.pdf",
+        ResourceRepresentation.TRANSLATED: output_directory / "中文译文.pdf",
+        ResourceRepresentation.BILINGUAL: output_directory / "双语对照.pdf",
     }
-    assert result[ArtifactKind.CHINESE].read_bytes().endswith(b" mono")
-    assert result[ArtifactKind.BILINGUAL].read_bytes().endswith(b" dual")
+    assert result[ResourceRepresentation.TRANSLATED].read_bytes().endswith(b" mono")
+    assert result[ResourceRepresentation.BILINGUAL].read_bytes().endswith(b" dual")

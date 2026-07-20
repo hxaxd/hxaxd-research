@@ -21,3 +21,8 @@ class Project(ProjectCreate):
 
 class ProjectSummary(Project):
     paper_count: int
+
+
+class ProjectPatch(BaseModel):
+    name: NonEmptyText | None = None
+    description: str | None = None

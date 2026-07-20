@@ -92,7 +92,7 @@ class SnapshotService:
             ):
                 raise ResourceConflictError("已有备份或恢复任务正在执行")
         if self.jobs.has_active_jobs():
-            raise ResourceConflictError("存在尚未结束的翻译任务，不能备份或恢复")
+            raise ResourceConflictError("存在尚未结束的资源转换任务，不能备份或恢复")
 
     def _start(
         self,
@@ -133,7 +133,7 @@ class SnapshotService:
     def _run_restore(self, operation: SnapshotOperation, path: Path) -> None:
         try:
             if self.jobs.has_active_jobs():
-                raise SnapshotError("存在尚未结束的翻译任务")
+                raise SnapshotError("存在尚未结束的资源转换任务")
             result = SnapshotRestorer(SCHEMA_PATH).restore(
                 path,
                 self.settings.data_dir,
@@ -157,9 +157,7 @@ class SnapshotService:
             )
 
     def _fail(self, operation: SnapshotOperation, error: Exception) -> None:
-        message = (
-            "备份失败" if operation.kind is SnapshotOperationKind.BACKUP else "恢复失败"
-        )
+        message = "备份失败" if operation.kind is SnapshotOperationKind.BACKUP else "恢复失败"
         with self._lock:
             self._operation = operation.model_copy(
                 update={

@@ -1,28 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import type { Artifact } from "../../shared/api/contracts";
-import { artifactsByKind, firstAvailableKind } from "./artifactVariants";
+import type { Resource, ResourceRepresentation } from "../../shared/api/contracts";
+import { firstAvailableRepresentation, pdfByRepresentation } from "./artifactVariants";
 
-function artifact(kind: Artifact["kind"]): Artifact {
+function resource(representation: ResourceRepresentation, preferred = true): Resource {
   return {
-    id: kind,
-    paper_id: "paper",
-    kind,
-    filename: `${kind}.pdf`,
-    relative_path: `${kind}.pdf`,
-    sha256: kind,
-    size: 10,
-    created_at: "2026-01-01T00:00:00Z",
+    id: representation, paper_id: "paper", format: "pdf", representation,
+    origin: "user", source_url: null, filename: `${representation}.pdf`,
+    media_type: "application/pdf", sha256: representation, size: 10, preferred,
+    parent_resource_id: null, job_id: null, created_at: "2026-01-01T00:00:00Z",
   };
 }
 
-describe("artifact variants", () => {
+describe("resource variants", () => {
   it("prefers the original PDF regardless of response order", () => {
-    expect(firstAvailableKind([artifact("chinese"), artifact("original")])).toBe("original");
+    expect(firstAvailableRepresentation([resource("translated"), resource("original")])).toBe("original");
   });
-
-  it("indexes each variant by its stable kind", () => {
-    expect(artifactsByKind([artifact("bilingual")]).bilingual?.filename).toBe("bilingual.pdf");
+  it("indexes each representation", () => {
+    expect(pdfByRepresentation([resource("bilingual")]).bilingual?.filename).toBe("bilingual.pdf");
   });
 });
-

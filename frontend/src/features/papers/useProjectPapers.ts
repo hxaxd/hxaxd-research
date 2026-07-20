@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../../shared/api/client";
-import type { Paper, Project } from "../../shared/api/contracts";
+import type { Project, ProjectPaperView } from "../../shared/api/contracts";
 
 export function useProjectPapers(projectId: string) {
   const [project, setProject] = useState<Project | null>(null);
-  const [papers, setPapers] = useState<Paper[]>([]);
+  const [papers, setPapers] = useState<ProjectPaperView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,4 +32,3 @@ export function useProjectPapers(projectId: string) {
 
   return { project, papers, loading, error };
 }
-
