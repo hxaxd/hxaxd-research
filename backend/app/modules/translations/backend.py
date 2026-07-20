@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.core.config import Settings
 from app.core.errors import TranslationExecutionError
-from app.modules.artifacts.models import ArtifactKind
+from app.modules.resources.models import ResourceRepresentation
 
 
 class Pdf2zhBackend:
@@ -20,7 +20,7 @@ class Pdf2zhBackend:
         output_directory: Path,
         qps: int,
         workers: int,
-    ) -> dict[ArtifactKind, Path]:
+    ) -> dict[ResourceRepresentation, Path]:
         executable = self.settings.pdf2zh_executable
         if not executable.is_file():
             raise TranslationExecutionError("PDF2zh 尚未安装，请先在工作台首页完成安装")
@@ -81,13 +81,13 @@ class Pdf2zhBackend:
             self._validate_pdf(mono_files[0], "中文译文")
             self._validate_pdf(dual_files[0], "双语译文")
             targets = {
-                ArtifactKind.CHINESE: output_directory / "中文译文.pdf",
-                ArtifactKind.BILINGUAL: output_directory / "双语对照.pdf",
+                ResourceRepresentation.TRANSLATED: output_directory / "中文译文.pdf",
+                ResourceRepresentation.BILINGUAL: output_directory / "双语对照.pdf",
             }
             self._commit_outputs(
                 {
-                    ArtifactKind.CHINESE: mono_files[0],
-                    ArtifactKind.BILINGUAL: dual_files[0],
+                    ResourceRepresentation.TRANSLATED: mono_files[0],
+                    ResourceRepresentation.BILINGUAL: dual_files[0],
                 },
                 targets,
                 stage,
@@ -112,12 +112,12 @@ class Pdf2zhBackend:
 
     @staticmethod
     def _commit_outputs(
-        sources: dict[ArtifactKind, Path],
-        targets: dict[ArtifactKind, Path],
+        sources: dict[ResourceRepresentation, Path],
+        targets: dict[ResourceRepresentation, Path],
         backup_directory: Path,
     ) -> None:
-        backups: dict[ArtifactKind, Path] = {}
-        committed: list[ArtifactKind] = []
+        backups: dict[ResourceRepresentation, Path] = {}
+        committed: list[ResourceRepresentation] = []
         try:
             for kind, target in targets.items():
                 if target.exists():

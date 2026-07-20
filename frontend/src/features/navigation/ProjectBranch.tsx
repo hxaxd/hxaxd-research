@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
-import type { Paper, ProjectSummary } from "../../shared/api/contracts";
+import type { ProjectPaperView, ProjectSummary } from "../../shared/api/contracts";
 import { Icon } from "../../shared/ui/Icon";
 
 interface ProjectBranchProps {
@@ -12,7 +12,7 @@ interface ProjectBranchProps {
 
 export function ProjectBranch({ project, sidebarExpanded }: ProjectBranchProps) {
   const [branchOpen, setBranchOpen] = useState(false);
-  const [papers, setPapers] = useState<Paper[] | null>(null);
+  const [papers, setPapers] = useState<ProjectPaperView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function toggle() {
@@ -50,11 +50,11 @@ export function ProjectBranch({ project, sidebarExpanded }: ProjectBranchProps) 
       {sidebarExpanded && branchOpen ? (
         <ul className="tree-paper-list">
           {error ? <li className="tree-error">{error}</li> : null}
-          {papers?.map((paper) => (
-            <li key={paper.id}>
-              <NavLink to={`/papers/${paper.id}`} title={paper.title_zh}>
+          {papers?.map(({ paper, project: membership }) => (
+            <li key={membership.id}>
+              <NavLink to={`/papers/${paper.id}`} title={paper.title_zh ?? paper.title}>
                 <Icon name="file-text" size={14} />
-                <span>{paper.title_zh}</span>
+                <span>{paper.title_zh ?? paper.title}</span>
               </NavLink>
             </li>
           ))}

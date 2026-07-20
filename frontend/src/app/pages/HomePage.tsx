@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import { useProjects } from "../../features/navigation/useProjects";
 import { SnapshotPanel } from "../../features/snapshots/SnapshotPanel";
 import { ToolPanel } from "../../features/tools/ToolPanel";
+import { useWorkspace } from "../../features/tools/useWorkspace";
 import { AsyncMessage } from "../../shared/ui/AsyncMessage";
 import { Icon } from "../../shared/ui/Icon";
 import "./pages.css";
 
 export function HomePage() {
   const { projects, loading, error } = useProjects();
+  const { workspace } = useWorkspace();
   if (loading) return <AsyncMessage kind="loading">正在整理工作台…</AsyncMessage>;
   if (error) return <AsyncMessage kind="error">{error}</AsyncMessage>;
 
@@ -35,6 +37,14 @@ export function HomePage() {
           <div><span>收集论文</span><strong>{totalPapers}</strong></div>
           <div><span>工作模式</span><strong className="status-online"><i />已连接</strong></div>
         </div>
+
+        {workspace ? <div className="capability-strip" aria-label="平台能力">
+          {Object.entries(workspace.capabilities).map(([name, capability]) => <div key={name}>
+            <span>{name === "resource_upload" ? "资源获取" : name === "compile" ? "TeX 编译" : "PDF 翻译"}</span>
+            <strong className={capability.ready ? "capability-ready" : "capability-missing"}>{capability.ready ? "已就绪" : capability.supported ? "工具未就绪" : "不支持"}</strong>
+            <small>{capability.accepts.join(" / ")} → {capability.produces.join(" / ")}</small>
+          </div>)}
+        </div> : null}
 
         <div className="home-section-heading">
           <div><span className="eyebrow">YOUR PROJECTS</span><h2>继续学习</h2></div>

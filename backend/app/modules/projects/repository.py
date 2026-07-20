@@ -26,7 +26,7 @@ class SqliteProjectRepository:
                 """
                 SELECT p.*, COUNT(pa.id) AS paper_count
                 FROM projects p
-                LEFT JOIN papers pa ON pa.project_id = p.id
+                LEFT JOIN project_papers pa ON pa.project_id = p.id
                 GROUP BY p.id
                 ORDER BY p.name
                 """
@@ -48,4 +48,19 @@ class SqliteProjectRepository:
                 )
         except sqlite3.IntegrityError as error:
             raise ResourceConflictError("已存在同名项目") from error
+        return project
+
+    def update(self, project: Project) -> Project:
+        try:
+            with self.database.connection() as connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE projects SET name = ?, description = ?, updated_at = ? WHERE id = ?
+                    """,
+                    (project.name, project.description, project.updated_at.isoformat(), project.id),
+                )
+        except sqlite3.IntegrityError as error:
+            raise ResourceConflictError("已存在同名项目") from error
+        if cursor.rowcount == 0:
+            raise ResourceNotFoundError("项目不存在")
         return project

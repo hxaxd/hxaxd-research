@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from app.core.dependencies import get_app_context
 
-from .models import Project, ProjectCreate, ProjectSummary
+from .models import Project, ProjectCreate, ProjectPatch, ProjectSummary
 from .service import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -37,3 +37,12 @@ def get_project(
     service: Annotated[ProjectService, Depends(get_service)],
 ) -> Project:
     return service.get(project_id)
+
+
+@router.patch("/{project_id}", response_model=Project)
+def patch_project(
+    project_id: str,
+    payload: ProjectPatch,
+    service: Annotated[ProjectService, Depends(get_service)],
+) -> Project:
+    return service.patch(project_id, payload)

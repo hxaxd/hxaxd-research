@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.modules.artifacts.repository import SqliteArtifactRepository
-from app.modules.artifacts.service import ArtifactService
-from app.modules.artifacts.storage import LocalPdfStorage
 from app.modules.papers.repository import SqlitePaperRepository
 from app.modules.papers.service import PaperService
 from app.modules.projects.repository import SqliteProjectRepository
 from app.modules.projects.service import ProjectService
+from app.modules.resources.repository import SqliteResourceRepository
+from app.modules.resources.service import ResourceService
+from app.modules.resources.storage import LocalResourceStorage
 from app.modules.snapshots.service import SnapshotService
 from app.modules.tools.service import ToolService
 from app.modules.translations.backend import Pdf2zhBackend
-from app.modules.translations.executor import ThreadedTranslationExecutor
+from app.modules.translations.executor import ThreadedJobExecutor
 from app.modules.translations.repository import SqliteJobRepository
-from app.modules.translations.service import TranslationService
+from app.modules.translations.service import JobService
 from app.modules.workspace.service import WorkspaceService
 
 from .config import Settings
@@ -25,13 +25,13 @@ from .database import Database
 class AppContext:
     settings: Settings
     database: Database
-    storage: LocalPdfStorage
+    storage: LocalResourceStorage
     job_repository: SqliteJobRepository
-    translation_executor: ThreadedTranslationExecutor
+    job_executor: ThreadedJobExecutor
     projects: ProjectService
     papers: PaperService
-    artifacts: ArtifactService
-    translations: TranslationService
+    resources: ResourceService
+    jobs: JobService
     tools: ToolService
     workspace: WorkspaceService
     snapshots: SnapshotService
@@ -44,39 +44,40 @@ class AppContext:
         self.job_repository.fail_interrupted()
 
     def shutdown(self) -> None:
-        self.translation_executor.shutdown()
+        self.job_executor.shutdown()
         self.tools.shutdown()
         self.snapshots.shutdown()
 
 
 def build_app_context(settings: Settings) -> AppContext:
     database = Database(settings.database_path)
-    storage = LocalPdfStorage(settings)
+    storage = LocalResourceStorage(settings)
 
     project_repository = SqliteProjectRepository(database)
     paper_repository = SqlitePaperRepository(database)
-    artifact_repository = SqliteArtifactRepository(database)
+    resource_repository = SqliteResourceRepository(database)
     job_repository = SqliteJobRepository(database)
 
     projects = ProjectService(project_repository)
     papers = PaperService(paper_repository, project_repository)
-    artifacts = ArtifactService(artifact_repository, storage, paper_repository)
+    resources = ResourceService(resource_repository, storage, paper_repository)
     tools = ToolService(settings)
     snapshots = SnapshotService(settings, job_repository)
-    workspace = WorkspaceService(projects, papers, artifacts, tools)
+    workspace = WorkspaceService(projects, papers, resources, tools, database)
 
     translation_backend = Pdf2zhBackend(settings)
-    translation_executor = ThreadedTranslationExecutor(
+    job_executor = ThreadedJobExecutor(
         jobs=job_repository,
-        artifacts=artifact_repository,
+        resources=resource_repository,
         storage=storage,
-        registrar=artifacts,
+        registrar=resources,
         backend=translation_backend,
+        tools=tools,
     )
-    translations = TranslationService(
+    jobs = JobService(
         jobs=job_repository,
-        artifacts=artifact_repository,
-        executor=translation_executor,
+        resources=resource_repository,
+        executor=job_executor,
     )
 
     return AppContext(
@@ -84,11 +85,11 @@ def build_app_context(settings: Settings) -> AppContext:
         database=database,
         storage=storage,
         job_repository=job_repository,
-        translation_executor=translation_executor,
+        job_executor=job_executor,
         projects=projects,
         papers=papers,
-        artifacts=artifacts,
-        translations=translations,
+        resources=resources,
+        jobs=jobs,
         tools=tools,
         workspace=workspace,
         snapshots=snapshots,

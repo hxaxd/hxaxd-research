@@ -127,11 +127,77 @@
   position: relative;
   min-height: 0;
   flex: 1;
-  overflow: auto;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
   outline: 0;
   background:
     radial-gradient(circle at 50% -10%, rgb(255 255 255 / 3%), transparent 34%),
     #171b23;
+}
+
+.pdf-scroll-container {
+  position: absolute;
+  inset: 45px 0 0;
+  overflow: auto;
+}
+
+.pdf-scroll-container .pdfViewer {
+  padding: 26px 0 80px;
+}
+
+.pdf-scroll-container .pdfViewer .page {
+  margin: 0 auto 18px;
+  border: 0;
+  box-shadow: 0 16px 60px rgb(0 0 0 / 48%), 0 0 0 1px rgb(255 255 255 / 6%);
+}
+
+.pdf-viewer--dark .pdfViewer .page {
+  filter: invert(0.9) hue-rotate(180deg) brightness(0.88) contrast(0.92);
+}
+
+.pdf-viewer--sepia .pdfViewer .page {
+  filter: sepia(0.18) brightness(0.93) contrast(0.96);
+}
+
+.pdf-findbar {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: #10141c;
+}
+
+.pdf-findbar label {
+  display: flex;
+  width: min(360px, 70%);
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.pdf-findbar input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.pdf-findbar button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
 }
 
 .pdf-viewer:focus-visible {
@@ -161,14 +227,16 @@
 }
 
 .pdf-page-controls {
-  position: sticky;
+  position: absolute;
   z-index: 3;
   bottom: 17px;
   display: flex;
   width: max-content;
   align-items: center;
   gap: 5px;
-  margin: -66px auto 17px;
+  right: 50%;
+  margin: 0;
+  transform: translateX(50%);
   border: 1px solid #3b4353;
   border-radius: 13px;
   padding: 7px;
@@ -176,6 +244,14 @@
   box-shadow: 0 12px 38px rgb(0 0 0 / 44%);
   color: var(--text-muted);
   backdrop-filter: blur(18px) saturate(1.25);
+}
+
+.pdf-page-controls select {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
 }
 
 .pdf-page-controls button {

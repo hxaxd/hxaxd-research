@@ -20,9 +20,9 @@ function ProjectContent({ projectId }: { projectId: string }) {
   if (error) return <AsyncMessage kind="error">{error}</AsyncMessage>;
   if (!project) return <AsyncMessage kind="empty">项目不存在</AsyncMessage>;
 
-  const included = papers.filter((paper) => paper.status === "included").length;
-  const discovered = papers.filter((paper) => paper.status === "discovered").length;
-  const years = papers.map((paper) => paper.publication_year).filter(Boolean);
+  const included = papers.filter((entry) => entry.project.status === "included").length;
+  const discovered = papers.filter((entry) => entry.project.status === "discovered").length;
+  const years = papers.map((entry) => entry.paper.publication_year).filter((year): year is number => year !== null);
   const yearRange = years.length > 0 ? `${Math.min(...years)} — ${Math.max(...years)}` : "—";
 
   return (

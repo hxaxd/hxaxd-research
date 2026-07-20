@@ -2,24 +2,31 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.modules.artifacts.models import Artifact
-from app.modules.papers.models import Paper
 from app.modules.projects.models import ProjectSummary
 from app.modules.tools.models import ManagedTool
 
 
-class WorkspacePaper(Paper):
-    artifacts: list[Artifact]
+class Capability(BaseModel):
+    supported: bool
+    ready: bool
+    accepts: list[str] = Field(default_factory=list)
+    produces: list[str] = Field(default_factory=list)
+    tool: str | None = None
+    tool_version: str | None = None
+    message: str
 
 
 class WorkspaceProject(ProjectSummary):
     status_counts: dict[str, int]
-    papers: list[WorkspacePaper]
+    resource_counts: dict[str, int]
 
 
 class WorkspaceState(BaseModel):
     generated_at: datetime
+    contract_version: str
+    schema_version: int
     projects: list[WorkspaceProject]
+    capabilities: dict[str, Capability]
     tools: list[ManagedTool]

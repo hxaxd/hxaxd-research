@@ -1,19 +1,19 @@
-import type { Artifact, ArtifactKind } from "../../shared/api/contracts";
+import type { Resource, ResourceRepresentation } from "../../shared/api/contracts";
 
-export const artifactLabels: Record<ArtifactKind, string> = {
-  original: "原文",
-  bilingual: "双语",
-  chinese: "中文",
+export const resourceLabels: Record<ResourceRepresentation, string> = {
+  original: "原文", bilingual: "双语", translated: "中文",
 };
+export const resourceOrder: ResourceRepresentation[] = ["original", "bilingual", "translated"];
 
-export const artifactOrder: ArtifactKind[] = ["original", "bilingual", "chinese"];
-
-export function artifactsByKind(artifacts: Artifact[]): Partial<Record<ArtifactKind, Artifact>> {
-  return Object.fromEntries(artifacts.map((artifact) => [artifact.kind, artifact]));
+export function pdfByRepresentation(resources: Resource[]): Partial<Record<ResourceRepresentation, Resource>> {
+  const result: Partial<Record<ResourceRepresentation, Resource>> = {};
+  for (const resource of resources.filter((item) => item.format === "pdf").toSorted((a, b) => Number(b.preferred) - Number(a.preferred))) {
+    result[resource.representation] ??= resource;
+  }
+  return result;
 }
 
-export function firstAvailableKind(artifacts: Artifact[]): ArtifactKind | null {
-  const available = artifactsByKind(artifacts);
-  return artifactOrder.find((kind) => available[kind] !== undefined) ?? null;
+export function firstAvailableRepresentation(resources: Resource[]): ResourceRepresentation | null {
+  const available = pdfByRepresentation(resources);
+  return resourceOrder.find((kind) => available[kind] !== undefined) ?? null;
 }
-

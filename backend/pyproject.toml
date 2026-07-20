@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116,<1",
     "python-multipart>=0.0.20,<1",
+    "pypdf>=5,<7",
     "uvicorn[standard]>=0.35,<1",
 ]
 

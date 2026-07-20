@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
+from app.core.migrations import MigrationRunner
+
 from .contract import (
     DATABASE_ARCHIVE_PATH,
     MANIFEST_PATH,
@@ -56,6 +58,8 @@ class SnapshotRestorer:
             stage = Path(temporary) / "data"
             stage.mkdir()
             manifest = self._extract_verified(archive_path, stage)
+            database_path = stage / Path(DATABASE_ARCHIVE_PATH).relative_to("payload")
+            MigrationRunner(database_path).run()
             self._validate_payload(stage, manifest)
             recovery = self._activate(stage, data_dir, replace=replace)
         return SnapshotRestoreResult(
@@ -72,11 +76,7 @@ class SnapshotRestorer:
                     safe_archive_path(name)
                 if MANIFEST_PATH not in members:
                     raise SnapshotError("快照缺少清单")
-                manifest = SnapshotManifest.from_json(
-                    archive.read(MANIFEST_PATH).decode("utf-8")
-                )
-                if manifest.schema_sha256 != sha256_file(self.schema_path):
-                    raise SnapshotError("数据库结构与当前程序不一致；不执行兼容或迁移")
+                manifest = SnapshotManifest.from_json(archive.read(MANIFEST_PATH).decode("utf-8"))
                 expected = {MANIFEST_PATH, *(item.path for item in manifest.files)}
                 if set(members) != expected:
                     raise SnapshotError("快照内容与清单不一致")
@@ -95,13 +95,11 @@ class SnapshotRestorer:
     def _validate_payload(stage: Path, manifest: SnapshotManifest) -> None:
         database_path = stage / Path(DATABASE_ARCHIVE_PATH).relative_to("payload")
         validate_database(database_path)
-        file_records = {
-            item.path.removeprefix("payload/"): item for item in manifest.files
-        }
+        file_records = {item.path.removeprefix("payload/"): item for item in manifest.files}
         connection = sqlite3.connect(database_path)
         try:
             rows = connection.execute(
-                "SELECT relative_path, sha256, size FROM artifacts ORDER BY relative_path"
+                "SELECT relative_path, sha256, size FROM resources ORDER BY relative_path"
             ).fetchall()
         except sqlite3.DatabaseError as error:
             raise SnapshotError("快照数据库不符合当前结构") from error
@@ -111,12 +109,8 @@ class SnapshotRestorer:
         for relative_path, expected_sha256, expected_size in rows:
             resolve_data_path(stage, relative_path)
             record = file_records.get(relative_path)
-            if (
-                record is None
-                or record.sha256 != expected_sha256
-                or record.size != expected_size
-            ):
-                raise SnapshotError(f"PDF 文件与数据库记录不一致: {relative_path}")
+            if record is None or record.sha256 != expected_sha256 or record.size != expected_size:
+                raise SnapshotError(f"资源文件与数据库记录不一致: {relative_path}")
             expected_paths.add(relative_path)
         if set(file_records) != expected_paths:
             raise SnapshotError("快照包含数据库未引用的文件")

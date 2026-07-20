@@ -5,6 +5,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from .migrations import MigrationRunner
+
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
@@ -14,10 +16,17 @@ class Database:
 
     def initialize(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        MigrationRunner(self.database_path).run()
         with self.connection() as connection:
-            connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=NORMAL")
+
+    def schema_version(self) -> int:
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
+            ).fetchone()
+        return int(row[0])
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
