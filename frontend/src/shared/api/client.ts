@@ -2,9 +2,13 @@ import type {
   Artifact,
   ArtifactKind,
   Job,
+  ManagedTool,
   Paper,
   Project,
   ProjectSummary,
+  SnapshotOperation,
+  SnapshotOverview,
+  ToolName,
 } from "./contracts";
 
 export class ApiError extends Error {
@@ -56,6 +60,18 @@ export const api = {
       body: JSON.stringify({}),
     }),
   job: (jobId: string) => request<Job>(`/jobs/${jobId}`),
+  tools: () => request<ManagedTool[]>("/tools"),
+  installTool: (name: ToolName) =>
+    request<ManagedTool>(`/tools/${name}/install`, { method: "POST" }),
+  snapshots: () => request<SnapshotOverview>("/snapshots"),
+  createSnapshot: () => request<SnapshotOperation>("/snapshots", { method: "POST" }),
+  restoreSnapshot: (filename: string) =>
+    request<SnapshotOperation>(`/snapshots/${encodeURIComponent(filename)}/restore`, {
+      method: "POST",
+      body: JSON.stringify({ confirmation: filename }),
+    }),
+  snapshotDownloadUrl: (filename: string) =>
+    `/api/snapshots/${encodeURIComponent(filename)}/download`,
   artifactUrl: (paperId: string, kind: ArtifactKind, sha256?: string) =>
     `/api/papers/${paperId}/artifacts/${kind}${sha256 ? `?v=${sha256}` : ""}`,
   artifactDownloadUrl: (paperId: string, kind: ArtifactKind) =>

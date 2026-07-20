@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { usePaper } from "../../features/papers/usePaper";
 import { artifactsByKind, firstAvailableKind } from "../../features/reader/artifactVariants";
@@ -11,6 +11,8 @@ import { TranslationButton } from "../../features/translations/TranslationButton
 import { api } from "../../shared/api/client";
 import type { ArtifactKind } from "../../shared/api/contracts";
 import { AsyncMessage } from "../../shared/ui/AsyncMessage";
+import { Icon } from "../../shared/ui/Icon";
+import "./pages.css";
 
 export function PaperPage() {
   const { paperId } = useParams<{ paperId: string }>();
@@ -55,9 +57,15 @@ function PaperContent({ paperId }: { paperId: string }) {
   return (
     <section className="paper-page" ref={reader}>
       <header className="paper-header">
+        <Link className="paper-back-link" title="返回项目" to={`/projects/${paper.project_id}`}>
+          <Icon name="arrow-left" size={18} />
+        </Link>
         <div className="paper-heading-copy">
-          <span className="eyebrow">{paper.paper_type}</span>
-          <h2>{paper.title_zh}</h2>
+          <div className="paper-kicker">
+            <span>{paper.paper_type}</span><i /><span>{paper.publication_year}</span><i />
+            <span>{paper.authors.slice(0, 2).join(", ")}{paper.authors.length > 2 ? " 等" : ""}</span>
+          </div>
+          <h1>{paper.title_zh}</h1>
           <p title={paper.title_en}>{paper.title_en}</p>
         </div>
       </header>
@@ -85,7 +93,7 @@ function PaperContent({ paperId }: { paperId: string }) {
                     className="toolbar-button"
                     href={api.artifactDownloadUrl(paperId, selected)}
                   >
-                    下载
+                    <Icon name="download" size={15} /><span>下载</span>
                   </a>
                 ) : null}
               </>
@@ -105,4 +113,3 @@ function PaperContent({ paperId }: { paperId: string }) {
     </section>
   );
 }
-

@@ -3,19 +3,21 @@ import { NavLink } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
 import type { Paper, ProjectSummary } from "../../shared/api/contracts";
+import { Icon } from "../../shared/ui/Icon";
 
 interface ProjectBranchProps {
   project: ProjectSummary;
+  sidebarExpanded: boolean;
 }
 
-export function ProjectBranch({ project }: ProjectBranchProps) {
-  const [expanded, setExpanded] = useState(false);
+export function ProjectBranch({ project, sidebarExpanded }: ProjectBranchProps) {
+  const [branchOpen, setBranchOpen] = useState(false);
   const [papers, setPapers] = useState<Paper[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function toggle() {
-    const next = !expanded;
-    setExpanded(next);
+    const next = !branchOpen;
+    setBranchOpen(next);
     if (next && papers === null) {
       setError(null);
       try {
@@ -29,26 +31,29 @@ export function ProjectBranch({ project }: ProjectBranchProps) {
   return (
     <li className="tree-project">
       <div className="tree-row tree-row--project">
-        <button
-          className="tree-toggle"
-          type="button"
-          aria-label={expanded ? "收起项目" : "展开项目"}
-          onClick={() => void toggle()}
-        >
-          {expanded ? "▾" : "▸"}
-        </button>
-        <NavLink to={`/projects/${project.id}`} title={project.name}>
-          <span>{project.name}</span>
+        {sidebarExpanded ? (
+          <button
+            className="tree-toggle"
+            type="button"
+            aria-label={branchOpen ? "收起项目" : "展开项目"}
+            onClick={() => void toggle()}
+          >
+            <Icon name={branchOpen ? "chevron-down" : "chevron-right"} size={14} />
+          </button>
+        ) : null}
+        <NavLink className="project-link" to={`/projects/${project.id}`} title={project.name}>
+          <Icon className="project-folder" name="folder" size={17} />
+          <span className="project-link-copy">{project.name}</span>
           <span className="tree-count">{project.paper_count}</span>
         </NavLink>
       </div>
-      {expanded ? (
+      {sidebarExpanded && branchOpen ? (
         <ul className="tree-paper-list">
           {error ? <li className="tree-error">{error}</li> : null}
           {papers?.map((paper) => (
             <li key={paper.id}>
               <NavLink to={`/papers/${paper.id}`} title={paper.title_zh}>
-                <span className="paper-dot" aria-hidden="true" />
+                <Icon name="file-text" size={14} />
                 <span>{paper.title_zh}</span>
               </NavLink>
             </li>

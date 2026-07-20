@@ -1,7 +1,7 @@
 [project]
 name = "hxaxd-research-backend"
 version = "0.1.0"
-description = "Web backend for the hxaxd research workspace"
+description = "Web backend for the hxaxd paper learning workspace"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116,<1",

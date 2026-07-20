@@ -19,3 +19,7 @@ class InvalidArtifactError(ApplicationError):
 
 class TranslationExecutionError(ApplicationError):
     pass
+
+
+class InvalidSnapshotError(ApplicationError):
+    pass

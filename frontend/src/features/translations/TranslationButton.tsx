@@ -1,4 +1,5 @@
 import { useTranslationJob } from "./useTranslationJob";
+import { Icon } from "../../shared/ui/Icon";
 import "./translations.css";
 
 interface TranslationButtonProps {
@@ -20,7 +21,7 @@ export function TranslationButton({ paperId, disabled, onCompleted }: Translatio
         disabled={disabled || starting || active}
         onClick={() => void start(paperId)}
       >
-        {label}
+        <Icon name="languages" size={15} /><span>{label}</span>
       </button>
       {job?.status === "failed" ? (
         <span className="inline-error" title={job.error_summary ?? undefined}>

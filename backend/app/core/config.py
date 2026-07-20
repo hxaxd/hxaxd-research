@@ -13,8 +13,23 @@ class Settings:
     data_dir: Path
     database_path: Path
     artifact_dir: Path
-    translate_script: Path
+    tools_dir: Path
+    snapshot_dir: Path
     frontend_origins: tuple[str, ...]
+
+    @property
+    def pdf2zh_dir(self) -> Path:
+        return self.tools_dir / "pdf2zh"
+
+    @property
+    def pdf2zh_executable(self) -> Path:
+        executable = "pdf2zh_next.exe" if os.name == "nt" else "pdf2zh_next"
+        scripts_directory = "Scripts" if os.name == "nt" else "bin"
+        return self.pdf2zh_dir / ".venv" / scripts_directory / executable
+
+    @property
+    def tex_dir(self) -> Path:
+        return self.tools_dir / "tex"
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -23,6 +38,7 @@ class Settings:
             data_dir=data_dir,
             database_path=data_dir / "research.sqlite3",
             artifact_dir=data_dir / "artifacts",
-            translate_script=REPOSITORY_ROOT / "scripts" / "translate-pdf.ps1",
+            tools_dir=REPOSITORY_ROOT / ".tools",
+            snapshot_dir=BACKEND_ROOT / "snapshots",
             frontend_origins=("http://127.0.0.1:5173", "http://localhost:5173"),
         )

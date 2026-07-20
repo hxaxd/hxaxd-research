@@ -1,29 +1,56 @@
 .upload-card {
   display: flex;
-  width: min(560px, calc(100% - 64px));
+  width: min(620px, calc(100% - 40px));
   align-items: center;
   justify-content: space-between;
   gap: 30px;
   margin: auto;
-  border: 1px dashed #354252;
-  border-radius: 14px;
+  border: 1px dashed #3a4254;
+  border-radius: var(--radius-lg);
   padding: 30px;
-  background: var(--surface);
+  background:
+    radial-gradient(circle at 0 0, rgb(139 141 246 / 10%), transparent 36%),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.upload-card > div {
+  min-width: 0;
+}
+
+.upload-card-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .upload-card h3 {
-  margin: 6px 0;
-  font-size: 21px;
+  margin: 15px 0 5px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
 }
 
 .upload-card p {
+  max-width: 390px;
   margin: 0;
   color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .primary-button {
-  min-width: 110px;
-  padding: 10px 16px;
+  display: inline-flex;
+  min-width: 118px;
+  min-height: 39px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 15px;
 }
 
 .upload-inline {
@@ -32,40 +59,68 @@
 
 .reader-toolbar {
   display: flex;
-  min-height: 49px;
+  min-height: 56px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 9px;
-  padding: 7px 12px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--border);
-  background: #11161e;
+  background: #121620;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 12%);
+}
+
+.reader-toolbar-primary,
+.reader-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reader-toolbar-primary {
+  min-width: 0;
+}
+
+.reader-toolbar-actions {
+  justify-content: flex-end;
 }
 
 .toolbar-group {
   display: inline-flex;
-  padding: 2px;
+  padding: 3px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: #0d1218;
+  border-radius: 10px;
+  background: #0b0e14;
 }
 
 .segmented {
-  min-width: 47px;
-  height: 28px;
+  display: inline-flex;
+  min-width: 52px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 0;
   background: transparent;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .segmented.active {
-  background: var(--surface-hover);
+  background: var(--surface-active);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%), 0 2px 8px rgb(0 0 0 / 20%);
   color: var(--text);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
 }
 
-.toolbar-spacer {
-  flex: 1;
+.toolbar-group--versions .segmented.active {
+  color: #c8c9ff;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 23px;
+  flex: 0 0 auto;
+  background: var(--border);
 }
 
 .pdf-viewer {
@@ -73,20 +128,28 @@
   min-height: 0;
   flex: 1;
   overflow: auto;
-  background: #161b22;
+  outline: 0;
+  background:
+    radial-gradient(circle at 50% -10%, rgb(255 255 255 / 3%), transparent 34%),
+    #171b23;
+}
+
+.pdf-viewer:focus-visible {
+  box-shadow: inset 0 0 0 2px rgb(166 167 255 / 40%);
 }
 
 .pdf-page-stage {
   display: flex;
   min-width: max-content;
   justify-content: center;
-  padding: 28px 42px 80px;
+  padding: 30px 44px 88px;
 }
 
 .pdf-page-stage canvas {
   display: block;
+  border-radius: 2px;
   background: white;
-  box-shadow: 0 10px 42px rgb(0 0 0 / 45%);
+  box-shadow: 0 16px 60px rgb(0 0 0 / 48%), 0 0 0 1px rgb(255 255 255 / 6%);
 }
 
 .pdf-viewer--dark .pdf-page-stage canvas {
@@ -100,38 +163,141 @@
 .pdf-page-controls {
   position: sticky;
   z-index: 3;
-  bottom: 16px;
+  bottom: 17px;
   display: flex;
   width: max-content;
   align-items: center;
-  gap: 8px;
-  margin: -58px auto 16px;
-  border: 1px solid #3a4552;
-  border-radius: 10px;
-  padding: 6px 8px;
-  background: rgb(15 20 27 / 94%);
-  box-shadow: 0 8px 30px rgb(0 0 0 / 40%);
+  gap: 5px;
+  margin: -66px auto 17px;
+  border: 1px solid #3b4353;
+  border-radius: 13px;
+  padding: 7px;
+  background: rgb(13 16 23 / 91%);
+  box-shadow: 0 12px 38px rgb(0 0 0 / 44%);
   color: var(--text-muted);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(18px) saturate(1.25);
 }
 
 .pdf-page-controls button {
-  min-width: 30px;
-  height: 28px;
+  display: grid;
+  width: 32px;
+  height: 31px;
+  place-items: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .pdf-page-controls button:hover:not(:disabled) {
   background: var(--surface-hover);
+  color: var(--text);
+}
+
+.page-number-control {
+  display: flex;
+  height: 31px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-number-control input {
+  width: 34px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  appearance: textfield;
+}
+
+.page-number-control input::-webkit-inner-spin-button,
+.page-number-control input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.zoom-value {
+  min-width: 42px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .control-separator {
   width: 1px;
-  height: 17px;
+  height: 20px;
+  margin: 0 3px;
   background: var(--border);
 }
 
+@media (max-width: 1160px) {
+  .toolbar-group--colors .segmented span {
+    display: none;
+  }
+
+  .toolbar-group--colors .segmented {
+    min-width: 34px;
+  }
+
+  .reader-toolbar-actions .toolbar-button span,
+  .reader-toolbar-actions .primary-toolbar-button span {
+    display: none;
+  }
+
+  .reader-toolbar-actions .toolbar-button,
+  .reader-toolbar-actions .primary-toolbar-button {
+    width: 36px;
+    padding: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .reader-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .reader-toolbar-primary,
+  .reader-toolbar-actions {
+    justify-content: space-between;
+  }
+
+  .reader-toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .pdf-page-stage {
+    justify-content: flex-start;
+    padding: 20px 18px 84px;
+  }
+
+  .upload-card {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .toolbar-group--versions .segmented {
+    min-width: 42px;
+  }
+
+  .toolbar-group--versions .segmented svg {
+    display: none;
+  }
+
+  .pdf-page-controls {
+    bottom: 10px;
+  }
+}

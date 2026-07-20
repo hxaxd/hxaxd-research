@@ -63,6 +63,13 @@ class SqliteJobRepository:
             ).fetchone()
         return row is not None
 
+    def has_active_jobs(self) -> bool:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM jobs WHERE status IN ('queued', 'running') LIMIT 1"
+            ).fetchone()
+        return row is not None
+
     def fail_interrupted(self) -> None:
         with self.database.connection() as connection:
             connection.execute(

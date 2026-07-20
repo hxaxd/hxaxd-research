@@ -14,7 +14,8 @@ def app_settings(tmp_path):
         data_dir=data_dir,
         database_path=data_dir / "research.sqlite3",
         artifact_dir=data_dir / "artifacts",
-        translate_script=tmp_path / "missing-translate-script.ps1",
+        tools_dir=tmp_path / ".tools",
+        snapshot_dir=tmp_path / "snapshots",
         frontend_origins=("http://testserver",),
     )
 

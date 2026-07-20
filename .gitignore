@@ -23,3 +23,5 @@ backend/.venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+old/*

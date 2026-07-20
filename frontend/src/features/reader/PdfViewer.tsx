@@ -8,6 +8,7 @@ import {
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 import { AsyncMessage } from "../../shared/ui/AsyncMessage";
+import { Icon } from "../../shared/ui/Icon";
 import "./reader.css";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -26,6 +27,11 @@ export function PdfViewer({ url, colorMode }: PdfViewerProps) {
   const [zoom, setZoom] = useState(1.25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  function goToPage(nextPage: number) {
+    if (!document) return;
+    setPageNumber(Math.min(document.numPages, Math.max(1, nextPage)));
+  }
 
   useEffect(() => {
     const task = getDocument({ url });
@@ -87,35 +93,56 @@ export function PdfViewer({ url, colorMode }: PdfViewerProps) {
   if (!document) return <AsyncMessage kind="empty">没有可显示的 PDF</AsyncMessage>;
 
   return (
-    <div className={`pdf-viewer pdf-viewer--${colorMode}`}>
+    <div
+      className={`pdf-viewer pdf-viewer--${colorMode}`}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.target instanceof HTMLInputElement) return;
+        if (event.key === "ArrowLeft" || event.key === "PageUp") goToPage(pageNumber - 1);
+        if (event.key === "ArrowRight" || event.key === "PageDown") goToPage(pageNumber + 1);
+      }}
+    >
       <div className="pdf-page-stage">
         <canvas ref={canvas} />
       </div>
       <div className="pdf-page-controls">
         <button
+          aria-label="上一页"
+          title="上一页"
           type="button"
           disabled={pageNumber <= 1}
-          onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
+          onClick={() => goToPage(pageNumber - 1)}
         >
-          上一页
+          <Icon name="arrow-left" size={16} />
         </button>
-        <span>
-          {pageNumber} / {document.numPages}
-        </span>
+        <label className="page-number-control">
+          <span className="visually-hidden">当前页码</span>
+          <input
+            aria-label="当前页码"
+            max={document.numPages}
+            min={1}
+            type="number"
+            value={pageNumber}
+            onChange={(event) => goToPage(Number(event.target.value))}
+          />
+          <span>/ {document.numPages}</span>
+        </label>
         <button
+          aria-label="下一页"
+          title="下一页"
           type="button"
           disabled={pageNumber >= document.numPages}
-          onClick={() => setPageNumber((current) => Math.min(document.numPages, current + 1))}
+          onClick={() => goToPage(pageNumber + 1)}
         >
-          下一页
+          <Icon name="arrow-right" size={16} />
         </button>
         <span className="control-separator" />
-        <button type="button" onClick={() => setZoom((current) => Math.max(0.6, current - 0.15))}>
-          −
+        <button aria-label="缩小" title="缩小" type="button" onClick={() => setZoom((current) => Math.max(0.6, current - 0.15))}>
+          <Icon name="zoom-out" size={16} />
         </button>
-        <span>{Math.round(zoom * 100)}%</span>
-        <button type="button" onClick={() => setZoom((current) => Math.min(3, current + 0.15))}>
-          ＋
+        <span className="zoom-value">{Math.round(zoom * 100)}%</span>
+        <button aria-label="放大" title="放大" type="button" onClick={() => setZoom((current) => Math.min(3, current + 0.15))}>
+          <Icon name="zoom-in" size={16} />
         </button>
       </div>
     </div>

@@ -7,36 +7,13 @@ uv sync --dev
 uv run uvicorn app.main:app --reload
 ```
 
-服务默认监听 `http://127.0.0.1:8000`，接口文档位于 `/docs`。
+服务默认监听 `http://127.0.0.1:8000`。完整调用说明见仓库根目录 `API.md`，交互式接口文档位于 `/docs`。
 
-## Agent 提交论文
-
-先从 `/api/schema/paper` 获取当前字段契约。JSONL 中每一行是一篇完整论文记录，然后运行：
-
-```powershell
-uv run python scripts/submit_papers.py papers.jsonl --project-id <project-id>
-```
-
-提交脚本只了解 HTTP 契约，不读取数据库结构。
-
-## 论文资源
-
-论文原文、中文译文和双语版本统一通过资源接口上传：
-
-```text
-POST /api/papers/{paper_id}/artifacts/{kind}
-```
-
-`kind` 可取 `original`、`chinese` 或 `bilingual`，文件字段名为 `upload`。
+项目、论文、PDF、翻译、本地工具和完整工作区快照均通过公开 HTTP 接口操作。Agent 和前端使用同一契约，不直接读取数据库或数据目录。
 
 ## 数据打包与重建
 
-在仓库根目录执行：
+备份、下载和恢复统一在工作台首页执行，也可以调用 `/api/snapshots` 接口。后端负责
+串行任务、完整性校验和原子替换；恢复时会保留带 `before-restore` 时间戳的原数据副本。
 
-```powershell
-.\scripts\backup-research-data.ps1
-.\scripts\restore-research-data.ps1 -Snapshot .\backend\snapshots\research-<时间>.researchpack -Replace
-```
-
-快照只接受当前程序的精确格式和数据库结构。`-Replace` 会把原数据目录重命名为带
-`before-restore` 时间戳的恢复副本，再原子启用快照数据；不会导入或转换旧格式。
+快照只接受当前程序的精确格式和数据库结构，不导入或转换旧格式。
