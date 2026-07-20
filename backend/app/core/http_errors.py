@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from .errors import (
     InvalidArtifactError,
+    InvalidSnapshotError,
     ResourceConflictError,
     ResourceNotFoundError,
     TranslationExecutionError,
@@ -22,6 +23,10 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(InvalidArtifactError)
     async def invalid_artifact(_: Request, error: InvalidArtifactError):
+        return JSONResponse(status_code=400, content={"detail": str(error)})
+
+    @app.exception_handler(InvalidSnapshotError)
+    async def invalid_snapshot(_: Request, error: InvalidSnapshotError):
         return JSONResponse(status_code=400, content={"detail": str(error)})
 
     @app.exception_handler(TranslationExecutionError)

@@ -36,13 +36,13 @@ class SnapshotWriter:
 
     def write(self, archive_path: Path) -> SnapshotWriteResult:
         if not self.database_path.is_file():
-            raise SnapshotError("数据目录中不存在研究数据库")
+            raise SnapshotError("数据目录中不存在学习数据库")
         archive_path = archive_path.resolve()
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         if archive_path.exists():
             raise SnapshotError(f"快照文件已存在: {archive_path}")
 
-        with tempfile.TemporaryDirectory(prefix="research-snapshot-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="learning-snapshot-") as temporary:
             stage = Path(temporary)
             database_copy = stage / DATABASE_ARCHIVE_PATH
             database_copy.parent.mkdir(parents=True)

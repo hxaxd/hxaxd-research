@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import { api } from "../../shared/api/client";
+import { Icon } from "../../shared/ui/Icon";
 import "./reader.css";
 
 interface OriginalPdfUploadProps {
@@ -36,9 +37,9 @@ export function OriginalPdfUpload({
     <div className={compact ? "upload-inline" : "upload-card"}>
       {!compact ? (
         <div>
-          <span className="eyebrow">ORIGINAL PDF</span>
+          <span className="upload-card-icon"><Icon name="upload" size={23} /></span>
           <h3>还没有原文</h3>
-          <p>添加原文后即可在浏览器阅读并启动翻译。</p>
+          <p>上传论文原文，即可开始阅读并生成中文与双语版本。</p>
         </div>
       ) : null}
       <input
@@ -57,7 +58,8 @@ export function OriginalPdfUpload({
         disabled={uploading}
         onClick={() => input.current?.click()}
       >
-        {uploading ? "上传中…" : compact ? "替换原文" : "选择 PDF"}
+        <Icon name="upload" size={15} />
+        <span>{uploading ? "上传中…" : compact ? "替换原文" : "选择 PDF"}</span>
       </button>
       {error ? <span className="inline-error">{error}</span> : null}
     </div>

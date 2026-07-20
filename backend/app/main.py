@@ -22,8 +22,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         context.shutdown()
 
     application = FastAPI(
-        title="Hxaxd Research API",
-        version="0.1.0",
+        title="Hxaxd Learning Workspace API",
+        description=(
+            "学习项目、论文记录、PDF 资源、翻译任务和本地工具的唯一服务接口。"
+            "交互式文档位于 /docs，机器可读契约位于 /openapi.json。"
+        ),
+        version="0.2.0",
         lifespan=lifespan,
     )
     application.state.context = context

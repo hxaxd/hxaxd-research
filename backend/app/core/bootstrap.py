@@ -9,10 +9,13 @@ from app.modules.papers.repository import SqlitePaperRepository
 from app.modules.papers.service import PaperService
 from app.modules.projects.repository import SqliteProjectRepository
 from app.modules.projects.service import ProjectService
+from app.modules.snapshots.service import SnapshotService
+from app.modules.tools.service import ToolService
 from app.modules.translations.backend import Pdf2zhBackend
 from app.modules.translations.executor import ThreadedTranslationExecutor
 from app.modules.translations.repository import SqliteJobRepository
 from app.modules.translations.service import TranslationService
+from app.modules.workspace.service import WorkspaceService
 
 from .config import Settings
 from .database import Database
@@ -29,14 +32,21 @@ class AppContext:
     papers: PaperService
     artifacts: ArtifactService
     translations: TranslationService
+    tools: ToolService
+    workspace: WorkspaceService
+    snapshots: SnapshotService
 
     def startup(self) -> None:
         self.database.initialize()
         self.storage.initialize()
+        self.tools.initialize()
+        self.snapshots.initialize()
         self.job_repository.fail_interrupted()
 
     def shutdown(self) -> None:
         self.translation_executor.shutdown()
+        self.tools.shutdown()
+        self.snapshots.shutdown()
 
 
 def build_app_context(settings: Settings) -> AppContext:
@@ -51,6 +61,9 @@ def build_app_context(settings: Settings) -> AppContext:
     projects = ProjectService(project_repository)
     papers = PaperService(paper_repository, project_repository)
     artifacts = ArtifactService(artifact_repository, storage, paper_repository)
+    tools = ToolService(settings)
+    snapshots = SnapshotService(settings, job_repository)
+    workspace = WorkspaceService(projects, papers, artifacts, tools)
 
     translation_backend = Pdf2zhBackend(settings)
     translation_executor = ThreadedTranslationExecutor(
@@ -76,4 +89,7 @@ def build_app_context(settings: Settings) -> AppContext:
         papers=papers,
         artifacts=artifacts,
         translations=translations,
+        tools=tools,
+        workspace=workspace,
+        snapshots=snapshots,
     )

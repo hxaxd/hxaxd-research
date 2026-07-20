@@ -11,6 +11,8 @@ export type PaperType =
 
 export type ArtifactKind = "original" | "chinese" | "bilingual";
 export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+export type ToolName = "pdf2zh" | "tex";
+export type ToolStatus = "missing" | "installing" | "installed" | "failed";
 
 export interface Project {
   id: string;
@@ -70,4 +72,41 @@ export interface Job {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+}
+
+export interface ManagedTool {
+  name: ToolName;
+  label: string;
+  description: string;
+  status: ToolStatus;
+  install_path: string;
+  executable_path: string | null;
+  version: string | null;
+  message: string;
+}
+
+export type SnapshotOperationKind = "backup" | "restore";
+export type SnapshotOperationStatus = "running" | "succeeded" | "failed";
+
+export interface SnapshotOperation {
+  id: string;
+  kind: SnapshotOperationKind;
+  status: SnapshotOperationStatus;
+  message: string;
+  filename: string | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface SnapshotItem {
+  filename: string;
+  size: number;
+  created_at: string;
+  download_url: string;
+}
+
+export interface SnapshotOverview {
+  snapshots: SnapshotItem[];
+  operation: SnapshotOperation | null;
 }

@@ -51,7 +51,7 @@ class SnapshotRestorer:
             raise SnapshotError("目标数据目录非空；如需重建，必须显式使用 --replace")
 
         with tempfile.TemporaryDirectory(
-            prefix="research-restore-", dir=data_dir.parent
+            prefix="learning-restore-", dir=data_dir.parent
         ) as temporary:
             stage = Path(temporary) / "data"
             stage.mkdir()

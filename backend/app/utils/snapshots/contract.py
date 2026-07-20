@@ -6,7 +6,7 @@ from typing import Any
 
 from .errors import SnapshotError
 
-SNAPSHOT_FORMAT = "hxaxd-research-exact-v1"
+SNAPSHOT_FORMAT = "hxaxd-learning-exact-v1"
 MANIFEST_PATH = "manifest.json"
 DATABASE_ARCHIVE_PATH = "payload/research.sqlite3"
 
