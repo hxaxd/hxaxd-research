@@ -56,7 +56,7 @@ def test_v3_snapshot_round_trip_preserves_catalog_and_blob(tmp_path):
 
     assert written.file_count == 2
     assert restored.file_count == 2
-    assert restored.source_format == "hxaxd-research-v3"
+    assert restored.source_format == "hxaxd-research-v4"
     restored.database.verify()
     with restored.database.read() as connection:
         assert connection.execute("SELECT COUNT(*) FROM bibliographic_items").fetchone()[0] == 1
@@ -95,7 +95,7 @@ def test_v2_safety_snapshot_is_migrated_in_staging(tmp_path):
     result = SnapshotRestorer().restore(archive, tmp_path / "restored")
 
     assert result.source_format == V2_SNAPSHOT_FORMAT
-    assert inspect_database(result.database.path).kind is DatabaseKind.V3
+    assert inspect_database(result.database.path).kind is DatabaseKind.V4
     with result.database.read() as connection:
         assert connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 1
         assert connection.execute("SELECT COUNT(*) FROM bibliographic_items").fetchone()[0] == 1
@@ -184,7 +184,7 @@ def test_unjournaled_activation_residue_never_initializes_an_empty_database(tmp_
 
     settings = _settings(tmp_path)
     settings.data_dir.mkdir(parents=True)
-    residue = settings.data_dir / ".research.sqlite3.v3-migrating-orphan"
+    residue = settings.data_dir / ".research.sqlite3.v4-migrating-orphan"
     residue.write_bytes(b"incomplete shadow")
     context = build_app_context(settings)
 
@@ -229,7 +229,7 @@ def test_snapshot_jobs_are_durable_and_restore_job_survives_database_swap(tmp_pa
     restored_job = jobs.get(restore_job.id)
     assert restored_job.status is JobStatus.SUCCEEDED
     assert restored_job.result is not None
-    assert restored_job.result["source_format"] == "hxaxd-research-v3"
+    assert restored_job.result["source_format"] == "hxaxd-research-v4"
     recovery = Path(restored_job.result["recovery_directory"])
     assert recovery.is_dir()
     V3Database(settings.database_path).verify()

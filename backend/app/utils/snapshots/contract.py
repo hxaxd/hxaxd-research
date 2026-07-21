@@ -6,9 +6,12 @@ from typing import Any
 
 from .errors import SnapshotError
 
-SNAPSHOT_FORMAT = "hxaxd-research-v3"
+SNAPSHOT_FORMAT = "hxaxd-research-v4"
+V3_SNAPSHOT_FORMAT = "hxaxd-research-v3"
 V2_SNAPSHOT_FORMAT = "hxaxd-learning-v2"
-SUPPORTED_SNAPSHOT_FORMATS = frozenset({SNAPSHOT_FORMAT, V2_SNAPSHOT_FORMAT})
+SUPPORTED_SNAPSHOT_FORMATS = frozenset(
+    {SNAPSHOT_FORMAT, V3_SNAPSHOT_FORMAT, V2_SNAPSHOT_FORMAT}
+)
 MANIFEST_PATH = "manifest.json"
 DATABASE_ARCHIVE_PATH = "payload/research.sqlite3"
 
@@ -83,7 +86,11 @@ class SnapshotManifest:
             or not isinstance(contract_version, str)
         ):
             raise SnapshotError("快照版本字段类型错误")
-        if format_ == SNAPSHOT_FORMAT and (schema_version != 3 or contract_version != "3.0"):
+        if format_ == SNAPSHOT_FORMAT and (schema_version != 4 or contract_version != "4.0"):
+            raise SnapshotError("v4 快照契约版本不受支持")
+        if format_ == V3_SNAPSHOT_FORMAT and (
+            schema_version != 3 or contract_version != "3.0"
+        ):
             raise SnapshotError("v3 快照契约版本不受支持")
         if format_ == V2_SNAPSHOT_FORMAT and schema_version != 2:
             raise SnapshotError("v2 快照结构版本不受支持")

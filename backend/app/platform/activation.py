@@ -22,6 +22,7 @@ class ActivationError(RuntimeError):
 
 class ActivationOperation(StrEnum):
     V2_MIGRATION = "v2_migration"
+    V3_MIGRATION = "v3_migration"
     SNAPSHOT_RESTORE = "snapshot_restore"
 
 
@@ -125,13 +126,51 @@ def activate_v2_database(
     journal_path: Path,
     fault_injector: FaultInjector | None = None,
 ) -> None:
+    _activate_database_migration(
+        active,
+        staged,
+        recovery,
+        operation=ActivationOperation.V2_MIGRATION,
+        journal_path=journal_path,
+        fault_injector=fault_injector,
+    )
+
+
+def activate_v3_database(
+    active: Path,
+    staged: Path,
+    recovery: Path,
+    *,
+    journal_path: Path,
+    fault_injector: FaultInjector | None = None,
+) -> None:
+    _activate_database_migration(
+        active,
+        staged,
+        recovery,
+        operation=ActivationOperation.V3_MIGRATION,
+        journal_path=journal_path,
+        fault_injector=fault_injector,
+    )
+
+
+def _activate_database_migration(
+    active: Path,
+    staged: Path,
+    recovery: Path,
+    *,
+    operation: ActivationOperation,
+    journal_path: Path,
+    fault_injector: FaultInjector | None = None,
+) -> None:
     active = active.resolve()
     staged = staged.resolve()
     recovery = recovery.resolve()
-    moves = _v2_moves(active, recovery)
+    label = "v2" if operation is ActivationOperation.V2_MIGRATION else "v3"
+    moves = _database_moves(active, recovery)
     record = ActivationRecord(
         version=1,
-        operation=ActivationOperation.V2_MIGRATION.value,
+        operation=operation.value,
         phase=ActivationPhase.PREPARED.value,
         scope_root=str(active.parent),
         active=str(active),
@@ -146,25 +185,25 @@ def activate_v2_database(
     journal = ActivationJournal(journal_path)
     journal.begin(record)
     try:
-        _inject(fault_injector, "v2.after_journal")
+        _inject(fault_injector, f"{label}.after_journal")
         for source, destination in moves:
             if source.exists():
                 if destination.exists():
                     raise ActivationError(f"迁移备份目标已经存在: {destination.name}")
                 _replace_path(source, destination)
-                _inject(fault_injector, f"v2.after_move.{source.name}")
+                _inject(fault_injector, f"{label}.after_move.{source.name}")
         record = journal.set_phase(record, ActivationPhase.SOURCE_MOVED)
-        _inject(fault_injector, "v2.after_source_moved")
+        _inject(fault_injector, f"{label}.after_source_moved")
         _replace_path(staged, active)
         record = journal.set_phase(record, ActivationPhase.ACTIVATED)
-        _inject(fault_injector, "v2.after_activated")
+        _inject(fault_injector, f"{label}.after_activated")
         V3Database(active).verify()
     except Exception:
         try:
-            _rollback_v2(record)
+            _rollback_database_migration(record, _migration_source_kind(operation), label)
         except Exception as rollback_error:
             raise ActivationError(
-                "v2 激活失败且自动回滚未完成；已保留激活日志供下次启动恢复"
+                f"{label} 激活失败且自动回滚未完成；已保留激活日志供下次启动恢复"
             ) from rollback_error
         journal.clear()
         raise
@@ -233,12 +272,19 @@ def recover_pending_activation(
     operation = _operation(record)
     expected_active = (
         database_path.resolve()
-        if operation is ActivationOperation.V2_MIGRATION
+        if operation
+        in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}
         else data_dir.resolve()
     )
     _validate_record(record, expected_active=expected_active)
-    if operation is ActivationOperation.V2_MIGRATION:
-        result = _recover_v2(record, journal)
+    if operation in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}:
+        label = "v2" if operation is ActivationOperation.V2_MIGRATION else "v3"
+        result = _recover_database_migration(
+            record,
+            journal,
+            source_kind=_migration_source_kind(operation),
+            label=label,
+        )
     else:
         result = _recover_snapshot(record, journal)
     return f"{operation.value}:{result}"
@@ -259,7 +305,9 @@ def ensure_no_activation_residue(
     database_path = database_path.resolve()
     residue = [
         *database_path.parent.glob(f".{database_path.name}.v3-migrating-*"),
+        *database_path.parent.glob(f".{database_path.name}.v4-migrating-*"),
         *database_path.parent.glob(f"{database_path.name}.v2-*.bak"),
+        *database_path.parent.glob(f"{database_path.name}.v3-*.bak"),
         *data_dir.parent.glob(".snapshot-restore-*"),
         *data_dir.parent.glob(f"{data_dir.name}.before-restore-*"),
     ]
@@ -271,27 +319,33 @@ def ensure_no_activation_residue(
         )
 
 
-def _recover_v2(record: ActivationRecord, journal: ActivationJournal) -> str:
+def _recover_database_migration(
+    record: ActivationRecord,
+    journal: ActivationJournal,
+    *,
+    source_kind: DatabaseKind,
+    label: str,
+) -> str:
     active = Path(record.active)
     staged = Path(record.staged)
     moves = [(Path(move.source), Path(move.recovery)) for move in record.moves]
-    if _verified_v3(active) and not staged.exists():
+    if _verified_current(active) and not staged.exists():
         journal.clear()
         return "committed"
-    if _verified_v3(staged):
+    if _verified_current(staged):
         active_kind = inspect_database(active).kind
-        if active_kind not in {DatabaseKind.LEGACY_V2, DatabaseKind.MISSING}:
-            raise ActivationError("v2 激活日志与活动数据库状态冲突")
-        _complete_v2_source_moves(moves)
+        if active_kind not in {source_kind, DatabaseKind.MISSING}:
+            raise ActivationError(f"{label} 激活日志与活动数据库状态冲突")
+        _complete_database_source_moves(moves, label)
         record = journal.set_phase(record, ActivationPhase.SOURCE_MOVED)
         _replace_path(staged, active)
         journal.set_phase(record, ActivationPhase.ACTIVATED)
         V3Database(active).verify()
         journal.clear()
         return "committed"
-    _rollback_v2(record)
-    if inspect_database(active).kind is not DatabaseKind.LEGACY_V2:
-        raise ActivationError("无法从 v2 备份恢复活动数据库")
+    _rollback_database_migration(record, source_kind, label)
+    if inspect_database(active).kind is not source_kind:
+        raise ActivationError(f"无法从 {label} 备份恢复活动数据库")
     staged.unlink(missing_ok=True)
     journal.clear()
     return "rolled_back"
@@ -301,8 +355,8 @@ def _recover_snapshot(record: ActivationRecord, journal: ActivationJournal) -> s
     active = Path(record.active)
     staged = Path(record.staged)
     recovery = Path(record.recovery)
-    stage_valid = _verified_v3(staged / "research.sqlite3")
-    active_valid = _verified_v3(active / "research.sqlite3")
+    stage_valid = _verified_current(staged / "research.sqlite3")
+    active_valid = _verified_current(active / "research.sqlite3")
     if not staged.exists() and active_valid:
         journal.clear()
         return "committed"
@@ -324,26 +378,30 @@ def _recover_snapshot(record: ActivationRecord, journal: ActivationJournal) -> s
     if active_valid and not recovery.exists():
         journal.clear()
         return "rolled_back"
-    if not active.exists() and _verified_v3(recovery / "research.sqlite3"):
+    if not active.exists() and _verified_current(recovery / "research.sqlite3"):
         _replace_path(recovery, active)
         journal.clear()
         return "rolled_back"
     raise ActivationError("快照激活残留无法验证；拒绝初始化或覆盖工作区")
 
 
-def _rollback_v2(record: ActivationRecord) -> None:
+def _rollback_database_migration(
+    record: ActivationRecord,
+    source_kind: DatabaseKind,
+    label: str,
+) -> None:
     active = Path(record.active)
     staged = Path(record.staged)
     moves = [(Path(move.source), Path(move.recovery)) for move in record.moves]
-    if inspect_database(active).kind is DatabaseKind.V3 and not staged.exists():
+    if inspect_database(active).kind is DatabaseKind.V4 and not staged.exists():
         _replace_path(active, staged)
     for source, recovery in reversed(moves):
         if source.exists() and recovery.exists():
-            raise ActivationError(f"v2 回滚路径冲突: {source.name}")
+            raise ActivationError(f"{label} 回滚路径冲突: {source.name}")
         if recovery.exists():
             _replace_path(recovery, source)
-    if inspect_database(active).kind is not DatabaseKind.LEGACY_V2:
-        raise ActivationError("v2 活动数据库没有恢复到可验证状态")
+    if inspect_database(active).kind is not source_kind:
+        raise ActivationError(f"{label} 活动数据库没有恢复到可验证状态")
     staged.unlink(missing_ok=True)
     _sync_directory(staged.parent)
 
@@ -361,14 +419,17 @@ def _rollback_snapshot(record: ActivationRecord) -> None:
         _replace_path(recovery, active)
 
 
-def _complete_v2_source_moves(moves: Iterable[tuple[Path, Path]]) -> None:
+def _complete_database_source_moves(
+    moves: Iterable[tuple[Path, Path]],
+    label: str,
+) -> None:
     for index, (source, recovery) in enumerate(moves):
         if source.exists() and recovery.exists():
-            raise ActivationError(f"v2 激活路径冲突: {source.name}")
+            raise ActivationError(f"{label} 激活路径冲突: {source.name}")
         if source.exists():
             _replace_path(source, recovery)
         elif index == 0 and not recovery.exists():
-            raise ActivationError("v2 活动数据库及其备份同时缺失")
+            raise ActivationError(f"{label} 活动数据库及其备份同时缺失")
 
 
 def _validate_record(record: ActivationRecord, *, expected_active: Path) -> None:
@@ -389,8 +450,10 @@ def _validate_record(record: ActivationRecord, *, expected_active: Path) -> None
         raise ActivationError("工作区激活日志包含越界路径")
     if len({active, staged, recovery}) != 3:
         raise ActivationError("工作区激活日志路径发生重叠")
-    if operation is ActivationOperation.V2_MIGRATION:
-        expected_moves = _v2_moves(active, recovery)
+    if operation in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}:
+        label = "v2" if operation is ActivationOperation.V2_MIGRATION else "v3"
+        source_version = 2 if operation is ActivationOperation.V2_MIGRATION else 3
+        expected_moves = _database_moves(active, recovery)
         actual_moves = [
             (
                 _absolute_path(move.source, "move.source"),
@@ -398,12 +461,14 @@ def _validate_record(record: ActivationRecord, *, expected_active: Path) -> None
             )
             for move in record.moves
         ]
-        if staged.parent != root or not staged.name.startswith(f".{active.name}.v3-migrating-"):
-            raise ActivationError("v2 激活日志的影子数据库路径无效")
-        if not recovery.name.startswith(f"{active.name}.v2-") or not recovery.name.endswith(".bak"):
-            raise ActivationError("v2 激活日志的备份路径无效")
+        if staged.parent != root or not staged.name.startswith(f".{active.name}.v4-migrating-"):
+            raise ActivationError(f"{label} 激活日志的影子数据库路径无效")
+        if not recovery.name.startswith(
+            f"{active.name}.v{source_version}-"
+        ) or not recovery.name.endswith(".bak"):
+            raise ActivationError(f"{label} 激活日志的备份路径无效")
         if actual_moves != expected_moves:
-            raise ActivationError("v2 激活日志的文件移动集合无效")
+            raise ActivationError(f"{label} 激活日志的文件移动集合无效")
     else:
         if record.moves:
             raise ActivationError("快照激活日志包含非预期文件移动")
@@ -429,7 +494,7 @@ def _absolute_path(value: str, field: str) -> Path:
     return path.resolve()
 
 
-def _v2_moves(active: Path, recovery: Path) -> list[tuple[Path, Path]]:
+def _database_moves(active: Path, recovery: Path) -> list[tuple[Path, Path]]:
     return [
         (active, recovery),
         (
@@ -443,8 +508,16 @@ def _v2_moves(active: Path, recovery: Path) -> list[tuple[Path, Path]]:
     ]
 
 
-def _verified_v3(path: Path) -> bool:
-    if inspect_database(path).kind is not DatabaseKind.V3:
+def _migration_source_kind(operation: ActivationOperation) -> DatabaseKind:
+    if operation is ActivationOperation.V2_MIGRATION:
+        return DatabaseKind.LEGACY_V2
+    if operation is ActivationOperation.V3_MIGRATION:
+        return DatabaseKind.LEGACY_V3
+    raise ActivationError("工作区激活操作不是数据库迁移")
+
+
+def _verified_current(path: Path) -> bool:
+    if inspect_database(path).kind is not DatabaseKind.V4:
         return False
     try:
         V3Database(path).verify()
