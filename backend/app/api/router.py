@@ -40,7 +40,7 @@ def create_api_router(context) -> APIRouter:
 
     def resolve_context(payload):
         try:
-            return context.agent_context.resolve(
+            return context.agent_prompt_context.resolve(
                 task_kind=payload.task_kind,
                 goal=payload.goal,
                 project_id=payload.project_id,
@@ -53,7 +53,9 @@ def create_api_router(context) -> APIRouter:
 
     def resolve_scopes(payload) -> tuple[str, ...]:
         try:
-            return context.agent_context.scopes_for(payload.task_kind, payload.project_id)
+            return context.agent_prompt_context.scopes_for(
+                payload.task_kind, payload.project_id
+            )
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
