@@ -1,4 +1,4 @@
-const CACHE = "hxaxd-workspace-shell-v1";
+const CACHE = "hxaxd-workspace-shell-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/research-icon.svg"];
 
 self.addEventListener("install", (event) => {

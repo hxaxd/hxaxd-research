@@ -6,7 +6,7 @@ import time
 from collections.abc import AsyncIterator
 
 from .models import JobEvent
-from .public import project_public_job_event
+from .public import is_public_job_event, project_public_job_event
 from .repository import SqliteJobRepository
 
 
@@ -30,6 +30,8 @@ async def stream_job_events(
         events = await asyncio.to_thread(repository.list_events, job_id, after=cursor)
         for event in events:
             cursor = event.id
+            if not is_public_job_event(event):
+                continue
             last_write = time.monotonic()
             yield format_sse_event(event)
         job = await asyncio.to_thread(repository.get, job_id)

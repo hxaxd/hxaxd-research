@@ -26,6 +26,7 @@ import type {
   ProjectCreate,
   ProjectItem,
   ProjectItemStatus,
+  ProjectItemUpdate,
   PairedDevice,
   PairDeviceRequest,
   PairingCreate,
@@ -103,6 +104,11 @@ export const api = {
     request<ProjectItem[]>(
       `/projects/${projectId}/items${query({ status: status === "all" ? null : status })}`,
     ),
+  updateProjectItem: (projectId: string, workId: string, payload: ProjectItemUpdate) =>
+    request<ProjectItem>(`/projects/${projectId}/works/${workId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   candidates: (projectId: string) =>
     request<Candidate[]>(`/projects/${projectId}/candidates`),
   decideCandidates: (projectId: string, decisions: CandidateDecision[]) =>

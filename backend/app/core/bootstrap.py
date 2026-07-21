@@ -33,6 +33,7 @@ from app.documents import (
     DocumentRepository,
     DocumentService,
     OpenAICompatibleTranslationProvider,
+    PdfPipelineCapabilityProbe,
     RapidOcrExtractor,
 )
 from app.integrations.zotero import (
@@ -228,11 +229,23 @@ def build_app_context(settings: Settings) -> AppContext:
         concurrency_provider=lambda: preferences.get().tasks.max_concurrent_jobs,
     )
     jobs = JobScheduler(job_repository, job_worker)
-    operations = OperationService(settings, attachments, jobs, job_repository, process_runner)
-    OperationHandlers(settings, attachments, process_runner).register(job_registry)
+    pdf_capability_probe = PdfPipelineCapabilityProbe(settings, process_runner)
+    operations = OperationService(
+        settings,
+        attachments,
+        jobs,
+        job_repository,
+        process_runner,
+        pdf_capability_probe,
+    )
+    OperationHandlers(
+        settings, attachments, process_runner, pdf_capability_probe
+    ).register(job_registry)
     document_repository = DocumentRepository(database)
     ocr_extractor = RapidOcrExtractor(settings, process_runner)
-    document_extractor = BabelDocExtractor(settings, process_runner, ocr_extractor)
+    document_extractor = BabelDocExtractor(
+        settings, process_runner, ocr_extractor, pdf_capability_probe
+    )
     translation_provider = OpenAICompatibleTranslationProvider(
         name=settings.translation_provider,
         model=settings.translation_model,
@@ -321,7 +334,7 @@ def build_app_context(settings: Settings) -> AppContext:
                 supported=True,
                 ready=document_extractor.ready,
                 message=(
-                    "BabelDOC 结构化提取与扫描件 OCR 已就绪"
+                    "结构提取与扫描件 OCR 已就绪；特殊块识别和外部译文回注仍受限"
                     if document_extractor.ready and document_extractor.true_ocr_ready
                     else "BabelDOC 结构化提取已就绪；升级 PDF 工具可启用扫描件 OCR"
                     if document_extractor.ready
@@ -330,9 +343,25 @@ def build_app_context(settings: Settings) -> AppContext:
                 details={
                     "extractor": document_extractor.name,
                     "version": document_extractor.version,
+                    "pdf2zh_version": pdf_capability_probe.get().pdf2zh_version,
+                    "babeldoc_version": pdf_capability_probe.get().babeldoc_version,
                     "true_ocr": document_extractor.true_ocr_ready,
                     "ocr_engine": ocr_extractor.name,
                     "ocr_version": ocr_extractor.version,
+                    "page_coordinates": pdf_capability_probe.get().page_coordinates,
+                    "reading_order": pdf_capability_probe.get().reading_order,
+                    "paragraph_boundaries": pdf_capability_probe.get().paragraph_boundaries,
+                    "block_classification": pdf_capability_probe.get().block_classification,
+                    "specialized_block_types": (
+                        pdf_capability_probe.get().specialized_block_types
+                    ),
+                    "ocr_confidence": pdf_capability_probe.get().ocr_confidence,
+                    "external_translation_injection": (
+                        pdf_capability_probe.get().external_block_translation_injection
+                    ),
+                    "external_translation_pdf": (
+                        pdf_capability_probe.get().translated_pdf_from_external_blocks
+                    ),
                 },
             ),
             "whole_document_translation": translation_capability,

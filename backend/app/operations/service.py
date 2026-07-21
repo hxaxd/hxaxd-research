@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.core.config import Settings
+from app.documents.capabilities import PdfPipelineCapabilityProbe
 from app.jobs.models import Job, JobAttachment, JobCreate, JobStatus
 from app.jobs.repository import SqliteJobRepository
 from app.jobs.scheduler import JobScheduler
@@ -34,12 +35,16 @@ class OperationService:
         jobs: JobScheduler,
         job_repository: SqliteJobRepository,
         runner: ProcessRunner,
+        capability_probe: PdfPipelineCapabilityProbe | None = None,
     ) -> None:
         self.settings = settings
         self.attachments = attachments
         self.jobs = jobs
         self.job_repository = job_repository
         self.runner = runner
+        self.capability_probe = capability_probe or PdfPipelineCapabilityProbe(
+            settings, runner
+        )
 
     def list_tools(self) -> list[ManagedTool]:
         return [self.get_tool(name) for name in ManagedToolName]
@@ -83,13 +88,11 @@ class OperationService:
                 continue
             if (
                 job.kind == "tool.install.pdf2zh"
-                and self.settings.pdf2zh_executable.is_file()
-                and self.settings.rapidocr_package_dir is not None
+                and self.capability_probe.get().compatible
             ):
+                probe = self.capability_probe.get()
                 self.job_repository.reconcile_committed(
-                    job.id, {"tool": "pdf2zh", "version": self._version(
-                        ManagedToolName.PDF2ZH, self.settings.pdf2zh_executable
-                    )}
+                    job.id, {"tool": "pdf2zh", "version": probe.pdf2zh_version}
                 )
                 reconciled += 1
             elif job.kind == "tool.install.tex" and self._executable(ManagedToolName.TEX):
@@ -101,12 +104,17 @@ class OperationService:
 
     def get_tool(self, name: ManagedToolName) -> ManagedTool:
         executable = self._executable(name)
+        pdf_probe = (
+            self.capability_probe.get()
+            if name is ManagedToolName.PDF2ZH and executable is not None
+            else None
+        )
         installing = self._has_active_job(f"tool.install.{name.value}")
         last_failure = self._last_failure(f"tool.install.{name.value}")
         upgrade_required = (
             name is ManagedToolName.PDF2ZH
             and executable is not None
-            and self.settings.rapidocr_package_dir is None
+            and (pdf_probe is None or not pdf_probe.compatible)
         )
         status = (
             ManagedToolStatus.INSTALLING
@@ -125,7 +133,13 @@ class OperationService:
             label=metadata["label"],
             description=metadata["description"],
             status=status,
-            version=self._version(name, executable) if executable else None,
+            version=(
+                pdf_probe.pdf2zh_version
+                if pdf_probe is not None
+                else self._version(name, executable)
+                if executable
+                else None
+            ),
             executable_path=str(executable) if executable else None,
             install_path=str(
                 self.settings.pdf2zh_dir
@@ -135,7 +149,7 @@ class OperationService:
             message=(
                 "正在安装"
                 if installing
-                else "版面翻译可用；需要升级以启用真正的扫描件识别"
+                else pdf_probe.message
                 if upgrade_required
                 else "可以使用"
                 if executable
@@ -146,10 +160,7 @@ class OperationService:
         )
 
     def install_tool(self, name: ManagedToolName) -> Job:
-        if self._executable(name) is not None and not (
-            name is ManagedToolName.PDF2ZH
-            and self.settings.rapidocr_package_dir is None
-        ):
+        if self.get_tool(name).status is ManagedToolStatus.READY:
             return self.jobs.create(
                 JobCreate(
                     kind=f"tool.verify.{name.value}",

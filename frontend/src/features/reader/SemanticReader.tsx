@@ -72,10 +72,11 @@ interface Props {
   projectId: string;
   itemId: string;
   attachment: Attachment;
+  annotationRefreshToken?: number;
   onOpenPdf: (page: number | null) => void;
 }
 
-export function SemanticReader({ projectId, itemId, attachment, onOpenPdf }: Props) {
+export function SemanticReader({ projectId, itemId, attachment, annotationRefreshToken = 0, onOpenPdf }: Props) {
   const scrollRef = useRef<HTMLElement>(null);
   const saveTimer = useRef<number | null>(null);
   const restoredDocument = useRef<string | null>(null);
@@ -102,7 +103,7 @@ export function SemanticReader({ projectId, itemId, attachment, onOpenPdf }: Pro
   const preferences = useApiResource(() => api.userPreferences(), []);
   const annotations = useApiResource(
     () => api.annotations(projectId, itemId),
-    [projectId, itemId],
+    [projectId, itemId, annotationRefreshToken],
   );
   const readingState = useApiResource(
     () => api.readingState(projectId, itemId),

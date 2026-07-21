@@ -1,3 +1,4 @@
+from .capabilities import PdfPipelineCapabilityProbe, PdfPipelineProbeResult
 from .extractor import BabelDocExtractor, DocumentExtractionError, parse_babeldoc_il
 from .models import (
     BlockKind,
@@ -37,6 +38,8 @@ __all__ = [
     "DocumentTranslationRequest",
     "OcrMode",
     "OpenAICompatibleTranslationProvider",
+    "PdfPipelineCapabilityProbe",
+    "PdfPipelineProbeResult",
     "RapidOcrExtractor",
     "SemanticRole",
     "TranslationProvider",

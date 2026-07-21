@@ -65,6 +65,14 @@ export function WorkspacePreferencesSettings() {
     setBusy(true);
     setFeedback(null);
     try {
+      let notificationPermission: NotificationPermission | "unsupported" | null = null;
+      if (draft.tasks.notify_on_success || draft.tasks.notify_on_failure) {
+        notificationPermission = "Notification" in window
+          ? Notification.permission === "default"
+            ? await Notification.requestPermission()
+            : Notification.permission
+          : "unsupported";
+      }
       const saved = await api.updateUserPreferences({
         expected_revision: draft.revision,
         reader: draft.reader,
@@ -79,7 +87,13 @@ export function WorkspacePreferencesSettings() {
       });
       resource.setData(saved);
       setDraft(saved);
-      setFeedback("设置已保存，并将用于之后的阅读、翻译与智能体任务。");
+      setFeedback(
+        notificationPermission === "denied"
+          ? "设置已保存；系统通知被浏览器拒绝，应用内仍会显示任务提醒。"
+          : notificationPermission === "unsupported"
+          ? "设置已保存；当前浏览器不支持系统通知，应用内仍会显示任务提醒。"
+          : "设置已保存，并将用于之后的阅读、翻译与智能体任务。",
+      );
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "无法保存设置");
     } finally {

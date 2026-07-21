@@ -11,12 +11,16 @@ from app.core.config import Settings
 from app.platform.processes import (
     CancellationToken,
     ExecutableIdentity,
-    ProcessLogEvent,
     ProcessOutcome,
     ProcessRunner,
     ProcessSpec,
 )
 
+from .capabilities import (
+    BABELDOC_VERSION,
+    RAPIDOCR_VERSION,
+    PdfPipelineCapabilityProbe,
+)
 from .models import (
     BlockKind,
     ExtractedBlock,
@@ -25,8 +29,6 @@ from .models import (
     SemanticRole,
 )
 
-BABELDOC_VERSION = "0.6.2"
-RAPIDOCR_VERSION = "3.9.2"
 STRUCTURE_VERSION = "semantic-blocks-v2"
 
 
@@ -59,19 +61,26 @@ class BabelDocExtractor:
     structure_version = STRUCTURE_VERSION
 
     def __init__(
-        self, settings: Settings, runner: ProcessRunner, ocr_extractor: OcrExtractor
+        self,
+        settings: Settings,
+        runner: ProcessRunner,
+        ocr_extractor: OcrExtractor,
+        capability_probe: PdfPipelineCapabilityProbe | None = None,
     ) -> None:
         self.settings = settings
         self.runner = runner
         self.ocr_extractor = ocr_extractor
+        self.capability_probe = capability_probe or PdfPipelineCapabilityProbe(
+            settings, runner
+        )
 
     @property
     def ready(self) -> bool:
-        return self.settings.babeldoc_executable.is_file()
+        return self.capability_probe.get().compatible
 
     @property
     def true_ocr_ready(self) -> bool:
-        return self.ocr_extractor.ready
+        return self.capability_probe.get().true_ocr and self.ocr_extractor.ready
 
     def extract(
         self,
@@ -178,7 +187,6 @@ class BabelDocExtractor:
                     display_name="BabelDOC structure extraction",
                 ),
                 cancellation=callbacks.cancellation,
-                observer=_log_observer(callbacks),
             )
             callbacks.record_process(result.pid, "babeldoc", result.returncode)
             if result.outcome is ProcessOutcome.CANCELED:
@@ -190,7 +198,12 @@ class BabelDocExtractor:
             if not result.succeeded:
                 details = (result.stderr_tail or result.stdout_tail or result.error or "")[-2000:]
                 code = "ocr_required" if "ScannedPDFError" in details else "extractor_failed"
-                raise DocumentExtractionError(code, f"BabelDOC 结构提取失败：{details}")
+                message = (
+                    "PDF 没有可恢复的文本层，需要扫描件 OCR"
+                    if code == "ocr_required"
+                    else "BabelDOC 结构提取失败；未登记任何结构化结果"
+                )
+                raise DocumentExtractionError(code, message)
 
             intermediate = working / source_path.stem / "styles_and_formulas.json"
             if not intermediate.is_file():
@@ -438,16 +451,3 @@ def _heuristic_role(value: str) -> SemanticRole | None:
 
 def _normalize_text(value: str) -> str:
     return value.replace("\r\n", "\n").replace("\r", "\n").strip()
-
-
-def _log_observer(callbacks: ExtractionCallbacks):
-    def observe(event: ProcessLogEvent) -> None:
-        if not event.text:
-            return
-        callbacks.emit(
-            f"extractor.{event.stream}",
-            {"message": event.text[-2000:]},
-            "info" if event.stream == "stdout" else "warning",
-        )
-
-    return observe

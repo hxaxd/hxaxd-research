@@ -74,6 +74,15 @@ export interface ProjectItem {
   updated_at: string;
 }
 
+export interface ProjectItemUpdate {
+  status?: ProjectItemStatus;
+  roles?: string[];
+  summary?: string | null;
+  relevance?: string | null;
+  contributions?: string[];
+  reading_focus?: string[];
+}
+
 export interface Creator {
   id: string;
   position: number;

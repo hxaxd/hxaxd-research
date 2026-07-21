@@ -71,6 +71,55 @@ def test_worker_completes_job_and_restart_requeues_interrupted_attempt(tmp_path)
     assert repository.attempts(interrupted.id)[0].status.value == "interrupted"
 
 
+def test_success_event_exposes_only_product_ids_and_internal_links(tmp_path):
+    repository = _repository(tmp_path)
+    registry = JobRegistry()
+
+    def produce(_context):
+        return JobExecutionResult(
+            result={
+                "document_id": "document-1",
+                "attachment_ids": ["attachment-2", "attachment-1"],
+                "private_receipt": "not-public",
+            },
+            commit_point_reached=True,
+        )
+
+    registry.register("test.product", produce)
+    job = repository.enqueue(JobCreate(kind="test.product"))
+
+    assert JobWorker(repository, registry, worker_id="worker-product").run_once()
+    event = repository.list_events(job.id)[-1]
+
+    assert event.event_type == "job.succeeded"
+    assert event.payload == {
+        "attachments": 2,
+        "attachment_ids": ["attachment-2", "attachment-1"],
+        "document_id": "document-1",
+        "product_link": f"/tasks?job={job.id}",
+        "products": [
+            {
+                "type": "attachment",
+                "id": "attachment-2",
+                "role": "output",
+                "href": "/api/attachments/attachment-2/content",
+            },
+            {
+                "type": "attachment",
+                "id": "attachment-1",
+                "role": "output",
+                "href": "/api/attachments/attachment-1/content",
+            },
+            {
+                "type": "document",
+                "id": "document-1",
+                "role": "structured_document",
+                "href": f"/tasks?job={job.id}",
+            },
+        ],
+    }
+
+
 def test_running_job_cancellation_reaches_handler(tmp_path):
     repository = _repository(tmp_path)
     registry = JobRegistry()

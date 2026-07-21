@@ -15,6 +15,7 @@ def test_built_frontend_serves_assets_and_spa_routes_without_path_escape(tmp_pat
     distribution.mkdir()
     (distribution / "index.html").write_text("<main>workspace shell</main>", "utf-8")
     (distribution / "asset.js").write_text("globalThis.ready = true", "utf-8")
+    (distribution / "worker.mjs").write_text("export const ready = true", "utf-8")
     (tmp_path / "outside.txt").write_text("private data", "utf-8")
     application = FastAPI()
     mount_frontend(application, distribution)
@@ -23,6 +24,9 @@ def test_built_frontend_serves_assets_and_spa_routes_without_path_escape(tmp_pat
         assert "workspace shell" in client.get("/").text
         assert "workspace shell" in client.get("/projects/project-1").text
         assert client.get("/asset.js").text == "globalThis.ready = true"
+        assert client.get("/worker.mjs").headers["content-type"].startswith(
+            "application/javascript"
+        )
         escaped = client.get("/%2E%2E/outside.txt")
         assert "private data" not in escaped.text
 

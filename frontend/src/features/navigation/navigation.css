@@ -26,8 +26,8 @@
 
 .brand-mark {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid rgb(166 167 255 / 18%);
@@ -42,8 +42,8 @@
 
 .sidebar-toggle {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   place-items: center;
   border: 0;
@@ -66,7 +66,7 @@
   color: var(--text-muted);
   font-size: 12px;
 }
-.primary-nav-link { min-height: 38px; padding: 0 11px; }
+.primary-nav-link { min-height: 44px; padding: 0 11px; }
 .primary-nav-link:hover,
 .project-link:hover { background: var(--surface-hover); color: var(--text); }
 .primary-nav-link.active,
@@ -86,8 +86,8 @@
 .section-count { margin-left: auto; font-variant-numeric: tabular-nums; }
 .project-create-link {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border-radius: 7px;
   color: var(--text-faint);
@@ -95,7 +95,7 @@
 .project-create-link:hover { background: var(--surface-hover); color: var(--text); }
 .navigation-scroll { min-height: 0; flex: 1; overflow: auto; padding: 0 12px 12px; }
 .project-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
-.project-link { min-height: 38px; padding: 0 10px; }
+.project-link { min-height: 44px; padding: 0 10px; }
 .project-link span { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
 .project-link em {
   min-width: 20px;

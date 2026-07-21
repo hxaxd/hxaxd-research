@@ -98,6 +98,7 @@
 .semantic-reader--touch button,
 .semantic-reader--touch select,
 .semantic-reader--touch input { min-height: 44px; }
+.semantic-reader--touch button { min-width: 44px; }
 .semantic-reader--touch .semantic-toolbar button { min-height: 44px; }
 .semantic-reader--touch .semantic-block__meta .semantic-icon-action { opacity: 1; }
 .semantic-reader--touch .block-note header button,

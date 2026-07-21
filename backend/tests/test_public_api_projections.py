@@ -78,6 +78,12 @@ def test_job_api_projects_state_and_redacts_event_payloads(tmp_path) -> None:
         },
         attempt_id=claimed.attempt.id,
     )
+    repository.append_event(
+        job.id,
+        "extractor.stdout",
+        {"message": r"raw tool output C:\private\workspace\paper.pdf"},
+        attempt_id=claimed.attempt.id,
+    )
     repository.complete(
         claimed,
         {
@@ -122,11 +128,22 @@ def test_job_api_projects_state_and_redacts_event_payloads(tmp_path) -> None:
     assert claimed.attempt.id not in stream.text
     assert r"C:\private" not in stream.text
     assert "https://papers.example.test/file.pdf?view=full" in stream.text
+    assert "extractor.stdout" not in stream.text
+    assert "raw tool output" not in stream.text
 
     internal = repository.get(job.id)
     assert secret in internal.input["url"]
     assert secret in internal.result["download_url"]
-    assert secret in repository.list_events(job.id)[2].payload["url"]
+    internal_download = next(
+        event
+        for event in repository.list_events(job.id)
+        if event.event_type == "download.started"
+    )
+    assert secret in internal_download.payload["url"]
+    assert any(
+        event.event_type == "extractor.stdout"
+        for event in repository.list_events(job.id)
+    )
 
     contract = client.get("/openapi.json").json()
     properties = contract["components"]["schemas"]["PublicJob"]["properties"]

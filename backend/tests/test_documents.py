@@ -144,6 +144,92 @@ def test_babeldoc_il_parser_removes_debug_blocks_and_preserves_anchors() -> None
     assert document.blocks[3].anchor["page_box"]["y2"] == 842
 
 
+def test_babeldoc_il_parser_uses_render_order_and_available_specialized_labels() -> None:
+    layouts = [
+        {"id": 1, "class_name": "plain text", "box": _box(40, 100, 270, 700)},
+        {"id": 2, "class_name": "plain text", "box": _box(320, 100, 550, 700)},
+        {"id": 3, "class_name": "table", "box": _box(40, 30, 270, 90)},
+        {"id": 4, "class_name": "figure", "box": _box(320, 30, 550, 90)},
+    ]
+    right = _paragraph(
+        "Right column follows.",
+        label="plain text",
+        layout_id=2,
+        order=3,
+        box=_box(320, 500, 550, 540),
+    )
+    left = _paragraph(
+        "Left column is first.",
+        label="plain text",
+        layout_id=1,
+        order=2,
+        box=_box(40, 500, 270, 540),
+    )
+    formula = _paragraph(
+        "E = mc2",
+        label="",
+        layout_id=1,
+        order=4,
+        box=_box(40, 430, 270, 470),
+    )
+    formula["pdf_paragraph_composition"] = [{"pdf_formula": {"unicode": "E = mc2"}}]
+    payload = {
+        "total_pages": 1,
+        "page": [{
+            "page_number": 0,
+            "mediabox": {"box": _box(0, 0, 595, 842)},
+            "page_layout": layouts,
+            "pdf_paragraph": [
+                right,
+                _paragraph(
+                    "Two-column evidence",
+                    label="title",
+                    layout_id=1,
+                    order=1,
+                    box=_box(40, 740, 550, 780),
+                ),
+                left,
+                formula,
+                _paragraph(
+                    "Metric 0.98",
+                    label="fallback_line",
+                    layout_id=3,
+                    order=5,
+                    box=_box(50, 45, 250, 70),
+                ),
+                _paragraph(
+                    "Figure 1",
+                    label="figure",
+                    layout_id=4,
+                    order=6,
+                    box=_box(330, 45, 540, 70),
+                ),
+                _paragraph(
+                    "Footnote evidence",
+                    label="footnote",
+                    layout_id=1,
+                    order=7,
+                    box=_box(40, 10, 270, 25),
+                ),
+            ],
+        }],
+    }
+
+    document = parse_babeldoc_il(payload)
+
+    assert [block.source_text for block in document.blocks[:3]] == [
+        "Two-column evidence",
+        "Left column is first.",
+        "Right column follows.",
+    ]
+    assert [block.kind for block in document.blocks[3:]] == [
+        BlockKind.FORMULA,
+        BlockKind.TABLE,
+        BlockKind.FIGURE,
+        BlockKind.FOOTNOTE,
+    ]
+
+
 def test_rapidocr_parser_recovers_two_column_paragraphs_with_confidence() -> None:
     def line(text: str, x: int, y: int, x2: int, y2: int, score: float = 0.94):
         return {
