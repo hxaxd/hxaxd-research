@@ -41,8 +41,10 @@ export function SettingsPage() {
 function capabilityName(key: string) {
   return ({
     attachment_upload: "附件上传",
-    durable_jobs: "持久任务",
+    durable_jobs: "持久任务调度",
     pdf_translation: "PDF 翻译",
+    semantic_documents: "论文结构与 OCR",
+    whole_document_translation: "整篇语义翻译",
     tex_compile: "TeX 编译",
     embedded_agent: "内嵌智能体",
     zotero: "Zotero 迁移",
@@ -50,11 +52,32 @@ function capabilityName(key: string) {
 }
 
 function capabilityIcon(key: string): "terminal" | "shield" | "plug" {
-  if (key === "pdf_translation" || key === "tex_compile" || key === "embedded_agent") return "terminal";
+  if (["pdf_translation", "semantic_documents", "whole_document_translation", "tex_compile", "embedded_agent"].includes(key)) return "terminal";
   return key === "zotero" ? "plug" : "shield";
 }
 
 function Detail({ name, value }: { name: string; value: string | number | boolean | null }) {
-  const label = ({ version: "版本", executable: "可执行文件", endpoint: "端点" } as Record<string, string>)[name] ?? name;
+  const label = ({
+    version: "适配器版本",
+    pdf2zh_version: "PDF2zh 版本",
+    babeldoc_version: "BabelDOC 版本",
+    extractor: "结构提取器",
+    provider: "提供者",
+    model: "模型",
+    mode: "调度策略",
+    true_ocr: "真正 OCR",
+    ocr_engine: "OCR 引擎",
+    ocr_version: "OCR 版本",
+    page_coordinates: "页面坐标",
+    reading_order: "阅读顺序",
+    paragraph_boundaries: "段落边界",
+    block_classification: "基础版面分类",
+    specialized_block_types: "特殊块类型可靠识别",
+    ocr_confidence: "OCR 置信度",
+    external_translation_injection: "外部块译文回注",
+    external_translation_pdf: "外部译文 PDF 重排",
+    executable: "可执行文件",
+    endpoint: "端点",
+  } as Record<string, string>)[name] ?? name;
   return <><dt>{label}</dt><dd>{value === null ? "—" : typeof value === "boolean" ? value ? "是" : "否" : String(value)}</dd></>;
 }

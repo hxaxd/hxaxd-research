@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
+from app.documents.capabilities import PdfPipelineProbeResult
 from app.jobs.models import (
     ClaimedJob,
     Job,
@@ -35,6 +36,7 @@ from app.operations.handlers import (
     _activate_tool_directory,
     _download_https,
     _extract_zip_safely,
+    _require_success,
     _validate_public_https_url,
 )
 from app.operations.models import (
@@ -180,6 +182,29 @@ class FakeRunner:
         )
 
 
+class FakePdfProbe:
+    def __init__(self, compatible: bool) -> None:
+        self.compatible = compatible
+
+    def get(self, *, refresh: bool = False) -> PdfPipelineProbeResult:
+        del refresh
+        return PdfPipelineProbeResult(
+            compatible=self.compatible,
+            pdf2zh_version="2.9.0" if self.compatible else None,
+            babeldoc_version="0.6.2" if self.compatible else None,
+            rapidocr_version="3.9.2" if self.compatible else None,
+            typed_high_level_api=self.compatible,
+            translator_extension=self.compatible,
+            page_coordinates=self.compatible,
+            reading_order=self.compatible,
+            paragraph_boundaries=self.compatible,
+            block_classification=self.compatible,
+            true_ocr=self.compatible,
+            ocr_confidence=self.compatible,
+            message="兼容" if self.compatible else "不兼容",
+        )
+
+
 def test_pdf_tool_reports_and_schedules_the_ocr_bundle_upgrade(tmp_path) -> None:
     settings = _settings(tmp_path)
     settings.pdf2zh_executable.parent.mkdir(parents=True)
@@ -187,6 +212,7 @@ def test_pdf_tool_reports_and_schedules_the_ocr_bundle_upgrade(tmp_path) -> None
     source_path = tmp_path / "source.pdf"
     source_path.write_bytes(b"pdf")
     scheduler = FakeScheduler()
+    probe = FakePdfProbe(False)
     service = OperationService(
         settings,
         FakeAttachmentService(
@@ -196,6 +222,7 @@ def test_pdf_tool_reports_and_schedules_the_ocr_bundle_upgrade(tmp_path) -> None
         scheduler,  # type: ignore[arg-type]
         FakeJobRepository(),  # type: ignore[arg-type]
         FakeRunner(),  # type: ignore[arg-type]
+        probe,  # type: ignore[arg-type]
     )
 
     partial = service.get_tool(ManagedToolName.PDF2ZH)
@@ -207,6 +234,7 @@ def test_pdf_tool_reports_and_schedules_the_ocr_bundle_upgrade(tmp_path) -> None
         settings.pdf2zh_dir / ".venv" / "Lib" / "site-packages" / "rapidocr"
     )
     rapidocr.mkdir(parents=True)
+    probe.compatible = True
     ready = service.get_tool(ManagedToolName.PDF2ZH)
     assert ready.status is ManagedToolStatus.READY
     service.install_tool(ManagedToolName.PDF2ZH)
@@ -277,6 +305,70 @@ def test_download_rejects_private_dns_and_cancellation_without_network(tmp_path,
     assert canceled.value.code == "canceled"
     assert canceled.value.retryable
     assert not target.exists()
+
+
+def test_download_event_exposes_only_the_remote_host(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    source_path = tmp_path / "source.pdf"
+    source_path.write_bytes(b"pdf")
+    attachments = FakeAttachmentService(
+        _attachment("source", AttachmentType.FULLTEXT, AttachmentFormat.PDF),
+        source_path,
+    )
+    handler = OperationHandlers(
+        settings,
+        attachments,  # type: ignore[arg-type]
+        FakeRunner(),  # type: ignore[arg-type]
+    )
+    events: list[tuple[str, dict[str, Any], str]] = []
+    original = _context(
+        "attachment.download",
+        {
+            "item_id": "item-1",
+            "url": "https://papers.example.test/file.pdf?token=very-secret",
+        },
+    )
+    context = JobExecutionContext(
+        claimed=original.claimed,
+        cancellation=original.cancellation,
+        emit=lambda event_type, payload, level: events.append(
+            (event_type, payload, level)
+        ),
+        record_process=original.record_process,
+    )
+
+    def fake_download(_url: str, target: Path, **_kwargs: object) -> None:
+        target.write_bytes(b"downloaded")
+
+    monkeypatch.setattr("app.operations.handlers._download_https", fake_download)
+
+    handler.download(context)
+
+    started = next(event for event in events if event[0] == "download.started")
+    assert started[1] == {"host": "papers.example.test"}
+    assert "secret" not in repr(events)
+
+
+def test_process_failure_does_not_publish_raw_tool_output() -> None:
+    result = ProcessResult(
+        outcome=ProcessOutcome.COMPLETED,
+        executable="tool",
+        argv=(),
+        pid=123,
+        returncode=1,
+        started_at=NOW,
+        finished_at=NOW,
+        duration_seconds=0,
+        stdout_tail="private document text",
+        stderr_tail=r"C:\\Users\\reader\\secret-paper.pdf",
+    )
+
+    with pytest.raises(JobFailure) as failure:
+        _require_success(result, None, "PDF 处理")
+
+    assert failure.value.code == "process_failed"
+    assert str(failure.value) == "PDF 处理失败；未登记任何输出"
+    assert "secret-paper" not in str(failure.value)
 
 
 def test_public_download_route_keeps_path_and_rejects_non_https_before_scheduling(tmp_path):

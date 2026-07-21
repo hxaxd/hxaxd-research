@@ -5,6 +5,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+_FRONTEND_MEDIA_TYPES = {
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".mjs": "application/javascript",
+    ".svg": "image/svg+xml",
+    ".wasm": "application/wasm",
+}
+
 
 def mount_frontend(application: FastAPI, distribution: Path) -> None:
     index = distribution / "index.html"
@@ -18,5 +26,8 @@ def mount_frontend(application: FastAPI, distribution: Path) -> None:
         if requested != root and root not in requested.parents:
             raise HTTPException(status_code=404)
         if frontend_path and requested.is_file():
-            return FileResponse(requested)
-        return FileResponse(index)
+            return FileResponse(
+                requested,
+                media_type=_FRONTEND_MEDIA_TYPES.get(requested.suffix.lower()),
+            )
+        return FileResponse(index, media_type="text/html")

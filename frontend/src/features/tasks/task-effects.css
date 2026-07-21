@@ -1,0 +1,26 @@
+.task-effect-toast {
+  position: fixed;
+  z-index: 80;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: grid;
+  width: min(390px, calc(100vw - 36px));
+  min-height: 64px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 13px;
+  background: rgb(15 19 28 / 96%);
+  color: var(--text);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 48%);
+  text-align: left;
+}
+.task-effect-toast span { display: grid; gap: 3px; min-width: 0; }
+.task-effect-toast strong { font-size: 11px; }
+.task-effect-toast small { overflow: hidden; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .task-effect-toast { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 24px); min-height: 68px; }
+}

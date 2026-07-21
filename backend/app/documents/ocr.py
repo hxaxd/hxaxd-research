@@ -16,10 +16,10 @@ from app.platform.processes import (
     ProcessSpec,
 )
 
+from .capabilities import RAPIDOCR_VERSION
 from .extractor import DocumentExtractionError, ExtractionCallbacks
 from .models import BlockKind, ExtractedBlock, ExtractedDocument, SemanticRole
 
-RAPIDOCR_VERSION = "3.9.2"
 OCR_STRUCTURE_VERSION = "rapidocr-reading-blocks-v1"
 
 
@@ -116,9 +116,8 @@ class RapidOcrExtractor:
             if result.outcome is ProcessOutcome.TIMED_OUT:
                 raise DocumentExtractionError("timeout", "扫描件文字识别超时")
             if not result.succeeded:
-                details = (result.stderr_tail or result.stdout_tail or result.error or "")[-2000:]
                 raise DocumentExtractionError(
-                    "ocr_failed", f"扫描件文字识别失败：{details}"
+                    "ocr_failed", "扫描件文字识别失败；未登记任何结构化结果"
                 )
             if not output.is_file() or output.stat().st_size > 100 * 1024 * 1024:
                 raise DocumentExtractionError(

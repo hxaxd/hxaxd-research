@@ -4,6 +4,8 @@ from app.platform.public_projection import sanitize_public_payload, sanitize_pub
 
 from .models import Job, JobEvent, PublicJob, PublicJobEvent
 
+_PRIVATE_STREAM_SUFFIXES = (".stdout", ".stderr")
+
 
 def project_public_job(job: Job) -> PublicJob:
     return PublicJob(
@@ -33,3 +35,9 @@ def project_public_job_event(event: JobEvent) -> PublicJobEvent:
         payload=sanitize_public_payload(event.payload),
         created_at=event.created_at,
     )
+
+
+def is_public_job_event(event: JobEvent) -> bool:
+    """Hide legacy process streams while preserving them for local audit."""
+
+    return not event.event_type.casefold().endswith(_PRIVATE_STREAM_SUFFIXES)

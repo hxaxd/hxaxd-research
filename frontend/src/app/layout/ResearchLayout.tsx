@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { NavigationTree } from "../../features/navigation/NavigationTree";
+import { TaskPreferenceEffects } from "../../features/tasks/TaskPreferenceEffects";
 import { Icon } from "../../shared/ui/Icon";
 import "./layout.css";
 
@@ -55,6 +56,7 @@ export function ResearchLayout() {
         ) : null}
         <Outlet />
       </main>
+      <TaskPreferenceEffects />
     </div>
   );
 }

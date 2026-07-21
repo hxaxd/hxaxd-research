@@ -480,7 +480,11 @@ class SqliteJobRepository:
                 claimed.job.id,
                 claimed.attempt.id,
                 "job.canceled" if cancellation else "job.succeeded",
-                {"attachments": len(attachments) if not cancellation else 0},
+                (
+                    {"attachments": 0}
+                    if cancellation
+                    else _public_success_payload(claimed.job.id, result, attachments)
+                ),
             )
         return self.get(claimed.job.id)
 
@@ -554,7 +558,7 @@ class SqliteJobRepository:
                 job_id,
                 attempt["id"],
                 "job.succeeded",
-                {"attachments": len(attachments or [])},
+                _public_success_payload(job_id, result, attachments or []),
             )
         return self.get(job_id)
 
@@ -765,6 +769,56 @@ class SqliteJobRepository:
         values = dict(row)
         values["metadata"] = json.loads(values.pop("metadata_json"))
         return JobAttachment.model_validate(values)
+
+
+def _public_success_payload(
+    job_id: str,
+    result: dict[str, Any],
+    attachments: list[JobAttachment],
+) -> dict[str, Any]:
+    outputs = [attachment for attachment in attachments if attachment.role != "input"]
+    products: list[dict[str, str]] = [
+        {
+            "type": "attachment",
+            "id": attachment.attachment_id,
+            "role": attachment.role,
+            "href": f"/api/attachments/{attachment.attachment_id}/content",
+        }
+        for attachment in outputs
+    ]
+    ordered_attachment_ids = [attachment.attachment_id for attachment in outputs]
+    recorded_ids = set(ordered_attachment_ids)
+    result_attachment_ids = result.get("attachment_ids")
+    if isinstance(result_attachment_ids, list):
+        for attachment_id in result_attachment_ids:
+            if isinstance(attachment_id, str) and attachment_id not in recorded_ids:
+                products.append(
+                    {
+                        "type": "attachment",
+                        "id": attachment_id,
+                        "role": "output",
+                        "href": f"/api/attachments/{attachment_id}/content",
+                    }
+                )
+                recorded_ids.add(attachment_id)
+                ordered_attachment_ids.append(attachment_id)
+    document_id = result.get("document_id")
+    if isinstance(document_id, str):
+        products.append(
+            {
+                "type": "document",
+                "id": document_id,
+                "role": "structured_document",
+                "href": f"/tasks?job={job_id}",
+            }
+        )
+    return {
+        "attachments": len(recorded_ids),
+        "attachment_ids": ordered_attachment_ids,
+        "document_id": document_id if isinstance(document_id, str) else None,
+        "product_link": f"/tasks?job={job_id}",
+        "products": products,
+    }
 
 
 def _now() -> datetime:

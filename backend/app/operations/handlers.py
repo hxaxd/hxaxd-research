@@ -17,6 +17,11 @@ from uuid import uuid4
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings
+from app.documents.capabilities import (
+    PDF2ZH_VERSION,
+    RAPIDOCR_VERSION,
+    PdfPipelineCapabilityProbe,
+)
 from app.jobs.models import JobAttachment, JobExecutionResult, JobFailure
 from app.jobs.scheduler import JobExecutionContext, JobRegistry
 from app.library.models import (
@@ -30,7 +35,6 @@ from app.library.models import (
 from app.library.service import AttachmentService
 from app.platform.processes import (
     ExecutableIdentity,
-    ProcessLogEvent,
     ProcessOutcome,
     ProcessRunner,
     ProcessSpec,
@@ -42,8 +46,6 @@ from .models import (
     TranslationJobInput,
 )
 
-PDF2ZH_VERSION = "2.9.0"
-RAPIDOCR_VERSION = "3.9.2"
 TEX_REPOSITORY = "https://mirror.ctan.org/systems/texlive/tlnet"
 TEX_INSTALLER_URL = f"{TEX_REPOSITORY}/install-tl.zip"
 MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
@@ -59,10 +61,14 @@ class OperationHandlers:
         settings: Settings,
         attachments: AttachmentService,
         runner: ProcessRunner,
+        capability_probe: PdfPipelineCapabilityProbe | None = None,
     ) -> None:
         self.settings = settings
         self.attachments = attachments
         self.runner = runner
+        self.capability_probe = capability_probe or PdfPipelineCapabilityProbe(
+            settings, runner
+        )
 
     def register(self, registry: JobRegistry) -> None:
         registry.register("attachment.download", self.download)
@@ -87,7 +93,12 @@ class OperationHandlers:
         with self._stage("download") as stage:
             filename = request.filename or _url_filename(str(request.url))
             target = stage / "download"
-            context.emit("download.started", {"url": str(request.url)}, "info")
+            parsed_url = urlparse(str(request.url))
+            context.emit(
+                "download.started",
+                {"host": parsed_url.hostname or "unknown"},
+                "info",
+            )
             _download_https(
                 str(request.url),
                 target,
@@ -184,10 +195,14 @@ class OperationHandlers:
                 ),
                 display_name="latexmk",
             )
+            context.emit(
+                "compile.started",
+                {"attachment_id": source.id, "engine": "latexmk"},
+                "info",
+            )
             result = self.runner.run(
                 spec,
                 cancellation=context.cancellation,
-                observer=_log_observer(context),
             )
             context.record_process(result.pid, "latexmk", result.returncode)
             pdf = output_dir / f"{main.stem}.pdf"
@@ -211,6 +226,9 @@ class OperationHandlers:
                 job_id=context.claimed.job.id,
                 operation_roles=["output"],
             )[0]
+        context.emit(
+            "compile.completed", {"attachment_id": attachment.id}, "info"
+        )
         return _attachment_result(
             context,
             [attachment],
@@ -295,10 +313,18 @@ class OperationHandlers:
                 sensitive_values=(api_key,),
                 display_name="pdf2zh",
             )
+            context.emit(
+                "pdf_export.started",
+                {
+                    "attachment_id": source.id,
+                    "engine": "pdf2zh",
+                    "mode": "legacy_pdf_translation",
+                },
+                "info",
+            )
             result = self.runner.run(
                 spec,
                 cancellation=context.cancellation,
-                observer=_log_observer(context),
             )
             context.record_process(result.pid, "pdf2zh", result.returncode)
             _require_success(result, None, "PDF 翻译")
@@ -338,6 +364,11 @@ class OperationHandlers:
                 job_id=context.claimed.job.id,
                 operation_roles=["translated", "bilingual"],
             )
+        context.emit(
+            "pdf_export.completed",
+            {"attachment_ids": [attachment.id for attachment in generated]},
+            "info",
+        )
         return _attachment_result(
             context,
             generated,
@@ -389,8 +420,16 @@ class OperationHandlers:
             raise JobFailure("installation_incomplete", "PDF2zh 安装后未找到可执行文件")
         if self.settings.rapidocr_package_dir is None:
             raise JobFailure("installation_incomplete", "PDF 工具安装后未找到 RapidOCR")
+        probe = self.capability_probe.get(refresh=True)
+        if not probe.compatible:
+            raise JobFailure("installation_incompatible", probe.message)
         return JobExecutionResult(
-            result={"tool": "pdf2zh", "version": PDF2ZH_VERSION},
+            result={
+                "tool": "pdf2zh",
+                "version": probe.pdf2zh_version,
+                "babeldoc_version": probe.babeldoc_version,
+                "ocr_version": probe.rapidocr_version,
+            },
             commit_point_reached=True,
         )
 
@@ -470,7 +509,21 @@ class OperationHandlers:
             raise JobFailure("tool_missing", "PDF2zh 尚未安装")
         if self.settings.rapidocr_package_dir is None:
             raise JobFailure("tool_upgrade_required", "PDF 工具需要升级以启用扫描件识别")
-        return JobExecutionResult(result={"tool": "pdf2zh", "ready": True})
+        probe = self.capability_probe.get(refresh=True)
+        if not probe.compatible:
+            raise JobFailure("tool_upgrade_required", probe.message)
+        return JobExecutionResult(
+            result={
+                "tool": "pdf2zh",
+                "ready": True,
+                "version": probe.pdf2zh_version,
+                "babeldoc_version": probe.babeldoc_version,
+                "ocr_version": probe.rapidocr_version,
+                "external_block_translation_injection": (
+                    probe.external_block_translation_injection
+                ),
+            }
+        )
 
     def verify_tex(self, _: JobExecutionContext) -> JobExecutionResult:
         if self._tex_executable() is None:
@@ -486,6 +539,9 @@ class OperationHandlers:
         timeout: float,
         cwd: Path | None = None,
     ) -> None:
+        context.emit(
+            "tool.install_step_started", {"tool": executable}, "info"
+        )
         result = self.runner.run(
             ProcessSpec(
                 executable=executable,
@@ -507,10 +563,12 @@ class OperationHandlers:
                 ),
             ),
             cancellation=context.cancellation,
-            observer=_log_observer(context),
         )
         context.record_process(result.pid, executable, result.returncode)
         _require_success(result, None, f"{executable} 安装步骤")
+        context.emit(
+            "tool.install_step_completed", {"tool": executable}, "info"
+        )
 
     def _tex_executable(self) -> Path | None:
         return _tex_executable_at(self.settings.tex_dir)
@@ -656,26 +714,13 @@ def _activate_tool_directory(source: Path, target: Path) -> Path | None:
     return previous
 
 
-def _log_observer(context: JobExecutionContext) -> Callable[[ProcessLogEvent], None]:
-    def observe(event: ProcessLogEvent) -> None:
-        if event.text:
-            context.emit(
-                f"process.{event.stream}",
-                {"message": event.text[-2000:]},
-                "info" if event.stream == "stdout" else "warning",
-            )
-
-    return observe
-
-
 def _require_success(result, expected_file: Path | None, label: str) -> None:
     if result.outcome is ProcessOutcome.CANCELED:
         raise JobFailure("canceled", f"{label}已取消", retryable=True)
     if result.outcome is ProcessOutcome.TIMED_OUT:
         raise JobFailure("timeout", f"{label}超时")
     if not result.succeeded or (expected_file is not None and not expected_file.is_file()):
-        details = (result.stderr_tail or result.stdout_tail or result.error or "")[-2000:]
-        raise JobFailure("process_failed", f"{label}失败：{details}")
+        raise JobFailure("process_failed", f"{label}失败；未登记任何输出")
 
 
 def _download_https(

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { CandidateInbox } from "../../features/candidates/CandidateInbox";
 import { api } from "../../shared/api/client";
@@ -13,6 +13,7 @@ type ProjectTab = "candidates" | "library";
 
 export function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [deciding, setDeciding] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
@@ -36,7 +37,12 @@ export function ProjectPage() {
     setDeciding(decision.candidate_id);
     setDecisionError(null);
     try {
-      await api.decideCandidates(validProjectId, [decision]);
+      const results = await api.decideCandidates(validProjectId, [decision]);
+      const target = candidateDecisionTarget(validProjectId, decision, results[0]);
+      if (target) {
+        navigate(target);
+        return;
+      }
       await resource.reload();
     } catch (reason) {
       setDecisionError(reason instanceof Error ? reason.message : "无法提交候选判断");
@@ -68,6 +74,15 @@ export function ProjectPage() {
       </div>
     </section>
   );
+}
+
+export function candidateDecisionTarget(
+  projectId: string,
+  decision: CandidateDecision,
+  result: { project_item: ProjectItem | null } | undefined,
+): string | null {
+  if (decision.decision !== "include" || !result?.project_item) return null;
+  return `/projects/${projectId}/items/${result.project_item.preferred_item_id}`;
 }
 
 function ProjectLibrary({ projectId, items, status, onStatus }: { projectId: string; items: ProjectItem[]; status: ProjectItemStatus; onStatus: (status: ProjectItemStatus) => void }) {
