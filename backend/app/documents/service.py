@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Iterable
 
 from pydantic import ValidationError
 
@@ -10,6 +12,7 @@ from app.jobs.repository import SqliteJobRepository
 from app.jobs.scheduler import JobExecutionContext, JobRegistry, JobScheduler
 from app.library.models import AttachmentFormat, AttachmentType
 from app.library.service import AttachmentService
+from app.preferences import PreferencesService
 
 from .extractor import (
     BabelDocExtractor,
@@ -23,12 +26,35 @@ from .models import (
     DocumentExtractionRequest,
     DocumentStatus,
     DocumentTranslationJobInput,
+    DocumentTranslationOutput,
     DocumentTranslationRequest,
+    GlossaryOutputItem,
+    TranslationGlossaryTerm,
     TranslationInputBlock,
+    TranslationOutputItem,
 )
 from .prompts import TRANSLATION_PROMPT_VERSION
 from .repository import DocumentConflictError, DocumentRepository
-from .translation import DocumentTranslationError, TranslationProvider
+from .translation import (
+    DocumentTranslationError,
+    TranslationProvider,
+    TranslationProviderResponse,
+)
+
+_PLACEHOLDER_PATTERN = re.compile(
+    r"https?://[^\s)\]}]+|10\.\d{4,9}/[^\s)\]}]+|`[^`\n]+`|\$[^$\n]+\$|"
+    r"\\\([^\n]+?\\\)|\\\[[^\n]+?\\\]|\[[0-9][0-9,;\-–—\s]*\]"
+)
+_FALLBACK_ERROR_CODES = {
+    "document_too_large",
+    "translation_truncated",
+    "translation_incomplete",
+    "invalid_provider_response",
+    "invalid_translation_output",
+    "translation_placeholder_damaged",
+    "translation_glossary_conflict",
+    "translation_language_conflict",
+}
 
 
 class DocumentService:
@@ -40,6 +66,7 @@ class DocumentService:
         job_repository: SqliteJobRepository,
         extractor: BabelDocExtractor,
         translation_provider: TranslationProvider,
+        preferences: PreferencesService,
     ) -> None:
         self.repository = repository
         self.attachments = attachments
@@ -47,6 +74,7 @@ class DocumentService:
         self.job_repository = job_repository
         self.extractor = extractor
         self.translation_provider = translation_provider
+        self.preferences = preferences
 
     def register_handlers(self, registry: JobRegistry) -> None:
         registry.register("document.extract", self._extract)
@@ -118,13 +146,22 @@ class DocumentService:
         document = self.repository.get(document_id)
         if document.status is not DocumentStatus.READY or document.structure_hash is None:
             raise ValueError("只有就绪的结构化文档可以翻译")
+        settings = self.preferences.get().translation
+        if settings.provider.casefold() != self.translation_provider.name.casefold():
+            raise ValueError("当前运行环境没有配置所选翻译提供者")
         payload = DocumentTranslationJobInput(
             document_id=document.id,
             structure_hash=document.structure_hash,
             target_language=request.target_language,
-            provider=self.translation_provider.name,
-            model=self.translation_provider.model,
+            provider=settings.provider,
+            model=settings.model,
             prompt_version=TRANSLATION_PROMPT_VERSION,
+            style=settings.style,
+            batching=settings.batching,
+            glossary=[
+                TranslationGlossaryTerm.model_validate(item.model_dump(mode="json"))
+                for item in settings.glossary
+            ],
         )
         identity = ":".join(
             (
@@ -132,8 +169,9 @@ class DocumentService:
                 document.structure_hash,
                 request.target_language,
                 self.translation_provider.name,
-                self.translation_provider.model,
+                settings.model,
                 TRANSLATION_PROMPT_VERSION,
+                _digest(json.dumps(payload.model_dump(mode="json"), sort_keys=True)),
             )
         )
         return self.jobs.create(
@@ -144,7 +182,7 @@ class DocumentService:
                 idempotency_key=f"document-translate:{_digest(identity)}",
                 concurrency_key=f"document-translate:{document.id}",
                 input=payload.model_dump(mode="json"),
-                max_attempts=2,
+                max_attempts=3,
             )
         )
 
@@ -278,6 +316,12 @@ class DocumentService:
             )
             for block in blocks
         ]
+        protected_blocks, placeholders = _protect_blocks(input_blocks)
+        outline = [
+            block.source_text
+            for block in input_blocks
+            if block.kind.value in {"title", "heading"}
+        ]
         context.emit(
             "document.translation_started",
             {
@@ -285,25 +329,20 @@ class DocumentService:
                 "blocks": len(input_blocks),
                 "provider": request.provider,
                 "model": request.model,
-                "mode": "whole_document_single_request",
+                "mode": request.batching,
             },
             "info",
         )
         try:
-            output = self.translation_provider.translate_document(
-                input_blocks,
-                request.target_language,
-                cancellation=lambda: context.cancellation.is_cancelled,
+            output = self._translate_with_fallback(
+                context,
+                request,
+                protected_blocks,
+                outline,
+                placeholders,
             )
         except DocumentTranslationError as error:
             raise JobFailure(error.code, str(error), retryable=error.retryable) from error
-        expected_ids = [block.id for block in input_blocks]
-        actual_ids = [item.id for item in output.translations]
-        if actual_ids != expected_ids:
-            raise JobFailure(
-                "invalid_translation_output",
-                "整篇翻译结果遗漏、重复、增加或重排了文档块",
-            )
         if context.cancellation.is_cancelled:
             raise JobFailure("canceled", "整篇翻译已取消", retryable=True)
         try:
@@ -337,6 +376,300 @@ class DocumentService:
             commit_point_reached=True,
         )
 
+    def _translate_with_fallback(
+        self,
+        context: JobExecutionContext,
+        request: DocumentTranslationJobInput,
+        blocks: list[TranslationInputBlock],
+        outline: list[str],
+        placeholders: dict[str, dict[str, str]],
+    ) -> DocumentTranslationOutput:
+        source_characters = sum(len(block.source_text) for block in blocks)
+        capacity = self.translation_provider.capacity.max_input_characters
+        use_chapters = request.batching == "chapter" or (
+            request.batching == "whole_with_fallback" and source_characters > capacity
+        )
+        if use_chapters:
+            context.emit(
+                "document.translation_fallback",
+                {
+                    "reason": "configured_chapters"
+                    if request.batching == "chapter"
+                    else "input_budget",
+                    "source_characters": source_characters,
+                    "provider_budget": capacity,
+                },
+                "warning",
+            )
+            return self._translate_batches(
+                context,
+                request,
+                _chapter_batches(blocks, capacity),
+                outline,
+                placeholders,
+                ordinal_offset=1,
+            )
+        try:
+            return self._translate_batches(
+                context,
+                request,
+                [blocks],
+                outline,
+                placeholders,
+                ordinal_offset=0,
+            )
+        except DocumentTranslationError as error:
+            if (
+                request.batching != "whole_with_fallback"
+                or error.code not in _FALLBACK_ERROR_CODES
+            ):
+                raise
+            context.emit(
+                "document.translation_fallback",
+                {"reason": error.code, "message": str(error)},
+                "warning",
+            )
+            return self._translate_batches(
+                context,
+                request,
+                _chapter_batches(blocks, capacity),
+                outline,
+                placeholders,
+                ordinal_offset=1,
+            )
+
+    def _translate_batches(
+        self,
+        context: JobExecutionContext,
+        request: DocumentTranslationJobInput,
+        batches: list[list[TranslationInputBlock]],
+        outline: list[str],
+        placeholders: dict[str, dict[str, str]],
+        *,
+        ordinal_offset: int,
+    ) -> DocumentTranslationOutput:
+        outputs: list[DocumentTranslationOutput] = []
+        for index, batch in enumerate(batches):
+            if context.cancellation.is_cancelled:
+                raise DocumentTranslationError(
+                    "canceled", "整篇翻译已取消", retryable=True
+                )
+            ordinal = index + ordinal_offset
+            input_hash = _batch_hash(request, batch, outline)
+            cached = self.repository.get_translation_checkpoint(
+                context.claimed.job.id, ordinal, input_hash
+            )
+            if cached is not None:
+                outputs.append(_validate_translation_output(batch, cached, placeholders))
+                context.emit(
+                    "document.translation_batch_reused",
+                    {"batch": index + 1, "batches": len(batches)},
+                    "info",
+                )
+                continue
+            context.emit(
+                "document.translation_batch_started",
+                {
+                    "batch": index + 1,
+                    "batches": len(batches),
+                    "blocks": len(batch),
+                },
+                "info",
+            )
+            provider_result = self.translation_provider.translate_document(
+                batch,
+                request.target_language,
+                model=request.model,
+                style=request.style,
+                glossary=request.glossary,
+                document_outline=outline,
+                batch_label=f"chapter_{index + 1}_of_{len(batches)}",
+                preceding_context=_neighbor_context(batches, index - 1, tail=True),
+                following_context=_neighbor_context(batches, index + 1, tail=False),
+                cancellation=lambda: context.cancellation.is_cancelled,
+            )
+            response = (
+                provider_result
+                if isinstance(provider_result, TranslationProviderResponse)
+                else TranslationProviderResponse(output=provider_result)
+            )
+            validated = _validate_translation_output(batch, response.output, placeholders)
+            try:
+                self.repository.save_translation_checkpoint(
+                    job_id=context.claimed.job.id,
+                    batch_ordinal=ordinal,
+                    input_sha256=input_hash,
+                    output=response.output,
+                    provider_request_id=response.request_id,
+                    usage=dict(response.usage or {}),
+                )
+            except DocumentConflictError as error:
+                raise DocumentTranslationError(
+                    "translation_checkpoint_conflict", str(error)
+                ) from error
+            outputs.append(validated)
+            context.emit(
+                "document.translation_batch_verified",
+                {
+                    "batch": index + 1,
+                    "batches": len(batches),
+                    "blocks": len(batch),
+                },
+                "info",
+            )
+        return _merge_translation_outputs(outputs, request.glossary)
+
+
+def _protect_blocks(
+    blocks: list[TranslationInputBlock],
+) -> tuple[list[TranslationInputBlock], dict[str, dict[str, str]]]:
+    protected: list[TranslationInputBlock] = []
+    placeholders: dict[str, dict[str, str]] = {}
+    for block in blocks:
+        source_text, replacements = _protect_text(block.source_text)
+        protected.append(block.model_copy(update={"source_text": source_text}))
+        placeholders[block.id] = replacements
+    return protected, placeholders
+
+
+def _protect_text(source_text: str) -> tuple[str, dict[str, str]]:
+    replacements: dict[str, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        original = match.group(0)
+        token = (
+            f"⟦HXAXD_{len(replacements):04d}_"
+            f"{hashlib.sha256(original.encode('utf-8')).hexdigest()[:8]}⟧"
+        )
+        replacements[token] = original
+        return token
+
+    return _PLACEHOLDER_PATTERN.sub(replace, source_text), replacements
+
+
+def _validate_translation_output(
+    blocks: list[TranslationInputBlock],
+    output: DocumentTranslationOutput,
+    placeholders: dict[str, dict[str, str]],
+) -> DocumentTranslationOutput:
+    expected_ids = [block.id for block in blocks]
+    actual_ids = [item.id for item in output.translations]
+    if actual_ids != expected_ids:
+        raise DocumentTranslationError(
+            "invalid_translation_output",
+            "翻译结果遗漏、重复、增加或重排了文档块",
+        )
+    restored: list[TranslationOutputItem] = []
+    for item in output.translations:
+        text = item.translated_text
+        expected = placeholders.get(item.id, {})
+        for token, original in expected.items():
+            if text.count(token) != 1:
+                raise DocumentTranslationError(
+                    "translation_placeholder_damaged",
+                    f"翻译块 {item.id} 损坏了公式、引用或链接占位符",
+                )
+            text = text.replace(token, original)
+        if "⟦HXAXD_" in text:
+            raise DocumentTranslationError(
+                "translation_placeholder_damaged",
+                f"翻译块 {item.id} 返回了未知占位符",
+            )
+        restored.append(item.model_copy(update={"translated_text": text}))
+    return output.model_copy(update={"translations": restored})
+
+
+def _chapter_batches(
+    blocks: list[TranslationInputBlock], capacity: int
+) -> list[list[TranslationInputBlock]]:
+    budget = max(1, int(capacity * 0.72))
+    batches: list[list[TranslationInputBlock]] = []
+    current: list[TranslationInputBlock] = []
+    current_size = 0
+    current_section: str | None = None
+    for block in blocks:
+        size = len(block.source_text)
+        if size > capacity:
+            raise DocumentTranslationError(
+                "document_block_too_large",
+                f"阅读块 {block.id} 单独超过翻译提供者的安全输入预算",
+            )
+        section = block.section_path[0] if block.section_path else None
+        section_changed = bool(current) and section != current_section
+        over_budget = bool(current) and current_size + size > budget
+        if section_changed or over_budget:
+            batches.append(current)
+            current = []
+            current_size = 0
+        current.append(block)
+        current_size += size
+        current_section = section
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _neighbor_context(
+    batches: list[list[TranslationInputBlock]], index: int, *, tail: bool
+) -> str | None:
+    if index < 0 or index >= len(batches):
+        return None
+    texts: Iterable[str]
+    texts = (block.source_text for block in batches[index])
+    value = "\n".join(texts)
+    return value[-1200:] if tail else value[:1200]
+
+
+def _batch_hash(
+    request: DocumentTranslationJobInput,
+    blocks: list[TranslationInputBlock],
+    outline: list[str],
+) -> str:
+    payload = {
+        "request": request.model_dump(mode="json"),
+        "outline": outline,
+        "blocks": [block.model_dump(mode="json") for block in blocks],
+    }
+    return _digest(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+def _merge_translation_outputs(
+    outputs: list[DocumentTranslationOutput],
+    required_glossary: list[TranslationGlossaryTerm],
+) -> DocumentTranslationOutput:
+    translations = [item for output in outputs for item in output.translations]
+    terms: dict[str, GlossaryOutputItem] = {}
+    for required in required_glossary:
+        terms[required.source_term.casefold()] = GlossaryOutputItem(
+            source_term=required.source_term,
+            translated_term=required.translated_term,
+            note="用户术语表",
+        )
+    for output in outputs:
+        for item in output.glossary:
+            normalized = item.source_term.casefold().strip()
+            existing = terms.get(normalized)
+            if existing and existing.translated_term != item.translated_term:
+                raise DocumentTranslationError(
+                    "translation_glossary_conflict",
+                    f"翻译批次对术语 {item.source_term} 给出了不一致译名",
+                )
+            terms.setdefault(normalized, item)
+    languages = {
+        output.detected_source_language
+        for output in outputs
+        if output.detected_source_language
+    }
+    if len(languages) > 1:
+        raise DocumentTranslationError(
+            "translation_language_conflict", "翻译批次对源语言判断不一致"
+        )
+    return DocumentTranslationOutput(
+        translations=translations,
+        glossary=list(terms.values()),
+        detected_source_language=next(iter(languages), None),
+    )
+
 
 def _validated(model, payload):
     try:
@@ -365,4 +698,3 @@ def _structure_hash(value: dict) -> str:
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-

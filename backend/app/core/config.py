@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
@@ -18,6 +19,7 @@ class Settings:
     frontend_origins: tuple[str, ...]
     agent_runtime_dir: Path | None = None
     public_base_url: str = "http://127.0.0.1:8000"
+    agent_base_url: str = "http://127.0.0.1:8000"
     codex_executable: Path | None = None
     zotero_local_url: str = "http://127.0.0.1:23119/api/"
     zotero_api_key: str | None = None
@@ -25,6 +27,14 @@ class Settings:
     translation_api_key: str | None = None
     translation_provider: str = "deepseek"
     translation_model: str = "deepseek-v4-flash"
+    lan_access_enabled: bool = False
+    device_session_days: int = 90
+    device_cookie_secure: bool = False
+    allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost")
+
+    @property
+    def frontend_dist_dir(self) -> Path:
+        return REPOSITORY_ROOT / "frontend" / "dist"
 
     @property
     def pdf2zh_dir(self) -> Path:
@@ -98,6 +108,15 @@ class Settings:
                     Path.home() / ".local" / "state" / "HxaxdResearch" / "agent-runs"
                 ).resolve()
         codex_value = os.environ.get("HXAXD_CODEX_EXECUTABLE", "").strip()
+        public_base_url = os.environ.get(
+            "RESEARCH_APP_PUBLIC_URL", "http://127.0.0.1:8000"
+        ).rstrip("/")
+        public_host = urlsplit(public_base_url).hostname or "127.0.0.1"
+        configured_hosts = tuple(
+            host.strip()
+            for host in os.environ.get("RESEARCH_APP_ALLOWED_HOSTS", "").split(",")
+            if host.strip()
+        )
         return cls(
             data_dir=data_dir,
             database_path=data_dir / "research.sqlite3",
@@ -106,8 +125,9 @@ class Settings:
             snapshot_dir=BACKEND_ROOT / "snapshots",
             frontend_origins=("http://127.0.0.1:5173", "http://localhost:5173"),
             agent_runtime_dir=agent_runtime_dir,
-            public_base_url=os.environ.get(
-                "RESEARCH_APP_PUBLIC_URL", "http://127.0.0.1:8000"
+            public_base_url=public_base_url,
+            agent_base_url=os.environ.get(
+                "RESEARCH_APP_AGENT_URL", "http://127.0.0.1:8000"
             ).rstrip("/"),
             codex_executable=Path(codex_value).resolve() if codex_value else None,
             zotero_local_url=os.environ.get(
@@ -129,4 +149,13 @@ class Settings:
             translation_model=os.environ.get(
                 "RESEARCH_TRANSLATION_MODEL", "deepseek-v4-flash"
             ).strip(),
+            lan_access_enabled=os.environ.get("RESEARCH_APP_LAN_ACCESS", "").strip()
+            in {"1", "true", "yes", "on"},
+            device_session_days=int(
+                os.environ.get("RESEARCH_APP_DEVICE_SESSION_DAYS", "90")
+            ),
+            device_cookie_secure=urlsplit(public_base_url).scheme == "https",
+            allowed_hosts=tuple(
+                dict.fromkeys(("127.0.0.1", "localhost", public_host, *configured_hosts))
+            ),
         )

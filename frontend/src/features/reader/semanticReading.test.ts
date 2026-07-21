@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { DocumentBlock } from "../../shared/api/contracts";
-import { effectiveReadingMode, filterSemanticBlocks } from "./semanticReading";
+import {
+  calculateScrollProgress,
+  effectiveReadingMode,
+  filterSemanticBlocks,
+  searchSemanticBlocks,
+} from "./semanticReading";
 
 function block(id: string, role: DocumentBlock["semantic_role"]): DocumentBlock {
   return {
@@ -32,5 +37,36 @@ describe("semantic reading projection", () => {
     const blocks = [block("1", "background"), block("2", "method"), block("3", null)];
     expect(filterSemanticBlocks(blocks, "method").map((item) => item.id)).toEqual(["2"]);
     expect(filterSemanticBlocks(blocks, "all")).toEqual(blocks);
+  });
+
+  it("normalizes persisted scroll progress at document boundaries", () => {
+    expect(calculateScrollProgress(250, 1000, 500)).toBe(0.5);
+    expect(calculateScrollProgress(-20, 1000, 500)).toBe(0);
+    expect(calculateScrollProgress(900, 1000, 500)).toBe(1);
+    expect(calculateScrollProgress(0, 400, 500)).toBe(1);
+  });
+
+  it("searches source, translation, and section context without changing block order", () => {
+    const blocks = [block("1", "background"), block("2", "method")];
+    blocks[0]!.source_text = "Working memory background";
+    blocks[1]!.section_path = ["Experimental method"];
+    blocks[1]!.translation = {
+      id: "translation-2",
+      block_id: "2",
+      target_language: "zh-CN",
+      translated_text: "稳定段落",
+      source_sha256: "2".padEnd(64, "0"),
+      provider: "fixture",
+      model: "fixture",
+      prompt_version: "v1",
+      batch_id: "batch-1",
+      validation_status: "valid",
+      created_by_job_id: null,
+      created_at: "2026-07-22T00:00:00Z",
+    };
+    expect(searchSemanticBlocks(blocks, "MEMORY").map((item) => item.id)).toEqual(["1"]);
+    expect(searchSemanticBlocks(blocks, "实验")).toEqual([]);
+    expect(searchSemanticBlocks(blocks, "稳定").map((item) => item.id)).toEqual(["2"]);
+    expect(searchSemanticBlocks(blocks, " method ").map((item) => item.id)).toEqual(["2"]);
   });
 });

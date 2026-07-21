@@ -222,6 +222,9 @@ CREATE TABLE agent_runs (
     runtime TEXT NOT NULL,
     runtime_version TEXT,
     model TEXT,
+    reasoning_effort TEXT CHECK(reasoning_effort IS NULL OR reasoning_effort IN (
+        'low', 'medium', 'high', 'xhigh'
+    )),
     provider_thread_id TEXT,
     provider_turn_id TEXT,
     final_message TEXT,
@@ -613,6 +616,17 @@ CREATE TABLE document_glossary_entries (
     created_at TEXT NOT NULL,
     UNIQUE(document_id, target_language, source_term)
 ) STRICT;
+
+CREATE TABLE translation_batch_checkpoints (
+    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    batch_ordinal INTEGER NOT NULL CHECK(batch_ordinal >= 0),
+    input_sha256 TEXT NOT NULL,
+    output_json TEXT NOT NULL CHECK(json_valid(output_json)),
+    provider_request_id TEXT,
+    usage_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(usage_json)),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(job_id, batch_ordinal)
+) WITHOUT ROWID, STRICT;
 
 CREATE TABLE annotations (
     id TEXT PRIMARY KEY,

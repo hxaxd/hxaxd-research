@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from threading import Event
+from threading import Event, Lock
 from time import sleep
 
 from fastapi import FastAPI
@@ -251,6 +251,64 @@ def test_heartbeat_errors_are_reported_without_killing_the_worker(tmp_path, monk
         assert repository.get(job.id).status is JobStatus.SUCCEEDED
     finally:
         release_handler.set()
+        worker.stop()
+
+
+def test_worker_pool_applies_live_task_concurrency_limit(tmp_path):
+    repository = _repository(tmp_path)
+    registry = JobRegistry()
+    first_started = Event()
+    second_started = Event()
+    release = Event()
+    guard = Lock()
+    state = {"active": 0, "maximum": 0, "started": 0, "limit": 1}
+
+    def wait_for_release(_):
+        with guard:
+            state["active"] += 1
+            state["started"] += 1
+            state["maximum"] = max(state["maximum"], state["active"])
+            if state["started"] == 1:
+                first_started.set()
+            if state["started"] == 2:
+                second_started.set()
+        try:
+            assert release.wait(3)
+            return JobExecutionResult()
+        finally:
+            with guard:
+                state["active"] -= 1
+
+    registry.register("test.concurrent", wait_for_release)
+    worker = JobWorker(
+        repository,
+        registry,
+        worker_id="worker-concurrency",
+        poll_interval=0.01,
+        max_workers=3,
+        concurrency_provider=lambda: state["limit"],
+    )
+    scheduler = JobScheduler(repository, worker)
+    jobs = [scheduler.create(JobCreate(kind="test.concurrent")) for _ in range(4)]
+    worker.start(recover=False)
+    try:
+        assert first_started.wait(2)
+        assert not second_started.wait(0.1)
+        state["limit"] = 2
+        worker.notify()
+        assert second_started.wait(2)
+        with guard:
+            assert state["maximum"] == 2
+        release.set()
+        for _ in range(300):
+            if all(repository.get(job.id).status is JobStatus.SUCCEEDED for job in jobs):
+                break
+            sleep(0.01)
+        assert all(repository.get(job.id).status is JobStatus.SUCCEEDED for job in jobs)
+        with guard:
+            assert state["maximum"] == 2
+    finally:
+        release.set()
         worker.stop()
 
 

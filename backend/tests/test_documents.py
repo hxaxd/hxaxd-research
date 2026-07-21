@@ -20,6 +20,8 @@ from app.documents.models import (
 from app.documents.ocr import parse_rapidocr_output
 from app.documents.translation import (
     DocumentTranslationError,
+    TranslationCapacity,
+    TranslationProviderResponse,
     _consume_streaming_response,
 )
 from app.jobs.models import JobCreate, JobStatus
@@ -200,9 +202,13 @@ def test_streaming_translation_response_is_one_interruptible_document_response()
         b'"finish_reason":"stop"}]}\n\n'
         b"data: [DONE]\n\n"
     )
-    content, finish_reason = _consume_streaming_response(response, lambda: False)
+    content, finish_reason, request_id, usage = _consume_streaming_response(
+        response, lambda: False
+    )
     assert content == '{"translations":[]}'
     assert finish_reason == "stop"
+    assert request_id is None
+    assert usage == {}
 
     with pytest.raises(DocumentTranslationError) as failure:
         _consume_streaming_response(BytesIO(b"data: [DONE]\n\n"), lambda: True)
@@ -234,7 +240,10 @@ class _FakeExtractor:
                 ),
                 ExtractedBlock(
                     kind=BlockKind.PARAGRAPH,
-                    source_text="The method preserves every stable block identifier.",
+                    source_text=(
+                        "The method preserves every stable block identifier, cites [1], "
+                        "keeps $x_i$, and links https://example.org."
+                    ),
                     page_start=1,
                     page_end=1,
                     anchor={"page": 1, "bbox": _box(10, 650, 500, 680)},
@@ -253,38 +262,58 @@ class _FakeExtractor:
 
 
 class _FakeProvider:
-    name = "fake-provider"
-    model = "whole-paper-1"
+    name = "deepseek"
+    model = "deepseek-v4-flash"
     ready = True
+    capacity = TranslationCapacity(
+        max_input_characters=1_000_000, max_output_tokens=384_000
+    )
 
     def __init__(self) -> None:
         self.calls: list[list] = []
         self.invalid = False
 
-    def translate_document(self, blocks, target_language, *, cancellation):
+    def translate_document(
+        self,
+        blocks,
+        target_language,
+        *,
+        model,
+        style,
+        glossary,
+        document_outline,
+        batch_label,
+        preceding_context,
+        following_context,
+        cancellation,
+    ):
         assert not cancellation()
         self.calls.append(list(blocks))
         selected = blocks[:-1] if self.invalid else blocks
-        return DocumentTranslationOutput(
-            translations=[
-                TranslationOutputItem(
-                    id=block.id,
-                    translated_text=f"{target_language}：{block.source_text}",
-                    semantic_role=(
-                        SemanticRole.METHOD
-                        if block.kind is BlockKind.PARAGRAPH
-                        else SemanticRole.OTHER
-                    ),
-                )
-                for block in selected
-            ],
-            glossary=[
-                GlossaryOutputItem(
-                    source_term="stable block",
-                    translated_term="稳定块",
-                )
-            ],
-            detected_source_language="en",
+        return TranslationProviderResponse(
+            output=DocumentTranslationOutput(
+                translations=[
+                    TranslationOutputItem(
+                        id=block.id,
+                        translated_text=f"{target_language}：{block.source_text}",
+                        semantic_role=(
+                            SemanticRole.METHOD
+                            if block.kind is BlockKind.PARAGRAPH
+                            else SemanticRole.OTHER
+                        ),
+                    )
+                    for block in selected
+                ],
+                glossary=[
+                    GlossaryOutputItem(
+                        source_term="stable block",
+                        translated_term="稳定块",
+                    )
+                ],
+                detected_source_language="en",
+            ),
+            request_id=f"request-{len(self.calls)}",
+            usage={"total_tokens": 100},
         )
 
 
@@ -302,13 +331,13 @@ class _CancelableExtractor(_FakeExtractor):
 
 
 class _CancelableProvider(_FakeProvider):
-    name = "cancelable-provider"
+    name = "deepseek"
 
     def __init__(self) -> None:
         super().__init__()
         self.entered = Event()
 
-    def translate_document(self, blocks, target_language, *, cancellation):
+    def translate_document(self, blocks, target_language, *, cancellation, **_kwargs):
         self.entered.set()
         deadline = monotonic() + 3
         while monotonic() < deadline:
@@ -318,6 +347,23 @@ class _CancelableProvider(_FakeProvider):
                 )
             sleep(0.01)
         raise AssertionError("translation cancellation did not arrive")
+
+
+class _CheckpointProvider(_FakeProvider):
+    capacity = TranslationCapacity(max_input_characters=160, max_output_tokens=20_000)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed_once = False
+
+    def translate_document(self, blocks, target_language, **kwargs):
+        if len(self.calls) == 1 and not self.failed_once:
+            self.calls.append(list(blocks))
+            self.failed_once = True
+            raise DocumentTranslationError(
+                "provider_unavailable", "temporary provider failure", retryable=True
+            )
+        return super().translate_document(blocks, target_language, **kwargs)
 
 
 def _wait_for_job(client, job_id: str) -> dict:
@@ -392,6 +438,9 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
     ).json()["items"]
     assert translated[0]["translation"]["translated_text"].startswith("zh-CN：")
     assert translated[1]["semantic_role"] == "method"
+    assert "[1]" in translated[1]["translation"]["translated_text"]
+    assert "$x_i$" in translated[1]["translation"]["translated_text"]
+    assert "https://example.org" in translated[1]["translation"]["translated_text"]
     assert translated[2]["translation"] is None
     with context.database.read() as connection:
         actions = {
@@ -420,6 +469,44 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
         params={"target_language": "zh-TW"},
     ).json()["items"]
     assert all(item["translation"] is None for item in untranslated)
+
+
+def test_chapter_fallback_reuses_verified_checkpoints_after_retry(client) -> None:
+    context = client.app.state.context
+    work = context.catalog_commands.create_work(
+        BibliographicItemDraft(title="Translation checkpoint fixture", language="en")
+    )
+    item_id = work.items[0].id
+    upload = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={"upload": ("checkpoint.pdf", PDF, "application/pdf")},
+    )
+    attachment_id = upload.json()["id"]
+    context.documents.extractor = _FakeExtractor()
+    provider = _CheckpointProvider()
+    context.documents.translation_provider = provider
+
+    extraction = client.post(
+        f"/api/attachments/{attachment_id}/documents", json={"ocr_mode": "auto"}
+    ).json()
+    assert _wait_for_job(client, extraction["id"])["status"] == "succeeded"
+    document = client.get(f"/api/items/{item_id}/documents").json()[0]
+    translation = client.post(
+        f"/api/documents/{document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+
+    completed = _wait_for_job(client, translation["id"])
+    assert completed["status"] == "succeeded", completed
+    assert len(provider.calls) == 3
+    with context.database.read() as connection:
+        checkpoints = connection.execute(
+            "SELECT COUNT(*) FROM translation_batch_checkpoints WHERE job_id = ?",
+            (translation["id"],),
+        ).fetchone()[0]
+    assert checkpoints == 2
+    events = context.job_repository.list_events(translation["id"])
+    assert any(event.event_type == "document.translation_batch_reused" for event in events)
 
 
 def test_document_extraction_and_translation_cancel_without_partial_records(client) -> None:

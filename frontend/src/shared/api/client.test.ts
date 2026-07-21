@@ -129,6 +129,93 @@ describe("domain API client", () => {
     expect(JSON.parse(String((fetch.mock.calls[2]![1] as RequestInit).body))).toEqual({ target_language: "zh-CN" });
   });
 
+  it("routes reading state, bookmarks, annotations, and preferences through typed commands", async () => {
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", fetch);
+
+    await api.updateReadingState("project-1", "item-1", {
+      attachment_id: "attachment-1",
+      block_id: "block-1",
+      page_number: 3,
+      progress: 0.42,
+    });
+    await api.addReadingBookmark("project-1", "item-1", {
+      block_id: "block-1",
+      page_number: 3,
+      label: "Method",
+    });
+    await api.createAnnotation("project-1", "item-1", {
+      attachment_id: null,
+      block_id: "block-1",
+      kind: "method",
+      body: "Important method",
+      quoted_text: null,
+      page_number: null,
+      anchor: {},
+      tags: ["method"],
+    });
+    await api.deleteAnnotation("annotation-1", "2026-07-22T00:00:00Z");
+    await api.updateUserPreferences({
+      expected_revision: 2,
+      reader: {
+        target_language: "zh-CN",
+        default_mode: "bilingual",
+        default_panel: "structured",
+        font_family: "serif",
+        font_size: "large",
+        line_height: "standard",
+        measure: "balanced",
+        density: "comfortable",
+        flow: "continuous",
+        columns: "auto",
+        theme: "dark",
+        show_outline: true,
+        restore_position: true,
+        large_touch_targets: true,
+        reduce_motion: false,
+      },
+      bilingual: { layout: "side_by_side", highlight_terms: true, synchronize_blocks: true },
+      pdf: { color_mode: "original", default_zoom: "page_width", toolbar_density: "comfortable", restore_position: true },
+      translation: { provider: "deepseek", model: "deepseek-v4-flash", style: "faithful_academic", batching: "whole_with_fallback", glossary: [], retranslate_scope: "changed" },
+      agent: { model: null, reasoning_effort: "high", enabled_capabilities: ["catalog_read"], context_summary: "balanced" },
+      tasks: { notify_on_success: true, notify_on_failure: true, auto_open_result: false, max_concurrent_jobs: 2 },
+    });
+
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual([
+      "/api/projects/project-1/items/item-1/reading-state",
+      "/api/projects/project-1/items/item-1/reading-state/bookmarks",
+      "/api/projects/project-1/items/item-1/annotations",
+      "/api/annotations/annotation-1?expected_updated_at=2026-07-22T00%3A00%3A00Z",
+      "/api/user-preferences",
+    ]);
+    expect(JSON.parse(String((fetch.mock.calls[0]![1] as RequestInit).body))).toEqual({
+      attachment_id: "attachment-1",
+      block_id: "block-1",
+      page_number: 3,
+      progress: 0.42,
+    });
+    expect(JSON.parse(String((fetch.mock.calls[4]![1] as RequestInit).body)).expected_revision).toBe(2);
+  });
+
+  it("keeps device pairing secrets in request bodies and session cookies", async () => {
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", fetch);
+
+    await api.pairDevice({ code: "ABCD-EFGH", label: "Reading tablet" });
+    await api.revokeDeviceSession("session-1");
+
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual([
+      "/api/device-access/pair",
+      "/api/device-access/sessions/session-1",
+    ]);
+    expect(String(fetch.mock.calls[0]?.[0])).not.toContain("ABCD-EFGH");
+    expect(JSON.parse(String((fetch.mock.calls[0]![1] as RequestInit).body))).toEqual({
+      code: "ABCD-EFGH",
+      label: "Reading tablet",
+    });
+    expect((fetch.mock.calls[1]![1] as RequestInit).method).toBe("DELETE");
+  });
+
   it("requires the caller to supply the exact snapshot restore confirmation", async () => {
     const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 202, headers: { "Content-Type": "application/json" } })));
     vi.stubGlobal("fetch", fetch);

@@ -11,7 +11,7 @@ import "./reader.css";
 GlobalWorkerOptions.workerSrc = workerUrl;
 export type PdfColorMode = "normal" | "dark" | "sepia";
 
-export function PdfViewer({ url, colorMode, initialPage }: { url: string; colorMode: PdfColorMode; initialPage?: number | null }) {
+export function PdfViewer({ url, colorMode, initialPage, initialZoom = "page-width", toolbarDensity = "comfortable" }: { url: string; colorMode: PdfColorMode; initialPage?: number | null; initialZoom?: "auto" | "page-width" | "page-fit"; toolbarDensity?: "compact" | "comfortable" }) {
   const container = useRef<HTMLDivElement>(null);
   const viewerElement = useRef<HTMLDivElement>(null);
   const viewer = useRef<PdfJsViewer | null>(null);
@@ -20,7 +20,7 @@ export function PdfViewer({ url, colorMode, initialPage }: { url: string; colorM
   const linkService = useRef<PDFLinkService | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [scale, setScale] = useState("page-width");
+  const [scale, setScale] = useState<string>(initialZoom === "auto" ? "page-width" : initialZoom);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +53,8 @@ export function PdfViewer({ url, colorMode, initialPage }: { url: string; colorM
       setDocument(nextDocument); linkService.current?.setDocument(nextDocument);
       finder.current?.setDocument(nextDocument);
       viewer.current.setDocument(nextDocument);
-      viewer.current.currentScaleValue = "page-width"; setScale("page-width");
+      const zoom = initialZoom === "auto" ? "page-width" : initialZoom;
+      viewer.current.currentScaleValue = zoom; setScale(zoom);
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "PDF 加载失败"); })
       .finally(() => { if (active) setLoading(false); });
     return () => {
@@ -63,7 +64,7 @@ export function PdfViewer({ url, colorMode, initialPage }: { url: string; colorM
       viewer.current?.setDocument(null as unknown as PDFDocumentProxy);
       void task.destroy();
     };
-  }, [url]);
+  }, [initialZoom, url]);
 
   useEffect(() => {
     if (!document || !viewer.current || !initialPage) return;
@@ -82,7 +83,7 @@ export function PdfViewer({ url, colorMode, initialPage }: { url: string; colorM
     });
   }
 
-  return <div className={`pdf-viewer pdf-viewer--${colorMode}`}>
+  return <div className={`pdf-viewer pdf-viewer--${colorMode} pdf-viewer--toolbar-${toolbarDensity}`}>
     <div className="pdf-findbar"><label><Icon name="search" size={14} /><input aria-label="在 PDF 中搜索" placeholder="在文中搜索" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") find(event.shiftKey, event.currentTarget.value); }} /></label><button type="button" title="上一个" onClick={() => find(true)}><Icon name="arrow-left" size={14} /></button><button type="button" title="下一个" onClick={() => find(false)}><Icon name="arrow-right" size={14} /></button></div>
     {loading ? <AsyncMessage kind="loading">正在载入 PDF…</AsyncMessage> : null}
     {error ? <AsyncMessage kind="error">{error}</AsyncMessage> : null}

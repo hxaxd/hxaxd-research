@@ -58,6 +58,7 @@ class AgentSupervisor:
         target_id: str | None = None,
         tool_scopes: tuple[str, ...] = (),
         model: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AgentRun:
         snapshot = self.prompts.assemble(context)
         run_id = uuid4().hex
@@ -81,6 +82,7 @@ class AgentSupervisor:
                     runtime=self.runtime.name,
                     runtime_version=self.runtime.version,
                     model=model,
+                    reasoning_effort=reasoning_effort,
                 )
             )
         except Exception:
@@ -115,7 +117,7 @@ class AgentSupervisor:
                     cwd=Path(run.cwd),
                     thread_id=run.provider_thread_id,
                     model=run.model,
-                    reasoning_effort=reasoning_effort,
+                    reasoning_effort=reasoning_effort or run.reasoning_effort,
                     tool_scopes=run.tool_scopes,
                     mcp=mcp,
                 ),

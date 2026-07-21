@@ -2,6 +2,9 @@ import type {
   AgentRun,
   AgentRunCreate,
   AgentRunLaunch,
+  Annotation,
+  AnnotationCreate,
+  AnnotationUpdate,
   Approval,
   Attachment,
   AttachmentDownloadRequest,
@@ -14,6 +17,8 @@ import type {
   ChangeSetList,
   ChangeSetStatus,
   DocumentBlocksPage,
+  DeviceAccessStatus,
+  DeviceSession,
   Job,
   ManagedTool,
   ManagedToolName,
@@ -21,12 +26,21 @@ import type {
   ProjectCreate,
   ProjectItem,
   ProjectItemStatus,
+  PairedDevice,
+  PairDeviceRequest,
+  PairingCreate,
+  PairingTicket,
+  ReadingBookmarkCreate,
+  ReadingState,
+  ReadingStateUpdate,
   SemanticDocument,
   SnapshotOverview,
   TransferConflictResolution,
   TransferPreview,
   TransferPreviewRequest,
   TransferReceipt,
+  UserPreferences,
+  UserPreferencesUpdate,
   Workspace,
   ZoteroIntegrationStatus,
 } from "./contracts";
@@ -159,6 +173,74 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ target_language: targetLanguage }),
     }),
+
+  annotations: (projectId: string, itemId: string) =>
+    request<Annotation[]>(`/projects/${projectId}/items/${itemId}/annotations`),
+  createAnnotation: (projectId: string, itemId: string, payload: AnnotationCreate) =>
+    request<Annotation>(`/projects/${projectId}/items/${itemId}/annotations`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAnnotation: (annotationId: string, payload: AnnotationUpdate) =>
+    request<Annotation>(`/annotations/${annotationId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteAnnotation: (annotationId: string, expectedUpdatedAt: string) =>
+    request<void>(
+      `/annotations/${annotationId}${query({ expected_updated_at: expectedUpdatedAt })}`,
+      { method: "DELETE" },
+    ),
+  readingState: (projectId: string, itemId: string) =>
+    request<ReadingState>(`/projects/${projectId}/items/${itemId}/reading-state`),
+  updateReadingState: (
+    projectId: string,
+    itemId: string,
+    payload: ReadingStateUpdate,
+  ) =>
+    request<ReadingState>(`/projects/${projectId}/items/${itemId}/reading-state`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  addReadingBookmark: (
+    projectId: string,
+    itemId: string,
+    payload: ReadingBookmarkCreate,
+  ) =>
+    request<ReadingState>(
+      `/projects/${projectId}/items/${itemId}/reading-state/bookmarks`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  deleteReadingBookmark: (
+    projectId: string,
+    itemId: string,
+    bookmarkId: string,
+  ) =>
+    request<ReadingState>(
+      `/projects/${projectId}/items/${itemId}/reading-state/bookmarks/${bookmarkId}`,
+      { method: "DELETE" },
+    ),
+  userPreferences: () => request<UserPreferences>("/user-preferences"),
+  updateUserPreferences: (payload: UserPreferencesUpdate) =>
+    request<UserPreferences>("/user-preferences", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deviceAccessStatus: () => request<DeviceAccessStatus>("/device-access/status"),
+  createDevicePairing: (payload: PairingCreate) =>
+    request<PairingTicket>("/device-access/pairings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  pairDevice: (payload: PairDeviceRequest) =>
+    request<PairedDevice>("/device-access/pair", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deviceSessions: () => request<DeviceSession[]>("/device-access/sessions"),
+  revokeDeviceSession: (sessionId: string) =>
+    request<DeviceSession>(`/device-access/sessions/${sessionId}`, { method: "DELETE" }),
 
   jobs: () => request<Job[]>("/jobs"),
   job: (jobId: string) => request<Job>(`/jobs/${jobId}`),

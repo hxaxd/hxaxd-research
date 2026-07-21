@@ -42,6 +42,7 @@ REQUIRED_TABLE_COLUMNS = {
         "target_id",
         "tool_scopes_json",
         "runtime",
+        "reasoning_effort",
         "provider_thread_id",
     },
     "agent_events": {"id", "run_id", "event_type", "visibility", "payload_json"},
@@ -84,8 +85,8 @@ class SqliteAgentRunRepository:
                     id, project_id, item_id, target_type, target_id,
                     task_kind, goal, status, prompt, prompt_version,
                     context_hash, cwd, tool_scopes_json, runtime, runtime_version,
-                    model, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    model, reasoning_effort, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     request.id,
@@ -103,6 +104,7 @@ class SqliteAgentRunRepository:
                     request.runtime,
                     request.runtime_version,
                     request.model,
+                    request.reasoning_effort,
                     _iso(now),
                     _iso(now),
                 ),

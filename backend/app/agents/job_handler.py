@@ -26,7 +26,11 @@ class AgentRunJobHandler:
                 or f"agent run cannot execute from {persisted.status.value}",
             )
         context.emit("agent.run.started", {"run_id": run_id}, "info")
-        run = self.supervisor.execute(run_id, cancellation=context.cancellation)
+        run = self.supervisor.execute(
+            run_id,
+            reasoning_effort=persisted.reasoning_effort,
+            cancellation=context.cancellation,
+        )
         if run.status is AgentRunStatus.FAILED:
             raise JobFailure(
                 run.error_code or "agent_run_failed",

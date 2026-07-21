@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -76,6 +76,18 @@ class DocumentTranslationJobInput(DocumentTranslationRequest):
     provider: str = Field(min_length=1, max_length=80)
     model: str = Field(min_length=1, max_length=160)
     prompt_version: str = Field(min_length=1, max_length=80)
+    style: Literal["faithful_academic", "natural_academic", "concise"] = (
+        "faithful_academic"
+    )
+    batching: Literal["whole_with_fallback", "whole_only", "chapter"] = (
+        "whole_with_fallback"
+    )
+    glossary: list[TranslationGlossaryTerm] = Field(default_factory=list, max_length=500)
+
+
+class TranslationGlossaryTerm(_DocumentModel):
+    source_term: str = Field(min_length=1, max_length=300)
+    translated_term: str = Field(min_length=1, max_length=300)
 
 
 class Document(_DocumentModel):
@@ -180,4 +192,3 @@ class DocumentTranslationOutput(_DocumentModel):
     translations: list[TranslationOutputItem]
     glossary: list[GlossaryOutputItem] = Field(default_factory=list)
     detected_source_language: str | None = Field(default=None, max_length=40)
-

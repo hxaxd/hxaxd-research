@@ -1,0 +1,19 @@
+{
+  "name": "文献工作台",
+  "short_name": "文献",
+  "description": "本地优先的文献检索、筛选、阅读与翻译工作台",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090b10",
+  "theme_color": "#090b10",
+  "icons": [
+    {
+      "src": "/research-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

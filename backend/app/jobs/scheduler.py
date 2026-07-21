@@ -50,6 +50,8 @@ class JobWorker:
         poll_interval: float = 0.5,
         lease_seconds: int = 30,
         heartbeat_interval: float | None = None,
+        max_workers: int = 1,
+        concurrency_provider: Callable[[], int] | None = None,
     ) -> None:
         self.repository = repository
         self.registry = registry
@@ -57,21 +59,35 @@ class JobWorker:
         self.poll_interval = poll_interval
         self.lease_seconds = lease_seconds
         self.heartbeat_interval = heartbeat_interval
+        self.max_workers = max(1, max_workers)
+        self.concurrency_provider = concurrency_provider
         self._stop = Event()
         self._wake = Event()
         self._thread: Thread | None = None
+        self._threads: list[Thread] = []
         self._active: dict[str, CancellationToken] = {}
         self._errors: dict[str, str] = {}
         self._lock = Lock()
+        self._claim_lock = Lock()
 
     def start(self, *, recover: bool = True) -> None:
-        if self._thread is not None and self._thread.is_alive():
+        if any(thread.is_alive() for thread in self._threads):
             return
         if recover:
             self.repository.recover_interrupted()
         self._stop.clear()
-        self._thread = Thread(target=self._loop, name=f"job-worker-{self.worker_id}", daemon=True)
-        self._thread.start()
+        self._threads = [
+            Thread(
+                target=self._loop,
+                args=(slot,),
+                name=f"job-worker-{self.worker_id}-{slot}",
+                daemon=True,
+            )
+            for slot in range(self.max_workers)
+        ]
+        self._thread = self._threads[0]
+        for thread in self._threads:
+            thread.start()
 
     def stop(self, timeout: float = 10) -> None:
         self._stop.set()
@@ -80,16 +96,16 @@ class JobWorker:
             active = list(self._active.values())
         for token in active:
             token.cancel()
-        if self._thread is not None:
-            self._thread.join(timeout=timeout)
+        per_thread_timeout = timeout / max(1, len(self._threads))
+        for thread in self._threads:
+            thread.join(timeout=per_thread_timeout)
 
     def notify(self) -> None:
         self._wake.set()
 
     @property
     def is_alive(self) -> bool:
-        thread = self._thread
-        return thread is not None and thread.is_alive() and not self._stop.is_set()
+        return any(thread.is_alive() for thread in self._threads) and not self._stop.is_set()
 
     @property
     def last_error(self) -> str | None:
@@ -108,12 +124,19 @@ class JobWorker:
         self.notify()
 
     def run_once(self) -> bool:
-        claimed = self.repository.claim_next(self.worker_id, lease_seconds=self.lease_seconds)
-        if claimed is None:
-            return False
-        token = CancellationToken()
-        with self._lock:
-            self._active[claimed.job.id] = token
+        with self._claim_lock:
+            limit = self._concurrency_limit()
+            with self._lock:
+                if len(self._active) >= limit:
+                    return False
+            claimed = self.repository.claim_next(
+                self.worker_id, lease_seconds=self.lease_seconds
+            )
+            if claimed is None:
+                return False
+            token = CancellationToken()
+            with self._lock:
+                self._active[claimed.job.id] = token
         if self.repository.get(claimed.job.id).status.value == "cancellation_requested":
             token.cancel()
         heartbeat_stop = Event()
@@ -201,21 +224,33 @@ class JobWorker:
             # Another recovery path already revoked this attempt's lease.
             return
 
-    def _loop(self) -> None:
+    def _loop(self, slot: int = 0) -> None:
+        error_key = "loop" if self.max_workers == 1 else f"loop-{slot}"
         try:
             while not self._stop.is_set():
                 try:
                     processed = self.run_once()
                 except Exception as error:
-                    self._record_error("loop", error)
+                    self._record_error(error_key, error)
                     self._wait_for_work()
                     continue
-                self._clear_error("loop")
+                self._clear_error(error_key)
                 if not processed:
                     self._wait_for_work()
         except BaseException as error:
-            self._record_error("loop", error)
+            self._record_error(error_key, error)
             raise
+
+    def _concurrency_limit(self) -> int:
+        if self.concurrency_provider is None:
+            return self.max_workers
+        try:
+            configured = int(self.concurrency_provider())
+        except Exception as error:
+            self._record_error("concurrency", error)
+            return 1
+        self._clear_error("concurrency")
+        return max(1, min(self.max_workers, configured))
 
     def _heartbeat(self, claimed: ClaimedJob, stop: Event) -> None:
         source = f"heartbeat:{claimed.job.id}"
