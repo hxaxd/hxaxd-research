@@ -97,9 +97,10 @@ def test_public_contract_has_no_legacy_paper_or_prompt_context_surface(client) -
     assert set(create_schema["properties"]) == {
         "task_kind",
         "goal",
-        "project_id",
-        "item_id",
-    }
+            "project_id",
+            "item_id",
+            "zotero_preview_id",
+        }
     public_run = contract["components"]["schemas"]["PublicAgentRun"]["properties"]
     for internal in ("prompt", "cwd", "context_hash", "provider_thread_id"):
         assert internal not in public_run
@@ -142,7 +143,12 @@ def test_frontend_contract_field_sets_match_openapi(client) -> None:
         "AgentRun": "PublicAgentRun",
         "AgentRunCreate": "CreateAgentRunRequest",
         "AgentRunLaunch": "AgentRunLaunch",
-        "Approval": "PublicApproval",
+            "Approval": "PublicApproval",
+            "ChangeEvidence": "EvidenceReference",
+            "ChangeItem": "ChangeItemView",
+            "ChangeSet": "ChangeSetView",
+            "ChangeSetList": "ChangeSetList",
+            "ChangeReviewDecision": "ChangeReviewDecision",
         "TransferDifference": "FieldDifference",
         "TransferConflict": "TransferConflict",
         "TransferConflictResolution": "ConflictResolution",

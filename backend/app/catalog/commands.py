@@ -9,7 +9,12 @@ from datetime import UTC, datetime
 from app.platform.db import V3Database
 
 from .domain import CatalogConflictError, CatalogNotFoundError, normalize_identifier
-from .models import BibliographicItemDraft, WorkView
+from .models import (
+    BibliographicItemDraft,
+    BibliographicItemPatch,
+    BibliographicItemView,
+    WorkView,
+)
 from .queries import CatalogQueries
 
 
@@ -208,6 +213,15 @@ class CatalogCommands:
                         now,
                     ),
                 )
+        self._record_item_revision(
+            connection,
+            item_id=item_id,
+            revision=1,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            changes={"snapshot": draft.model_dump(mode="json")},
+            created_at=now,
+        )
         connection.execute(
             """
             INSERT INTO audit_events(
@@ -226,6 +240,186 @@ class CatalogCommands:
             ),
         )
         return work_id, item_id
+
+    def apply_metadata_patch(
+        self,
+        item_id: str,
+        base_revision: int,
+        patch: BibliographicItemPatch,
+        *,
+        actor_type: str = "user",
+        actor_id: str | None = None,
+        correlation_id: str | None = None,
+        change_set_id: str | None = None,
+        revision_id: str | None = None,
+        evidence: list[dict] | None = None,
+    ) -> BibliographicItemView:
+        now = _now()
+        changes = patch.model_dump(exclude_unset=True, mode="json")
+        with self.database.transaction() as connection:
+            if revision_id is not None:
+                applied = connection.execute(
+                    "SELECT item_id FROM item_revisions WHERE id = ?",
+                    (revision_id,),
+                ).fetchone()
+                if applied is not None:
+                    if applied["item_id"] != item_id:
+                        raise CatalogConflictError("revision id belongs to another item")
+                    existing = connection.execute(
+                        "SELECT * FROM bibliographic_items WHERE id = ?", (item_id,)
+                    ).fetchone()
+                    return CatalogQueries._hydrate_items(connection, [existing])[0]
+            current = connection.execute(
+                "SELECT * FROM bibliographic_items WHERE id = ?", (item_id,)
+            ).fetchone()
+            if current is None:
+                raise CatalogNotFoundError("bibliographic item does not exist")
+            if int(current["revision"]) != base_revision:
+                raise CatalogConflictError(
+                    f"metadata revision is stale: expected {base_revision}, "
+                    f"found {current['revision']}"
+                )
+
+            structured = {"creators", "identifiers", "links", "tags"}
+            scalar_changes = {key: value for key, value in changes.items() if key not in structured}
+            if scalar_changes:
+                assignments = ", ".join(f"{field} = ?" for field in scalar_changes)
+                connection.execute(
+                    f"UPDATE bibliographic_items SET {assignments} WHERE id = ?",  # noqa: S608
+                    (*scalar_changes.values(), item_id),
+                )
+            if "creators" in changes:
+                connection.execute("DELETE FROM item_creators WHERE item_id = ?", (item_id,))
+                for position, creator in enumerate(patch.creators):
+                    connection.execute(
+                        """
+                        INSERT INTO item_creators(
+                            id, item_id, position, role, creator_type, given_name,
+                            family_name, literal_name, suffix, orcid, raw_name
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            _id(), item_id, position, creator.role, creator.creator_type,
+                            creator.given_name, creator.family_name, creator.literal_name,
+                            creator.suffix, creator.orcid, creator.raw_name,
+                        ),
+                    )
+            if "identifiers" in changes:
+                normalized = [
+                    normalize_identifier(identifier.scheme, identifier.value)
+                    for identifier in patch.identifiers
+                ]
+                keys = [(item.scheme, item.normalized_value) for item in normalized]
+                if len(keys) != len(set(keys)):
+                    raise CatalogConflictError("metadata patch contains duplicate identifiers")
+                explicit_primary = [
+                    index
+                    for index, identifier in enumerate(patch.identifiers)
+                    if identifier.is_primary
+                ]
+                if len(explicit_primary) > 1:
+                    raise CatalogConflictError(
+                        "metadata patch contains multiple primary identifiers"
+                    )
+                for identifier in normalized:
+                    if not identifier.is_identity:
+                        continue
+                    existing = connection.execute(
+                        """
+                        SELECT item_id FROM item_identifiers
+                        WHERE scheme = ? AND normalized_value = ?
+                          AND is_identity = 1 AND item_id <> ?
+                        """,
+                        (identifier.scheme, identifier.normalized_value, item_id),
+                    ).fetchone()
+                    if existing is not None:
+                        raise CatalogConflictError(
+                            f"identifier {identifier.scheme}:{identifier.normalized_value} "
+                            "already belongs to another item"
+                        )
+                connection.execute("DELETE FROM item_identifiers WHERE item_id = ?", (item_id,))
+                primary_index = explicit_primary[0] if explicit_primary else 0
+                for position, identifier in enumerate(normalized):
+                    connection.execute(
+                        """
+                        INSERT INTO item_identifiers(
+                            id, item_id, scheme, value, normalized_value, version,
+                            is_primary, is_identity
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            _id(), item_id, identifier.scheme, identifier.value,
+                            identifier.normalized_value, identifier.version,
+                            int(position == primary_index), int(identifier.is_identity),
+                        ),
+                    )
+            if "links" in changes:
+                connection.execute("DELETE FROM item_links WHERE item_id = ?", (item_id,))
+                seen_links: set[tuple[str, str]] = set()
+                for link in patch.links:
+                    key = (link.relation_type, link.url)
+                    if key in seen_links:
+                        continue
+                    seen_links.add(key)
+                    connection.execute(
+                        """
+                        INSERT INTO item_links(id, item_id, relation_type, url, title)
+                        VALUES(?, ?, ?, ?, ?)
+                        """,
+                        (_id(), item_id, link.relation_type, link.url, link.title),
+                    )
+            if "tags" in changes:
+                connection.execute("DELETE FROM item_tags WHERE item_id = ?", (item_id,))
+                for name, kind in {(tag.name, tag.kind) for tag in patch.tags}:
+                    connection.execute(
+                        "INSERT INTO item_tags(item_id, tag, kind) VALUES(?, ?, ?)",
+                        (item_id, name, kind),
+                    )
+
+            next_revision = base_revision + 1
+            connection.execute(
+                """
+                UPDATE bibliographic_items
+                SET revision = ?, updated_at = ? WHERE id = ?
+                """,
+                (next_revision, now, item_id),
+            )
+            connection.execute(
+                "UPDATE works SET updated_at = ? WHERE id = ?", (now, current["work_id"])
+            )
+            self._record_item_revision(
+                connection,
+                item_id=item_id,
+                revision=next_revision,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                changes=changes,
+                evidence=evidence,
+                change_set_id=change_set_id,
+                revision_id=revision_id,
+                created_at=now,
+            )
+            connection.execute(
+                """
+                INSERT INTO audit_events(
+                    id, occurred_at, actor_type, actor_id, action,
+                    entity_type, entity_id, correlation_id, before_json, after_json
+                ) VALUES(
+                    ?, ?, ?, ?, 'catalog.metadata_patched',
+                    'bibliographic_item', ?, ?, ?, ?
+                )
+                """,
+                (
+                    _id(), now, actor_type, actor_id, item_id, correlation_id,
+                    json.dumps(
+                        {key: current[key] for key in scalar_changes},
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    json.dumps(changes, ensure_ascii=False, sort_keys=True),
+                ),
+            )
+        return self.queries.get_item(item_id)
 
     def append_item_version(
         self,
@@ -438,6 +632,15 @@ class CatalogCommands:
                             now,
                         ),
                     )
+            self._record_item_revision(
+                connection,
+                item_id=item_id,
+                revision=1,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                changes={"snapshot": draft.model_dump(mode="json")},
+                created_at=now,
+            )
             connection.execute("UPDATE works SET updated_at = ? WHERE id = ?", (now, work_id))
             connection.execute(
                 """
@@ -467,3 +670,37 @@ class CatalogCommands:
                 ),
             )
         return self.queries.get_work(work_id)
+
+    @staticmethod
+    def _record_item_revision(
+        connection: sqlite3.Connection,
+        *,
+        item_id: str,
+        revision: int,
+        actor_type: str,
+        actor_id: str | None,
+        changes: dict,
+        created_at: str,
+        evidence: list[dict] | None = None,
+        change_set_id: str | None = None,
+        revision_id: str | None = None,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO item_revisions(
+                id, item_id, revision, actor_type, actor_id, change_set_id,
+                changes_json, evidence_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                revision_id or _id(),
+                item_id,
+                revision,
+                actor_type,
+                actor_id,
+                change_set_id,
+                json.dumps(changes, ensure_ascii=False, sort_keys=True),
+                json.dumps(evidence or [], ensure_ascii=False, sort_keys=True),
+                created_at,
+            ),
+        )

@@ -19,6 +19,7 @@ from .models import (
     CandidatePromotionRequest,
     CandidateView,
     ProjectCreate,
+    ProjectInsightsPatch,
     ProjectView,
     ProjectWorkDecision,
     ProjectWorkView,
@@ -394,6 +395,100 @@ class ScreeningCommands:
                 entity_id=candidate_id,
             )
         return self.queries.get_candidate(project_id, candidate_id)
+
+    def apply_project_insights(
+        self,
+        project_id: str,
+        work_id: str,
+        base_updated_at: str,
+        patch: ProjectInsightsPatch,
+        *,
+        actor_type: str = "user",
+        actor_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> ProjectWorkView:
+        now = _now()
+        changes = patch.model_dump(exclude_unset=True, mode="json")
+        with self.database.transaction() as connection:
+            current = connection.execute(
+                "SELECT * FROM project_works WHERE project_id = ? AND work_id = ?",
+                (project_id, work_id),
+            ).fetchone()
+            if current is None:
+                raise ScreeningNotFoundError("work is not in the project")
+            if correlation_id is not None:
+                applied = connection.execute(
+                    """
+                    SELECT 1 FROM audit_events
+                    WHERE action = 'screening.project_insights_applied'
+                      AND entity_id = ? AND correlation_id = ?
+                    """,
+                    (current["id"], correlation_id),
+                ).fetchone()
+                if applied is not None:
+                    return ScreeningQueries._project_work(connection, current)
+            if current["updated_at"] != base_updated_at:
+                raise ScreeningConflictError(
+                    "project insights are stale because the project work changed"
+                )
+            scalar_changes = {
+                key: changes[key] for key in ("summary", "relevance") if key in changes
+            }
+            if scalar_changes:
+                assignments = ", ".join(f"{key} = ?" for key in scalar_changes)
+                connection.execute(
+                    f"UPDATE project_works SET {assignments} WHERE id = ?",  # noqa: S608
+                    (*scalar_changes.values(), current["id"]),
+                )
+            if "roles" in changes:
+                connection.execute(
+                    "DELETE FROM project_work_roles WHERE project_work_id = ?",
+                    (current["id"],),
+                )
+                for role in dict.fromkeys(patch.roles):
+                    connection.execute(
+                        "INSERT INTO project_work_roles(project_work_id, role) VALUES(?, ?)",
+                        (current["id"], role),
+                    )
+            for field, kind in (
+                ("contributions", "contribution"),
+                ("reading_focus", "reading_focus"),
+            ):
+                if field not in changes:
+                    continue
+                connection.execute(
+                    "DELETE FROM project_work_notes WHERE project_work_id = ? AND kind = ?",
+                    (current["id"], kind),
+                )
+                for position, text in enumerate(changes[field]):
+                    connection.execute(
+                        """
+                        INSERT INTO project_work_notes(
+                            id, project_work_id, kind, position, text
+                        ) VALUES(?, ?, ?, ?, ?)
+                        """,
+                        (_id(), current["id"], kind, position, text),
+                    )
+            connection.execute(
+                "UPDATE project_works SET updated_at = ? WHERE id = ?",
+                (now, current["id"]),
+            )
+            self._audit(
+                connection,
+                now=now,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                action="screening.project_insights_applied",
+                entity_type="project_work",
+                entity_id=current["id"],
+                correlation_id=correlation_id,
+                before={
+                    "summary": current["summary"],
+                    "relevance": current["relevance"],
+                },
+                after=changes,
+            )
+        return self.queries.get_project_work(project_id, work_id)
 
     def decide_project_work(
         self,

@@ -93,6 +93,8 @@ def _create_v3_workspace(path) -> None:
         for table in V4_TABLES:
             connection.execute(f"DROP TABLE {table}")
         connection.execute("ALTER TABLE bibliographic_items DROP COLUMN revision")
+        connection.execute("ALTER TABLE agent_runs DROP COLUMN target_type")
+        connection.execute("ALTER TABLE agent_runs DROP COLUMN target_id")
         connection.execute("DELETE FROM schema_migrations")
         connection.execute(
             """

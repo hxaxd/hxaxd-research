@@ -70,7 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description=(
             "文献元数据、候选判断、附件、持久任务、内嵌代理与集成的唯一服务接口。"
         ),
-        version="3.0.0",
+        version="4.0.0",
         lifespan=lifespan,
     )
     application.state.context = context

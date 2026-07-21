@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from app.catalog.queries import CatalogQueries
+from app.integrations.zotero.models import PublicTransferPreview
+from app.integrations.zotero.service import ZoteroTransferService
 from app.library.models import PublicAttachment
 from app.library.service import AttachmentService
 from app.screening.queries import ScreeningQueries
@@ -18,15 +20,26 @@ class AgentPromptContextBuilder:
         catalog: CatalogQueries,
         screening: ScreeningQueries,
         attachments: AttachmentService,
+        zotero: ZoteroTransferService | None = None,
         policies: AgentTaskPolicyRegistry | None = None,
     ) -> None:
         self.catalog = catalog
         self.screening = screening
         self.attachments = attachments
+        self.zotero = zotero
         self.policies = policies or AgentTaskPolicyRegistry()
 
-    def scopes_for(self, task_kind: str, project_id: str | None) -> tuple[str, ...]:
-        return self.policies.resolve(task_kind, project_id).scopes
+    def scopes_for(
+        self,
+        task_kind: str,
+        project_id: str | None,
+        item_id: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+    ) -> tuple[str, ...]:
+        return self.policies.resolve(
+            task_kind, project_id, item_id, target_type, target_id
+        ).scopes
 
     def tools_for_scopes(self, scopes: tuple[str, ...]) -> tuple[str, ...]:
         return self.policies.tools_for_scopes(scopes)
@@ -38,12 +51,17 @@ class AgentPromptContextBuilder:
         goal: str,
         project_id: str | None,
         item_id: str | None,
+        target_type: str | None = None,
+        target_id: str | None = None,
     ) -> PromptContext:
-        policy = self.policies.resolve(task_kind, project_id)
+        policy = self.policies.resolve(
+            task_kind, project_id, item_id, target_type, target_id
+        )
         project = None
         items: list[dict] = []
         attachments: list[dict] = []
         prior_decisions: list[dict] = []
+        task_data: dict = {}
         if project_id is not None:
             project = self.screening.get_project(project_id).model_dump(mode="json")
             memberships = self.screening.list_project_works(project_id, limit=500)
@@ -73,6 +91,13 @@ class AgentPromptContextBuilder:
                 PublicAttachment.from_internal(attachment).model_dump(mode="json")
                 for attachment in self.attachments.list_for_item(item_id)
             ]
+        if target_type == "zotero_preview" and target_id is not None:
+            if self.zotero is None:
+                raise ValueError("Zotero 上下文服务不可用")
+            preview = self.zotero.get_preview(target_id)
+            task_data["zotero_transfer_preview"] = PublicTransferPreview.from_internal(
+                preview
+            ).model_dump(mode="json")
         scopes = policy.scopes
         return PromptContext(
             objective=goal,
@@ -80,10 +105,13 @@ class AgentPromptContextBuilder:
                 "task_kind": task_kind,
                 "project_id": project_id,
                 "item_id": item_id,
+                "target_type": target_type,
+                "target_id": target_id,
             },
             project=project,
             items=items,
             attachments=attachments,
+            task_data=task_data,
             capabilities={
                 "mcp_tools": list(self.tools_for_scopes(scopes)),
                 "tool_scopes": list(scopes),

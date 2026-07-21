@@ -1,0 +1,40 @@
+.change-review { min-height: 100%; background: var(--surface); }
+.change-review > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--border-soft); padding: 24px 26px 18px; }
+.change-review > header h2 { margin: 5px 0; font-size: 22px; }
+.change-review > header p { margin: 0; color: var(--text-faint); font-size: 11px; }
+.change-safety-note { display: flex; align-items: center; gap: 9px; margin: 16px 24px 0; border: 1px solid rgb(166 167 255 / 24%); border-radius: 10px; padding: 11px 13px; background: var(--accent-soft); color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.change-safety-note svg { flex: 0 0 auto; color: var(--accent); }
+.change-error,
+.change-item-error { border: 1px solid rgb(255 140 154 / 24%); border-radius: 8px; padding: 9px 11px; background: var(--danger-soft); color: var(--danger); font-size: 11px; }
+.change-error { margin: 12px 24px 0; }
+.change-item-list { display: grid; gap: 12px; padding: 16px 24px 24px; }
+.change-item { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: #0d1017; }
+.change-item--approved { border-color: rgb(99 210 155 / 35%); }
+.change-item--rejected,
+.change-item--stale { opacity: .72; }
+.change-item > header { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-soft); padding: 10px 14px; }
+.change-item > header > div { display: grid; gap: 3px; min-width: 0; }
+.change-item > header span { color: var(--accent); font-size: 10px; }
+.change-item > header strong { overflow: hidden; color: var(--text-muted); font: 9px/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.change-item > header em { border-radius: 999px; padding: 4px 8px; background: var(--surface-raised); color: var(--text-faint); font-size: 9px; font-style: normal; }
+.change-payload { max-height: 260px; margin: 0; overflow: auto; padding: 14px; background: #090c11; color: var(--text-muted); font: 11px/1.6 var(--font-mono); white-space: pre-wrap; }
+.change-rationale { margin: 0; border-top: 1px solid var(--border-soft); padding: 11px 14px; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
+.change-evidence { display: flex; flex-wrap: wrap; gap: 7px; border-top: 1px solid var(--border-soft); padding: 10px 14px; }
+.change-evidence a,
+.change-evidence span { display: inline-flex; min-height: 34px; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; color: var(--accent); font-size: 10px; }
+.change-item-error { margin: 10px 14px; }
+.change-result { display: flex; align-items: center; gap: 6px; margin: 10px 14px; color: var(--success); font-size: 10px; }
+.change-item-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border-top: 1px solid var(--border-soft); padding: 12px 14px; }
+.change-item-actions button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-muted); }
+.change-item-actions .approve.active { border-color: rgb(99 210 155 / 40%); background: var(--success-soft); color: var(--success); }
+.change-item-actions .reject.active { border-color: rgb(255 140 154 / 35%); background: var(--danger-soft); color: var(--danger); }
+.change-review > footer { position: sticky; bottom: 0; display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--border); padding: 12px 24px; background: rgb(13 16 23 / 96%); backdrop-filter: blur(14px); }
+.change-review > footer span { color: var(--text-muted); font-size: 11px; }
+.change-review > footer button { min-height: 44px; padding-inline: 18px; }
+
+@media (max-width: 850px) {
+  .change-review > header { padding: 20px 16px 14px; }
+  .change-safety-note { margin: 12px 14px 0; }
+  .change-item-list { padding: 14px; }
+  .change-review > footer { align-items: stretch; flex-direction: column; padding: 12px 14px; }
+}

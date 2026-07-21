@@ -26,6 +26,7 @@ from app.agents.codex_app_server import (
 )
 from app.agents.runtime import RuntimeOutcomeStatus, RuntimeRequest
 from app.catalog import CatalogCommands, CatalogQueries
+from app.changes import ChangeSetRepository, ChangeSetService
 from app.integrations.zotero import (
     SqliteZoteroTransferRepository,
     V3ZoteroDomainGateway,
@@ -96,6 +97,7 @@ class AppContext:
     mutation_gate: WorkspaceMutationGate
     process_lock: WorkspaceProcessLock
     operations: OperationService
+    changes: ChangeSetService
     workspace: WorkspaceProjectionService
     agent_repository: SqliteAgentRunRepository
     agent_supervisor: AgentSupervisor
@@ -207,6 +209,15 @@ def build_app_context(settings: Settings) -> AppContext:
     jobs = JobScheduler(job_repository, job_worker)
     operations = OperationService(settings, attachments, jobs, job_repository, process_runner)
     OperationHandlers(settings, attachments, process_runner).register(job_registry)
+    changes = ChangeSetService(
+        ChangeSetRepository(database),
+        catalog,
+        catalog_commands,
+        screening,
+        screening_commands,
+        operations,
+        zotero_service,
+    )
 
     agent_runtime_ready = True
     agent_runtime_message = "Codex 应用服务器已就绪"
@@ -255,6 +266,8 @@ def build_app_context(settings: Settings) -> AppContext:
         catalog,
         screening,
         screening_commands,
+        changes,
+        zotero_service,
     )
     mcp_server = create_agent_mcp_server(
         agent_tools,
@@ -262,13 +275,18 @@ def build_app_context(settings: Settings) -> AppContext:
         public_base_url=settings.public_base_url,
     )
     agent_repository = SqliteAgentRunRepository(settings.database_path)
-    agent_prompt_context = AgentPromptContextBuilder(catalog, screening, attachments)
+    agent_prompt_context = AgentPromptContextBuilder(
+        catalog, screening, attachments, zotero_service
+    )
 
     def mcp_credentials(run: AgentRun) -> RuntimeMcpCredentials:
         agent_capabilities.revoke_run(run.id)
         token = agent_capabilities.issue(
             run.id,
             project_id=run.project_id,
+            item_id=run.item_id,
+            target_type=run.target_type,
+            target_id=run.target_id,
             scopes=frozenset(run.tool_scopes),
         )
         return RuntimeMcpCredentials(
@@ -312,6 +330,7 @@ def build_app_context(settings: Settings) -> AppContext:
         mutation_gate=mutation_gate,
         process_lock=process_lock,
         operations=operations,
+        changes=changes,
         workspace=workspace,
         agent_repository=agent_repository,
         agent_supervisor=agent_supervisor,

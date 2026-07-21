@@ -7,13 +7,17 @@ import { AsyncMessage } from "../../shared/ui/AsyncMessage";
 import "./pages.css";
 
 export function TasksPage() {
-  const resource = useApiResource(() => Promise.all([api.jobs(), api.agentRuns()]), []);
+  const resource = useApiResource(
+    () => Promise.all([api.jobs(), api.agentRuns(), api.changeSets()]),
+    [],
+  );
   useEffect(() => {
     const timer = window.setInterval(() => void resource.reload(), 5000);
     return () => window.clearInterval(timer);
   }, [resource.reload]);
   if (resource.loading) return <AsyncMessage kind="loading">正在读取任务…</AsyncMessage>;
   if (resource.error) return <AsyncMessage kind="error">{resource.error}</AsyncMessage>;
-  const [jobs, runs] = resource.data ?? [[], []];
-  return <section className="workspace-page"><div className="workspace-content"><header className="page-header compact-page-header"><div><span className="eyebrow">TASK CONTROL</span><h1>任务中心</h1><p>这里保留独立生命周期与事件记录；失败的后台任务需从对应领域入口修正输入后重新发起。</p></div></header><TaskCenter jobs={jobs} runs={runs} onChanged={resource.reload} /></div></section>;
+  if (!resource.data) return <AsyncMessage kind="empty">暂无任务记录</AsyncMessage>;
+  const [jobs, runs, changeSets] = resource.data;
+  return <section className="workspace-page"><div className="workspace-content"><header className="page-header compact-page-header"><div><span className="eyebrow">TASK CONTROL</span><h1>任务与审阅</h1><p>智能体建议、用户批准、领域执行和后台任务各有独立生命周期；任何建议都不会静默生效。</p></div></header><TaskCenter jobs={jobs} runs={runs} changeSets={changeSets.items} onChanged={resource.reload} /></div></section>;
 }

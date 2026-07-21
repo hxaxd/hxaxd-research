@@ -29,6 +29,7 @@ class CreateAgentRunRequest(BaseModel):
     goal: str = Field(min_length=1, max_length=20_000)
     project_id: str | None = Field(default=None, max_length=200)
     item_id: str | None = Field(default=None, max_length=200)
+    zotero_preview_id: str | None = Field(default=None, max_length=200)
 
     @field_validator("task_kind", "goal")
     @classmethod
@@ -106,6 +107,10 @@ def create_agent_router(
             context,
             project_id=payload.project_id,
             item_id=payload.item_id,
+            target_type=(
+                "zotero_preview" if payload.zotero_preview_id is not None else None
+            ),
+            target_id=payload.zotero_preview_id,
             tool_scopes=tool_scopes,
         )
         try:

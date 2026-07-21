@@ -7,7 +7,9 @@ from app.agents.router import create_agent_router
 from app.agents.supervisor import AgentSupervisor
 from app.catalog.api import router as catalog_router
 from app.catalog.domain import CatalogNotFoundError
+from app.changes.api import router as changes_router
 from app.integrations.zotero.router import router as zotero_router
+from app.integrations.zotero.service import TransferNotFoundError
 from app.jobs.repository import SqliteJobRepository
 from app.jobs.router import create_job_router
 from app.jobs.scheduler import JobScheduler
@@ -45,8 +47,16 @@ def create_api_router(context) -> APIRouter:
                 goal=payload.goal,
                 project_id=payload.project_id,
                 item_id=payload.item_id,
+                target_type=(
+                    "zotero_preview" if payload.zotero_preview_id is not None else None
+                ),
+                target_id=payload.zotero_preview_id,
             )
-        except (CatalogNotFoundError, ScreeningNotFoundError) as error:
+        except (
+            CatalogNotFoundError,
+            ScreeningNotFoundError,
+            TransferNotFoundError,
+        ) as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
@@ -54,7 +64,11 @@ def create_api_router(context) -> APIRouter:
     def resolve_scopes(payload) -> tuple[str, ...]:
         try:
             return context.agent_prompt_context.scopes_for(
-                payload.task_kind, payload.project_id
+                payload.task_kind,
+                payload.project_id,
+                payload.item_id,
+                "zotero_preview" if payload.zotero_preview_id is not None else None,
+                payload.zotero_preview_id,
             )
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
@@ -64,6 +78,7 @@ def create_api_router(context) -> APIRouter:
     router.include_router(workspace_router)
     router.include_router(screening_router)
     router.include_router(catalog_router)
+    router.include_router(changes_router)
     router.include_router(library_router)
     router.include_router(operations_router)
     router.include_router(create_job_router(jobs, job_repository))

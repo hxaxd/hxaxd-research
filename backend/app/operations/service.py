@@ -155,7 +155,11 @@ class OperationService:
         )
 
     def download_attachment(
-        self, item_id: str, request: AttachmentDownloadRequest
+        self,
+        item_id: str,
+        request: AttachmentDownloadRequest,
+        *,
+        idempotency_key: str | None = None,
     ) -> Job:
         payload = AttachmentDownloadJobInput(
             item_id=item_id,
@@ -167,6 +171,7 @@ class OperationService:
                 kind="attachment.download",
                 subject_type="item",
                 subject_id=item_id,
+                idempotency_key=idempotency_key,
                 concurrency_key=f"attachment-download:{item_id}:{url_digest}",
                 input=payload.model_dump(mode="json"),
                 max_attempts=3,

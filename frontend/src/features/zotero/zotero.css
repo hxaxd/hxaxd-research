@@ -31,6 +31,8 @@
 .transfer-preview { overflow: hidden; }
 .transfer-preview > header { display: flex; align-items: flex-start; justify-content: space-between; padding: 18px; border-bottom: 1px solid var(--border-soft); }
 .transfer-preview > header code { border-radius: 7px; padding: 5px 7px; background: #0d1017; color: var(--text-faint); font-size: 9px; }
+.preview-header-actions { display: flex; align-items: center; gap: 8px; }
+.preview-header-actions button { min-height: 44px; }
 .transfer-summary { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid var(--border-soft); }
 .transfer-count { display: grid; gap: 2px; padding: 10px 13px; border-right: 1px solid var(--border-soft); }
 .transfer-count:last-child { border: 0; }
