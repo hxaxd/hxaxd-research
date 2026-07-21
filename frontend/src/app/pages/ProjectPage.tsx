@@ -25,7 +25,7 @@ export function ProjectPage() {
   );
 
   if (resource.loading) return <AsyncMessage kind="loading">正在读取项目…</AsyncMessage>;
-  if (resource.error) return <AsyncMessage kind="error">{resource.error}</AsyncMessage>;
+  if (resource.error) return <AsyncMessage kind="error" onRetry={() => void resource.retry()}>{resource.error}</AsyncMessage>;
   if (!projectId || !resource.data) return <AsyncMessage kind="empty">项目不存在</AsyncMessage>;
   const validProjectId = projectId;
   const [project, candidates, items] = resource.data;
@@ -33,12 +33,20 @@ export function ProjectPage() {
     (item) => item.state === "staged" || item.state === "matched",
   ).length;
 
-  async function decide(decision: CandidateDecision) {
-    setDeciding(decision.candidate_id);
+  async function decide(
+    decisions: CandidateDecision[],
+    options?: { openIncluded?: boolean },
+  ) {
+    setDeciding(decisions.length === 1 ? decisions[0]?.candidate_id ?? null : "batch");
     setDecisionError(null);
     try {
-      const results = await api.decideCandidates(validProjectId, [decision]);
-      const target = candidateDecisionTarget(validProjectId, decision, results[0]);
+      const results = await api.decideCandidates(validProjectId, decisions);
+      const includedIndex = options?.openIncluded
+        ? decisions.findIndex((decision) => decision.decision === "include")
+        : -1;
+      const target = includedIndex >= 0
+        ? candidateDecisionTarget(validProjectId, decisions[includedIndex]!, results[includedIndex])
+        : null;
       if (target) {
         navigate(target);
         return;
@@ -70,7 +78,7 @@ export function ProjectPage() {
           <button className={tab === "library" ? "active" : ""} type="button" onClick={() => selectTab("library")}><Icon name="library" size={15} />项目文献</button>
         </nav>
         {decisionError ? <div className="page-error">{decisionError}</div> : null}
-        {tab === "candidates" ? <CandidateInbox candidates={candidates} deciding={deciding} onDecision={decide} /> : <ProjectLibrary projectId={projectId} items={items} status={status} onStatus={(next) => setParams({ tab: "library", status: next })} />}
+        {tab === "candidates" ? <CandidateInbox candidates={candidates} deciding={deciding} onDecisions={decide} /> : <ProjectLibrary projectId={projectId} items={items} status={status} onStatus={(next) => setParams({ tab: "library", status: next })} />}
       </div>
     </section>
   );

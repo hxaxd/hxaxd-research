@@ -8,6 +8,7 @@ body,
 #root {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   margin: 0;
 }
 
@@ -35,6 +36,21 @@ a {
 button {
   color: inherit;
 }
+
+.settings-inline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgb(255 140 154 / 24%);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.settings-inline-error p { margin: 0; }
+.settings-inline-error button { min-height: 44px; flex: 0 0 auto; }
 
 a {
   color: inherit;

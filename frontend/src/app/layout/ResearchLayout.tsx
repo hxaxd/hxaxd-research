@@ -26,6 +26,27 @@ export function ResearchLayout() {
     return () => media.removeEventListener("change", syncNavigation);
   }, []);
 
+  useEffect(() => {
+    let revealTimer: number | null = null;
+    const revealFocusedControl = () => {
+      const focused = globalThis.document.activeElement;
+      if (!(focused instanceof HTMLElement) || !focused.matches("input, textarea, select, [contenteditable='true']")) return;
+      if (revealTimer !== null) window.clearTimeout(revealTimer);
+      revealTimer = window.setTimeout(() => {
+        focused.scrollIntoView({ block: "center", inline: "nearest" });
+      }, 80);
+    };
+    window.addEventListener("resize", revealFocusedControl);
+    window.visualViewport?.addEventListener("resize", revealFocusedControl);
+    globalThis.document.addEventListener("focusin", revealFocusedControl);
+    return () => {
+      if (revealTimer !== null) window.clearTimeout(revealTimer);
+      window.removeEventListener("resize", revealFocusedControl);
+      window.visualViewport?.removeEventListener("resize", revealFocusedControl);
+      globalThis.document.removeEventListener("focusin", revealFocusedControl);
+    };
+  }, []);
+
   return (
     <div className={sidebarExpanded ? "research-shell" : "research-shell research-shell--collapsed"}>
       <aside className="research-sidebar">

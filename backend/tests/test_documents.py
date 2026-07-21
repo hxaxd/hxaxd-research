@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import zipfile
 from io import BytesIO
 from threading import Event
 from time import monotonic, sleep
@@ -18,6 +19,11 @@ from app.documents.models import (
     TranslationOutputItem,
 )
 from app.documents.ocr import parse_rapidocr_output
+from app.documents.tex import (
+    TexStructureError,
+    TexStructureExtractor,
+    parse_tex_document,
+)
 from app.documents.translation import (
     DocumentTranslationError,
     TranslationCapacity,
@@ -28,9 +34,122 @@ from app.jobs.models import JobCreate, JobStatus
 
 from .sample_data import PDF
 
+TEX_SOURCE = r"""
+\documentclass{article}
+\title{Semantic Reading}
+\begin{document}
+\maketitle
+\begin{abstract}
+A structured abstract for the complete paper.
+\end{abstract}
+\section{Methods}
+The method preserves every stable paragraph and citation \cite{one}.
+\begin{equation}
+E = mc^2
+\end{equation}
+\begin{figure}
+\includegraphics{system.pdf}
+\caption{System architecture}
+\label{fig:system}
+\end{figure}
+\section{Results}
+The results improve reading quality.
+\begin{thebibliography}{9}
+\bibitem{one} Ada Example. A traceable result.
+\end{thebibliography}
+\end{document}
+"""
+
 
 def _box(x: float, y: float, x2: float, y2: float) -> dict:
     return {"x": x, "y": y, "x2": x2, "y2": y2}
+
+
+def test_tex_structure_drives_blocks_and_reuses_pdf_anchors() -> None:
+    layout = ExtractedDocument(
+        language="en",
+        page_count=4,
+        diagnostics={"source": "babeldoc_document_il"},
+        blocks=[
+            ExtractedBlock(
+                kind=BlockKind.TITLE,
+                source_text="Semantic Reading",
+                page_start=1,
+                page_end=1,
+                anchor={"type": "pdf_bbox", "page": 1, "bbox": _box(10, 700, 500, 730)},
+            ),
+            ExtractedBlock(
+                kind=BlockKind.PARAGRAPH,
+                source_text="A structured abstract for the complete paper.",
+                page_start=1,
+                page_end=1,
+                anchor={"type": "pdf_bbox", "page": 1, "bbox": _box(10, 620, 500, 680)},
+            ),
+            ExtractedBlock(
+                kind=BlockKind.HEADING,
+                source_text="Methods",
+                page_start=2,
+                page_end=2,
+                anchor={"type": "pdf_bbox", "page": 2, "bbox": _box(10, 700, 200, 730)},
+            ),
+            ExtractedBlock(
+                kind=BlockKind.PARAGRAPH,
+                source_text="The method preserves every stable paragraph and citation [one].",
+                page_start=2,
+                page_end=2,
+                anchor={"type": "pdf_bbox", "page": 2, "bbox": _box(10, 620, 500, 680)},
+            ),
+            ExtractedBlock(
+                kind=BlockKind.FORMULA,
+                source_text="E = mc^2",
+                page_start=2,
+                page_end=2,
+                anchor={"type": "pdf_bbox", "page": 2, "bbox": _box(100, 540, 300, 580)},
+            ),
+            ExtractedBlock(
+                kind=BlockKind.FIGURE,
+                source_text="System architecture",
+                page_start=3,
+                page_end=3,
+                anchor={"type": "pdf_bbox", "page": 3, "bbox": _box(20, 200, 560, 500)},
+            ),
+        ],
+    )
+
+    extracted = parse_tex_document(TEX_SOURCE, layout)
+
+    assert extracted.diagnostics["structure_source"] == "tex"
+    assert extracted.diagnostics["tex_pdf_anchor_matches"] >= 6
+    assert [block.kind for block in extracted.blocks] == [
+        BlockKind.TITLE,
+        BlockKind.PARAGRAPH,
+        BlockKind.HEADING,
+        BlockKind.PARAGRAPH,
+        BlockKind.FORMULA,
+        BlockKind.FIGURE,
+        BlockKind.HEADING,
+        BlockKind.PARAGRAPH,
+        BlockKind.REFERENCE,
+    ]
+    method = extracted.blocks[3]
+    assert method.section_path == ["Methods"]
+    assert method.semantic_role is SemanticRole.METHOD
+    assert method.page_start == 2
+    assert method.anchor["type"] == "pdf_bbox"
+    figure = extracted.blocks[5]
+    assert figure.anchor["structure_source"]["relation"] == "fig:system"
+    assert figure.page_start == 3
+    assert extracted.blocks[-1].section_path == ["References"]
+
+
+def test_tex_archive_rejects_path_traversal(tmp_path) -> None:
+    archive = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("../escape.tex", TEX_SOURCE)
+    layout = ExtractedDocument(page_count=1, blocks=[])
+
+    with pytest.raises(TexStructureError, match="不安全路径"):
+        TexStructureExtractor().enrich(archive, layout)
 
 
 def _paragraph(
@@ -435,6 +554,18 @@ class _CancelableProvider(_FakeProvider):
         raise AssertionError("translation cancellation did not arrive")
 
 
+class _BlockingProvider(_FakeProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = Event()
+        self.release = Event()
+
+    def translate_document(self, blocks, target_language, **kwargs):
+        self.entered.set()
+        assert self.release.wait(3), "blocked translation was not released"
+        return super().translate_document(blocks, target_language, **kwargs)
+
+
 class _CheckpointProvider(_FakeProvider):
     capacity = TranslationCapacity(max_input_characters=160, max_output_tokens=20_000)
 
@@ -460,6 +591,70 @@ def _wait_for_job(client, job_id: str) -> dict:
             return job
         sleep(0.02)
     raise AssertionError(f"job did not finish: {job_id}")
+
+
+def test_document_job_prefers_sibling_tex_structure_over_pdf_segmentation(client) -> None:
+    context = client.app.state.context
+    work = context.catalog_commands.create_work(
+        BibliographicItemDraft(title="TeX-priority semantic document", language="en")
+    )
+    item_id = work.items[0].id
+    tex = r"""
+    \documentclass{article}
+    \title{Whole-document translation}
+    \begin{document}
+    \maketitle
+    \section{Method}
+    The method preserves every stable block identifier, cites [1], keeps $x_i$, and links https://example.org.
+    \begin{equation}E = mc^2\end{equation}
+    \end{document}
+    """
+    source_archive = BytesIO()
+    with zipfile.ZipFile(source_archive, "w") as archive:
+        archive.writestr("main.tex", tex)
+    source = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={
+            "upload": (
+                "source.zip",
+                source_archive.getvalue(),
+                "application/zip",
+            )
+        },
+        data={"attachment_type": "source_archive", "preferred_for": "structure"},
+    )
+    assert source.status_code == 201, source.text
+    assert source.json()["format"] == "tex"
+    pdf = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={"upload": ("paper.pdf", PDF, "application/pdf")},
+    )
+    assert pdf.status_code == 201, pdf.text
+    context.documents.extractor = _FakeExtractor()
+    context.documents.tex_extractor = TexStructureExtractor()
+
+    launched = client.post(
+        f"/api/attachments/{pdf.json()['id']}/documents", json={"ocr_mode": "auto"}
+    )
+    assert launched.status_code == 202, launched.text
+    completed = _wait_for_job(client, launched.json()["id"])
+    assert completed["status"] == "succeeded", completed
+
+    internal = context.job_repository.get(launched.json()["id"])
+    assert internal.input["tex_attachment_id"] == source.json()["id"]
+    document = client.get(f"/api/items/{item_id}/documents").json()[0]
+    assert document["extractor"] == "fake-layout+tex-structure"
+    blocks = client.get(f"/api/documents/{document['id']}/blocks").json()["items"]
+    assert [block["kind"] for block in blocks] == [
+        "title",
+        "heading",
+        "paragraph",
+        "formula",
+    ]
+    assert blocks[1]["section_path"] == ["Method"]
+    assert blocks[2]["page_start"] == 1
+    events = context.job_repository.list_events(launched.json()["id"])
+    assert any(event.event_type == "document.tex_structure_applied" for event in events)
 
 
 def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client) -> None:
@@ -542,7 +737,48 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
     assert {"document.extracted", "document.translated"} <= actions
     assert glossary_count == 1
 
-    provider.invalid = True
+    current_preferences = client.get("/api/user-preferences").json()
+    full_retranslation_preferences = {
+        key: value
+        for key, value in current_preferences.items()
+        if key not in {"revision", "updated_at"}
+    }
+    full_retranslation_preferences["expected_revision"] = current_preferences["revision"]
+    full_retranslation_preferences["translation"] = {
+        **current_preferences["translation"],
+        "retranslate_scope": "document",
+    }
+    saved_preferences = client.put(
+        "/api/user-preferences", json=full_retranslation_preferences
+    )
+    assert saved_preferences.status_code == 200, saved_preferences.text
+
+    forced_provider = _BlockingProvider()
+    context.documents.translation_provider = forced_provider
+    forced = client.post(
+        f"/api/documents/{document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+    assert forced["id"] != translation_job["id"]
+    assert forced_provider.entered.wait(2)
+    concurrent_repeat = client.post(
+        f"/api/documents/{document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+    assert concurrent_repeat["id"] == forced["id"]
+    forced_provider.release.set()
+    assert _wait_for_job(client, forced["id"])["status"] == "succeeded"
+    assert len(forced_provider.calls) == 1
+
+    forced_again = client.post(
+        f"/api/documents/{document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+    assert forced_again["id"] not in {translation_job["id"], forced["id"]}
+    assert _wait_for_job(client, forced_again["id"])["status"] == "succeeded"
+    assert len(forced_provider.calls) == 2
+
+    forced_provider.invalid = True
     invalid = client.post(
         f"/api/documents/{document['id']}/translate",
         json={"target_language": "zh-TW"},

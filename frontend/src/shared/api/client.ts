@@ -2,6 +2,7 @@ import type {
   AgentRun,
   AgentRunCreate,
   AgentRunLaunch,
+  AgentTaskDefinition,
   Annotation,
   AnnotationCreate,
   AnnotationUpdate,
@@ -266,6 +267,8 @@ export const api = {
     }),
 
   agentRuns: () => request<AgentRun[]>("/agent-runs"),
+  agentTaskDefinitions: () =>
+    request<AgentTaskDefinition[]>("/agent-task-definitions"),
   agentRun: (runId: string) => request<AgentRun>(`/agent-runs/${runId}`),
   createAgentRun: (payload: AgentRunCreate) =>
     request<AgentRunLaunch>("/agent-runs", {

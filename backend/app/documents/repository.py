@@ -152,6 +152,25 @@ class DocumentRepository:
             ).fetchall()
         return [self._block(row) for row in rows]
 
+    def latest_translation_job_id(
+        self, document_id: str, target_language: str
+    ) -> str | None:
+        """Return the last atomically committed translation generation."""
+        with self.database.read() as connection:
+            row = connection.execute(
+                """
+                SELECT t.created_by_job_id
+                FROM block_translations t
+                JOIN document_blocks b ON b.id = t.block_id
+                WHERE b.document_id = ? AND t.target_language = ?
+                  AND t.created_by_job_id IS NOT NULL
+                ORDER BY t.created_at DESC, t.id DESC
+                LIMIT 1
+                """,
+                (document_id, target_language),
+            ).fetchone()
+        return str(row["created_by_job_id"]) if row is not None else None
+
     def commit_extraction(
         self,
         *,

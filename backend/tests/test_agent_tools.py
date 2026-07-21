@@ -43,12 +43,45 @@ def test_capability_registry_issues_verifies_and_revokes_run_tokens() -> None:
     assert asyncio.run(registry.verify_token(token)) is None
 
 
-def test_web_search_scope_is_granted_only_to_literature_discovery_tasks() -> None:
+def test_web_search_scope_matches_the_published_task_policy() -> None:
     context = AgentPromptContextBuilder(None, None, None)  # type: ignore[arg-type]
 
     assert WEB_SEARCH_SCOPE in context.scopes_for("literature_search", "project-1")
     assert WEB_SEARCH_SCOPE in context.scopes_for("candidate-search", "project-1")
+    assert WEB_SEARCH_SCOPE in context.scopes_for(
+        "metadata_enrichment", None, "item-1"
+    )
+    assert WEB_SEARCH_SCOPE in context.scopes_for(
+        "resource_acquisition", None, "item-1"
+    )
+    assert WEB_SEARCH_SCOPE not in context.scopes_for(
+        "conflict_resolution",
+        None,
+        target_type="zotero_preview",
+        target_id="preview-1",
+    )
     assert WEB_SEARCH_SCOPE not in context.scopes_for("paper_summary", "project-1")
+
+
+def test_backend_publishes_all_agent_task_definitions_and_readiness(client) -> None:
+    response = client.get("/api/agent-task-definitions")
+
+    assert response.status_code == 200, response.text
+    definitions = {item["id"]: item for item in response.json()}
+    assert set(definitions) == {
+        "literature_search",
+        "metadata_enrichment",
+        "resource_acquisition",
+        "conflict_resolution",
+    }
+    assert definitions["literature_search"]["scope_requirement"] == "project"
+    assert definitions["metadata_enrichment"]["scope_requirement"] == "item"
+    assert definitions["resource_acquisition"]["web_search"] is True
+    assert definitions["conflict_resolution"]["web_search"] is False
+    assert definitions["resource_acquisition"]["tools"][-1] == (
+        "propose_resource_acquisition"
+    )
+    assert all("ready" in definition for definition in definitions.values())
 
 
 def test_mcp_tool_allowlist_is_derived_from_run_scopes() -> None:

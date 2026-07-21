@@ -188,6 +188,10 @@ def test_public_job_error_removes_secrets_urls_and_local_paths(tmp_path) -> None
     assert r"C:\private" not in response.text
     assert "q=visible" in response.json()["error_message"]
     assert secret in repository.get(job.id).error_message
+    stream = client.get(f"/api/jobs/{job.id}/events")
+    assert stream.status_code == 200
+    assert '"retryable":false' in stream.text
+    assert '"automatic_retry":false' in stream.text
 
 
 def test_agent_api_redacts_runtime_ids_approval_details_and_public_events(tmp_path) -> None:

@@ -183,6 +183,7 @@ export interface Candidate {
   item: CandidateDraft;
   dedupe_key: string | null;
   matched_work_id: string | null;
+  matched_item: BibliographicItem | null;
   rank: number | null;
   rationale: string | null;
   evidence: CandidateEvidence[];
@@ -542,6 +543,19 @@ export type AgentRunStatus =
   | "canceled"
   | "completed"
   | "failed";
+
+export interface AgentTaskDefinition {
+  id: string;
+  label: string;
+  description: string;
+  scope_requirement: "project" | "item" | "zotero_preview";
+  web_search: boolean;
+  scopes: string[];
+  tools: string[];
+  result_kind: string;
+  ready: boolean;
+  missing_reason: string | null;
+}
 
 export interface AgentRun {
   id: string;

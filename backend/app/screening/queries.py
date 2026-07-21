@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from app.catalog.queries import CatalogQueries
 from app.platform.db import V3Database
 from app.platform.public_projection import (
     sanitize_public_payload,
@@ -140,6 +141,17 @@ class ScreeningQueries:
     @staticmethod
     def _candidate(connection, row) -> CandidateView:
         evidence = []
+        matched_item = None
+        if row["matched_work_id"]:
+            matched_row = connection.execute(
+                """
+                SELECT * FROM bibliographic_items
+                WHERE work_id = ? AND is_preferred_for_work = 1
+                """,
+                (row["matched_work_id"],),
+            ).fetchone()
+            if matched_row is not None:
+                matched_item = CatalogQueries._hydrate_items(connection, [matched_row])[0]
         if row["source_record_id"]:
             source = connection.execute(
                 "SELECT * FROM source_records WHERE id = ?", (row["source_record_id"],)
@@ -166,6 +178,7 @@ class ScreeningQueries:
             {
                 **dict(row),
                 "item": json.loads(row["proposed_item_json"]),
+                "matched_item": matched_item,
                 "evidence": evidence,
             }
         )

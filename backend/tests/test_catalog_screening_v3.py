@@ -131,5 +131,11 @@ def test_identifier_match_is_visible_before_candidate_promotion(tmp_path):
         f"/api/projects/{other_project['id']}/candidates", json=CANDIDATE
     )
     assert matched.status_code == 201, matched.text
-    assert matched.json()["state"] == "matched"
-    assert matched.json()["matched_work_id"] == promoted["work_id"]
+    payload = matched.json()
+    assert payload["state"] == "matched"
+    assert payload["matched_work_id"] == promoted["work_id"]
+    assert payload["matched_item"]["id"] == promoted["preferred_item_id"]
+    assert payload["matched_item"]["title"] == CANDIDATE["item"]["title"]
+    assert payload["matched_item"]["identifiers"][0]["normalized_value"] == (
+        "10.0000/candidate"
+    )

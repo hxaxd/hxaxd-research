@@ -21,10 +21,15 @@ export function useApiResource<T>(loader: () => Promise<T>, dependencies: readon
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
+  const retry = useCallback(async () => {
+    setLoading(true);
+    return reload();
+  }, [reload]);
+
   useEffect(() => {
     setLoading(true);
     void reload();
   }, [reload]);
 
-  return { data, loading, error, reload, setData };
+  return { data, loading, error, reload, retry, setData };
 }

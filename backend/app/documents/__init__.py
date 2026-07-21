@@ -15,6 +15,7 @@ from .models import (
 from .ocr import RapidOcrExtractor, parse_rapidocr_output
 from .repository import DocumentNotFoundError, DocumentRepository
 from .service import DocumentService
+from .tex import TexStructureError, TexStructureExtractor, parse_tex_document
 from .translation import (
     DocumentTranslationError,
     OpenAICompatibleTranslationProvider,
@@ -43,6 +44,9 @@ __all__ = [
     "RapidOcrExtractor",
     "SemanticRole",
     "TranslationProvider",
+    "TexStructureError",
+    "TexStructureExtractor",
     "parse_babeldoc_il",
     "parse_rapidocr_output",
+    "parse_tex_document",
 ]

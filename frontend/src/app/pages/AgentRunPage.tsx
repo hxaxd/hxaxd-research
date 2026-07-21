@@ -28,7 +28,7 @@ export function AgentRunPage() {
     void resource.reload();
   }, [resource.reload, stream.events]);
   if (resource.loading) return <AsyncMessage kind="loading">正在恢复运行视图…</AsyncMessage>;
-  if (resource.error) return <AsyncMessage kind="error">{resource.error}</AsyncMessage>;
+  if (resource.error) return <AsyncMessage kind="error" onRetry={() => void resource.retry()}>{resource.error}</AsyncMessage>;
   if (!runId || !resource.data) return <AsyncMessage kind="empty">运行不存在</AsyncMessage>;
   const [run, approvals] = resource.data;
 

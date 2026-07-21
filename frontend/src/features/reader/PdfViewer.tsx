@@ -44,6 +44,7 @@ export function PdfViewer({ url, colorMode, initialPage, initialZoom = "page-wid
   const [selectionMenu, setSelectionMenu] = useState<PdfSelectionMenu | null>(null);
   const [selectionMessage, setSelectionMessage] = useState<string | null>(null);
   const [selectionBusy, setSelectionBusy] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (!container.current || !viewerElement.current) return;
@@ -84,7 +85,7 @@ export function PdfViewer({ url, colorMode, initialPage, initialZoom = "page-wid
       viewer.current?.setDocument(null as unknown as PDFDocumentProxy);
       void task.destroy();
     };
-  }, [initialZoom, url]);
+  }, [initialZoom, loadAttempt, url]);
 
   useEffect(() => {
     if (!document || !viewer.current || !initialPage) return;
@@ -192,7 +193,7 @@ export function PdfViewer({ url, colorMode, initialPage, initialZoom = "page-wid
   return <div ref={root} className={`pdf-viewer pdf-viewer--${colorMode} pdf-viewer--toolbar-${toolbarDensity}`} onPointerUp={() => window.setTimeout(captureSelection, 0)}>
     <div className="pdf-findbar"><label><Icon name="search" size={14} /><input aria-label="在 PDF 中搜索" placeholder="在文中搜索" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") find(event.shiftKey, event.currentTarget.value); }} /></label><button type="button" title="上一个" onClick={() => find(true)}><Icon name="arrow-left" size={14} /></button><button type="button" title="下一个" onClick={() => find(false)}><Icon name="arrow-right" size={14} /></button></div>
     {loading ? <AsyncMessage kind="loading">正在载入 PDF…</AsyncMessage> : null}
-    {error ? <AsyncMessage kind="error">{error}</AsyncMessage> : null}
+    {error ? <AsyncMessage kind="error" retryLabel="重新载入 PDF" onRetry={() => setLoadAttempt((value) => value + 1)}>{error}</AsyncMessage> : null}
     <div ref={container} className="pdf-scroll-container"><div ref={viewerElement} className="pdfViewer" /></div>
     {selectionMenu ? <div className="pdf-selection-actions" role="toolbar" aria-label="PDF 选区操作" style={{ left: selectionMenu.left, top: selectionMenu.top }}>
       {([

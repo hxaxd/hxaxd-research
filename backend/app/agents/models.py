@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -110,6 +110,19 @@ class PublicAgentRun(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     cancel_requested_at: datetime | None
+
+
+class PublicAgentTaskDefinition(BaseModel):
+    id: str
+    label: str
+    description: str
+    scope_requirement: Literal["project", "item", "zotero_preview"]
+    web_search: bool
+    scopes: tuple[str, ...]
+    tools: tuple[str, ...]
+    result_kind: str
+    ready: bool
+    missing_reason: str | None = None
 
 
 class AgentEvent(BaseModel):

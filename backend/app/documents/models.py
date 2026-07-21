@@ -59,6 +59,8 @@ class DocumentExtractionJobInput(DocumentExtractionRequest):
     extractor: str = Field(min_length=1, max_length=80)
     extractor_version: str = Field(min_length=1, max_length=80)
     structure_version: str = Field(min_length=1, max_length=80)
+    tex_attachment_id: str | None = Field(default=None, min_length=1, max_length=200)
+    tex_source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class DocumentTranslationRequest(_DocumentModel):
@@ -81,6 +83,10 @@ class DocumentTranslationJobInput(DocumentTranslationRequest):
     )
     batching: Literal["whole_with_fallback", "whole_only", "chapter"] = (
         "whole_with_fallback"
+    )
+    retranslate_scope: Literal["changed", "document"] = "changed"
+    previous_translation_job_id: str | None = Field(
+        default=None, min_length=1, max_length=200
     )
     glossary: list[TranslationGlossaryTerm] = Field(default_factory=list, max_length=500)
 

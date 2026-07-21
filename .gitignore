@@ -10,6 +10,8 @@ __pycache__/
 .ruff_cache/
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 backend/data/
 backend/snapshots/
 backend/.venv/

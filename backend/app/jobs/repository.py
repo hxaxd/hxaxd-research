@@ -628,7 +628,14 @@ class SqliteJobRepository:
                 claimed.job.id,
                 claimed.attempt.id,
                 event_type,
-                {"code": code, "message": message[-1000:]},
+                {
+                    "code": code,
+                    "message": message[-1000:],
+                    "retryable": bool(retryable and not cancellation),
+                    "automatic_retry": can_retry,
+                    "attempt": claimed.attempt.attempt_number,
+                    "max_attempts": claimed.job.max_attempts,
+                },
                 level="warning" if can_retry else "error",
             )
         return self.get(claimed.job.id)

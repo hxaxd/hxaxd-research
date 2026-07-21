@@ -298,8 +298,16 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   async function startTranslation() {
     if (!document) return;
     setActionError(null);
+    setNotice(null);
     try {
-      setActiveJob(await api.translateDocument(document.id, readerSettings.target_language));
+      const nextJob = await api.translateDocument(document.id, readerSettings.target_language);
+      setActiveJob(nextJob);
+      if (
+        nextJob.status === "succeeded"
+        && preferences.data?.translation.retranslate_scope === "changed"
+      ) {
+        setNotice("当前文档结构和翻译设置没有变化，已复用现有译文；可在设置中选择“整篇”强制重译。");
+      }
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : "无法开始整篇翻译");
     }
@@ -454,7 +462,7 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     return <div className="semantic-reader"><AsyncMessage kind="loading">正在读取文档结构…</AsyncMessage></div>;
   }
   if (documents.error) {
-    return <div className="semantic-reader"><AsyncMessage kind="error">{documents.error}</AsyncMessage></div>;
+    return <div className="semantic-reader"><AsyncMessage kind="error" onRetry={() => void documents.retry()}>{documents.error}</AsyncMessage></div>;
   }
   if (!document) {
     return <div className="semantic-reader semantic-reader--empty">
@@ -462,7 +470,7 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
         <span className="semantic-onboarding__icon"><Icon name="book-open" size={25} /></span>
         <span className="eyebrow">STRUCTURED READING</span>
         <h2>把线性 PDF 变成可筛选的阅读结构</h2>
-        <p>复用 BabelDOC 的段落、布局、公式与页面坐标，一次生成稳定阅读块；之后整篇翻译与语义识别共用同一份结构。</p>
+        <p>存在 TeX 源附件时优先读取其章节、段落、公式和图表关系，再用 BabelDOC 补齐 PDF 页码与坐标；没有源码时直接复用 PDF 版面结构。</p>
         <label>扫描件策略
           <select value={ocrMode} onChange={(event) => setOcrMode(event.target.value as OcrMode)}>
             <option value="auto">自动检测</option>
@@ -474,7 +482,7 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
           <Icon name={isRunning ? "activity" : "sparkles"} size={17} />
           {isRunning ? "正在生成结构…" : "生成结构化内容"}
         </button>
-        <small>自动模式优先恢复原生段落；没有文本层时回退到真正的离线 OCR，并保留页码、坐标与识别置信度。</small>
+        <small>自动模式优先使用 TeX 与原生文本层；没有文本层时回退到真正的离线 OCR，并保留页码、坐标与识别置信度。</small>
         {actionError || activeJob?.error_message ? <p className="semantic-action-error">{actionError || activeJob?.error_message}</p> : null}
       </section>
     </div>;
@@ -528,7 +536,7 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
       <main className="semantic-scroll" onScroll={handleReaderScroll} ref={scrollRef}>
         <article className="semantic-document">
           {blocks.loading ? <AsyncMessage kind="loading">正在装配阅读块…</AsyncMessage> : null}
-          {blocks.error ? <AsyncMessage kind="error">{blocks.error}</AsyncMessage> : null}
+          {blocks.error ? <AsyncMessage kind="error" onRetry={() => void blocks.retry()}>{blocks.error}</AsyncMessage> : null}
           {!blocks.loading && !visibleBlocks.length ? <AsyncMessage kind="empty">当前筛选没有匹配的阅读块</AsyncMessage> : null}
           {visibleBlocks.map((block) => <SemanticBlockCard
             annotations={annotationsByBlock.get(block.id) ?? []}

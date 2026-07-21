@@ -15,6 +15,7 @@ from .models import (
     AgentRunStatus,
     ApprovalDecision,
     PublicAgentRun,
+    PublicAgentTaskDefinition,
     PublicApproval,
 )
 from .prompting import PromptContext
@@ -52,6 +53,7 @@ def create_agent_router(
     context_resolver: Callable[[CreateAgentRunRequest], PromptContext],
     scope_resolver: Callable[[CreateAgentRunRequest], tuple[str, ...]],
     run_defaults: Callable[[], tuple[str | None, str | None]] | None = None,
+    task_definitions: Callable[[], list[PublicAgentTaskDefinition]] | None = None,
 ) -> APIRouter:
     """Builds the public control plane around trusted, server-side context resolvers."""
 
@@ -64,6 +66,12 @@ def create_agent_router(
     project_query = Query(default=None, max_length=200)
     limit_query = Query(default=200, ge=1, le=1000)
     after_query = Query(default=0, ge=0)
+
+    @router.get(
+        "/agent-task-definitions", response_model=list[PublicAgentTaskDefinition]
+    )
+    def list_task_definitions() -> list[PublicAgentTaskDefinition]:
+        return task_definitions() if task_definitions is not None else []
 
     def enqueue(
         scheduler: JobScheduler,

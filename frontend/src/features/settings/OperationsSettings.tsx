@@ -153,7 +153,7 @@ export function OperationsSettings() {
       </section>
 
       {resource.loading ? <p className="settings-feedback">正在读取工具和快照状态…</p> : null}
-      {resource.error || error ? <p className="settings-feedback settings-feedback--error">{resource.error || error}</p> : null}
+      {resource.error || error ? <div className="settings-feedback settings-feedback--error">{resource.error || error}{resource.error ? <button className="toolbar-button" type="button" onClick={() => void resource.retry()}><Icon name="refresh" size={13} />重新读取</button> : null}</div> : null}
       {message ? <p className="settings-feedback settings-feedback--success"><Icon name="check" size={13} />{message}<Link to="/tasks">打开任务中心</Link></p> : null}
     </div>
   );
