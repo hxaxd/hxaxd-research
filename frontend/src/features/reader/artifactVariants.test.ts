@@ -1,22 +1,37 @@
 import { describe, expect, it } from "vitest";
 
-import type { Resource, ResourceRepresentation } from "../../shared/api/contracts";
-import { firstAvailableRepresentation, pdfByRepresentation } from "./artifactVariants";
+import type { Attachment } from "../../shared/api/contracts";
+import { firstReadableAttachment, pdfByLanguageMode } from "./artifactVariants";
 
-function resource(representation: ResourceRepresentation, preferred = true): Resource {
+function attachment(id: string, mode: Attachment["language_mode"], preferred = false): Attachment {
   return {
-    id: representation, paper_id: "paper", format: "pdf", representation,
-    origin: "user", source_url: null, filename: `${representation}.pdf`,
-    media_type: "application/pdf", sha256: representation, size: 10, preferred,
-    parent_resource_id: null, job_id: null, created_at: "2026-01-01T00:00:00Z",
+    id,
+    item_id: "item",
+    attachment_type: "fulltext",
+    format: "pdf",
+    language_mode: mode,
+    origin: "user",
+    filename: `${id}.pdf`,
+    media_type: "application/pdf",
+    sha256: id.padEnd(64, "0"),
+    size: 1,
+    preferred_for: preferred ? ["reading"] : [],
+    created_at: "2026-07-21T00:00:00Z",
   };
 }
 
-describe("resource variants", () => {
-  it("prefers the original PDF regardless of response order", () => {
-    expect(firstAvailableRepresentation([resource("translated"), resource("original")])).toBe("original");
+describe("attachment variants", () => {
+  it("selects the preferred attachment for each language mode", () => {
+    const variants = pdfByLanguageMode([
+      attachment("old", "original"),
+      attachment("preferred", "original", true),
+      attachment("bi", "bilingual"),
+    ]);
+    expect(variants.original?.id).toBe("preferred");
+    expect(variants.bilingual?.id).toBe("bi");
   });
-  it("indexes each representation", () => {
-    expect(pdfByRepresentation([resource("bilingual")]).bilingual?.filename).toBe("bilingual.pdf");
+
+  it("prefers original, then bilingual, then translated for initial reading", () => {
+    expect(firstReadableAttachment([attachment("zh", "translated"), attachment("bi", "bilingual")])?.id).toBe("bi");
   });
 });

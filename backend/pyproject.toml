@@ -1,18 +1,19 @@
 [project]
 name = "hxaxd-research-backend"
 version = "0.1.0"
-description = "Web backend for the hxaxd paper learning workspace"
+description = "Web backend for the hxaxd literature workspace"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116,<1",
     "python-multipart>=0.0.20,<1",
     "pypdf>=5,<7",
     "uvicorn[standard]>=0.35,<1",
+    "mcp>=1.10,<2",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2>=2,<3",
+    "httpx>=0.28,<1",
     "pytest>=8.4,<9",
     "ruff>=0.12,<1",
 ]

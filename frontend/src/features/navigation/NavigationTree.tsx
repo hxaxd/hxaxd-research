@@ -1,106 +1,69 @@
-import { useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 
-import { Icon } from "../../shared/ui/Icon";
-import { CreateProjectDialog } from "./CreateProjectDialog";
-import { ProjectBranch } from "./ProjectBranch";
-import { useProjects } from "./useProjects";
+import { useAppData } from "../../app/AppDataContext";
+import { Icon, type IconName } from "../../shared/ui/Icon";
 import "./navigation.css";
 
 interface NavigationTreeProps {
   expanded: boolean;
   onToggle: () => void;
 }
+const primaryLinks: Array<{ label: string; path: string; icon: IconName }> = [
+  { label: "概览", path: "/", icon: "home" },
+  { label: "任务", path: "/tasks", icon: "activity" },
+  { label: "集成", path: "/integrations", icon: "plug" },
+  { label: "设置", path: "/settings", icon: "settings" },
+];
 
 export function NavigationTree({ expanded, onToggle }: NavigationTreeProps) {
-  const { projects, loading, error, createProject } = useProjects();
-  const [query, setQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const visibleProjects = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return projects;
-    return projects.filter((project) => project.name.toLocaleLowerCase().includes(normalized));
-  }, [projects, query]);
-
+  const { projects, connection } = useAppData();
   return (
-    <>
-      <nav className={expanded ? "navigation-tree" : "navigation-tree navigation-tree--collapsed"} aria-label="论文学习工作台">
-        <div className="sidebar-brand">
-          <NavLink className="brand-link" end title="论文学习工作台概览" to="/">
-            <span className="brand-mark"><Icon name="library" size={21} /></span>
-            <span className="brand-copy">
-              <small>HXAXD LEARNING</small>
-              <strong>学习工作台</strong>
-            </span>
-          </NavLink>
-          <button
-            aria-label={expanded ? "收起导航" : "展开导航"}
-            className="sidebar-toggle"
-            title={expanded ? "收起导航" : "展开导航"}
-            type="button"
-            onClick={onToggle}
-          >
-            <Icon name={expanded ? "chevron-left" : "panel-left"} size={18} />
-          </button>
-        </div>
-
-        <NavLink className="overview-link" end title="概览" to="/">
-          <Icon name="home" size={18} />
-          <span>概览</span>
+    <nav
+      className={expanded ? "navigation-tree" : "navigation-tree navigation-tree--collapsed"}
+      aria-label="文献索引工作台"
+    >
+      <div className="sidebar-brand">
+        <NavLink className="brand-link" end to="/" title="文献索引工作台">
+          <span className="brand-mark"><Icon name="library" size={21} /></span>
+          <span className="brand-copy"><small>HXAXD RESEARCH</small><strong>文献工作台</strong></span>
         </NavLink>
+        <button className="sidebar-toggle" type="button" onClick={onToggle} aria-label={expanded ? "收起导航" : "展开导航"}>
+          <Icon name={expanded ? "chevron-left" : "panel-left"} size={18} />
+        </button>
+      </div>
 
-        <div className="sidebar-section-heading">
-          <span>学习项目</span>
-          <span className="section-count">{projects.length}</span>
-          <button aria-label="新建项目" title="新建项目" type="button" onClick={() => setDialogOpen(true)}>
-            <Icon name="plus" size={16} />
-          </button>
-        </div>
+      <div className="primary-navigation">
+        {primaryLinks.map((item) => (
+          <NavLink className="primary-nav-link" end={item.path === "/"} key={item.path} to={item.path} title={item.label}>
+            <Icon name={item.icon} size={18} /><span>{item.label}</span>
+          </NavLink>
+        ))}
+      </div>
 
-        <label className="nav-search">
-          <Icon name="search" size={16} />
-          <span className="visually-hidden">搜索项目</span>
-          <input
-            placeholder="搜索项目"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {query ? (
-            <button aria-label="清空搜索" type="button" onClick={() => setQuery("")}>
-              <Icon name="close" size={14} />
-            </button>
-          ) : null}
-        </label>
+      <div className="sidebar-section-heading">
+        <span>项目</span>
+        <span className="section-count">{projects.length}</span>
+        <NavLink className="project-create-link" to="/?newProject=1" title="创建项目" aria-label="创建项目">
+          <Icon name="plus" size={14} />
+        </NavLink>
+      </div>
+      <div className="navigation-scroll">
+        <ul className="project-list">
+          {projects.map((project) => (
+            <li key={project.id}>
+              <NavLink className="project-link" to={`/projects/${project.id}`} title={project.name}>
+                <Icon name="folder" size={17} />
+                <span>{project.name}</span>
+                {project.status_counts.discovered ? <em>{project.status_counts.discovered}</em> : null}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </div>
 
-        <div className="navigation-scroll">
-          {loading ? <p className="tree-muted">读取项目中…</p> : null}
-          {error ? <p className="tree-error">{error}</p> : null}
-          <ul className="project-list">
-            {visibleProjects.map((project) => (
-              <ProjectBranch key={project.id} project={project} sidebarExpanded={expanded} />
-            ))}
-          </ul>
-          {!loading && projects.length === 0 ? (
-            <button className="empty-create" type="button" onClick={() => setDialogOpen(true)}>
-              <Icon name="plus" size={17} />
-              创建第一个学习项目
-            </button>
-          ) : null}
-          {!loading && projects.length > 0 && visibleProjects.length === 0 ? (
-            <p className="tree-muted">没有匹配的项目</p>
-          ) : null}
-        </div>
-
-        <div className="sidebar-footer">
-          <span className="service-indicator" />
-          <span>本地服务已连接</span>
-        </div>
-      </nav>
-      <CreateProjectDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onCreate={createProject}
-      />
-    </>
+      <div className={`sidebar-footer sidebar-footer--${connection}`}>
+        <span className="service-indicator" /><span>{connection === "connected" ? "服务已连接" : connection === "connecting" ? "正在连接" : "服务已断开"}</span>
+      </div>
+    </nav>
   );
 }

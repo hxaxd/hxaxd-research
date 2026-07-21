@@ -1,0 +1,18 @@
+.resource-actions { display: grid; gap: 8px; }
+.resource-actions > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.resource-actions > header h2 { margin: 3px 0 0; }
+.resource-actions > header a,
+.resource-message a { color: var(--accent); font-size: 9px; }
+.resource-actions details { border: 1px solid var(--border-soft); border-radius: 9px; background: #0d1017; }
+.resource-actions summary { display: flex; min-height: 36px; align-items: center; gap: 7px; padding: 0 10px; color: var(--text-muted); cursor: pointer; font-size: 10px; }
+.resource-actions form { display: grid; gap: 7px; border-top: 1px solid var(--border-soft); padding: 9px; }
+.resource-actions input,
+.resource-actions select { min-width: 0; min-height: 34px; border: 1px solid var(--border); border-radius: 7px; padding: 0 8px; background: var(--bg); color: var(--text); font-size: 10px; }
+.resource-actions input[type="file"] { padding: 7px; }
+.resource-operation { display: grid; gap: 7px; border-top: 1px solid var(--border-soft); padding-top: 9px; }
+.resource-operation label { display: grid; gap: 4px; color: var(--text-faint); font-size: 9px; }
+.resource-operation button { justify-content: center; }
+.resource-operation--translate p { margin: 0; color: var(--text-faint); font-size: 9px; line-height: 1.5; }
+.resource-message { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 2px 0 0; color: var(--success); font-size: 9px; }
+.resource-message a { margin-left: auto; }
+.resource-error { margin: 2px 0 0; color: var(--danger); font-size: 9px; }

@@ -13,6 +13,7 @@ frontend/dist/
 backend/data/
 backend/snapshots/
 backend/.venv/
+backend/.runtime/
 
 # Local secrets
 .env
@@ -24,4 +25,5 @@ backend/.venv/
 .DS_Store
 Thumbs.db
 
-old/*
+/old/
+/toss/

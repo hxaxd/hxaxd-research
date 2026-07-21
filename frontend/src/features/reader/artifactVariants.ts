@@ -1,19 +1,23 @@
-import type { Resource, ResourceRepresentation } from "../../shared/api/contracts";
+import type { Attachment, AttachmentLanguageMode } from "../../shared/api/contracts";
 
-export const resourceLabels: Record<ResourceRepresentation, string> = {
-  original: "原文", bilingual: "双语", translated: "中文",
+export const attachmentLabels: Record<AttachmentLanguageMode, string> = {
+  original: "原文",
+  bilingual: "双语",
+  translated: "中文",
 };
-export const resourceOrder: ResourceRepresentation[] = ["original", "bilingual", "translated"];
 
-export function pdfByRepresentation(resources: Resource[]): Partial<Record<ResourceRepresentation, Resource>> {
-  const result: Partial<Record<ResourceRepresentation, Resource>> = {};
-  for (const resource of resources.filter((item) => item.format === "pdf").toSorted((a, b) => Number(b.preferred) - Number(a.preferred))) {
-    result[resource.representation] ??= resource;
-  }
+export const attachmentOrder: AttachmentLanguageMode[] = ["original", "bilingual", "translated"];
+
+export function pdfByLanguageMode(attachments: Attachment[]): Partial<Record<AttachmentLanguageMode, Attachment>> {
+  const result: Partial<Record<AttachmentLanguageMode, Attachment>> = {};
+  const preferred = attachments
+    .filter((item) => item.format === "pdf")
+    .toSorted((left, right) => Number(right.preferred_for.includes("reading")) - Number(left.preferred_for.includes("reading")));
+  for (const attachment of preferred) result[attachment.language_mode] ??= attachment;
   return result;
 }
-
-export function firstAvailableRepresentation(resources: Resource[]): ResourceRepresentation | null {
-  const available = pdfByRepresentation(resources);
-  return resourceOrder.find((kind) => available[kind] !== undefined) ?? null;
+export function firstReadableAttachment(attachments: Attachment[]): Attachment | null {
+  const available = pdfByLanguageMode(attachments);
+  const mode = attachmentOrder.find((item) => available[item]);
+  return mode ? available[mode] ?? null : null;
 }

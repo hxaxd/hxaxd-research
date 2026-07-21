@@ -4,33 +4,79 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.api.router import api_router
+from app.api.router import create_api_router
 from app.core.bootstrap import build_app_context
 from app.core.config import Settings
 from app.core.http_errors import register_error_handlers
+from app.platform import WorkspaceMutationGate
+
+
+class WorkspaceConcurrencyMiddleware:
+    def __init__(self, app: ASGIApp, *, gate: WorkspaceMutationGate) -> None:
+        self.app = app
+        self.gate = gate
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = str(scope.get("path", ""))
+        if path == "/api/health" or path.endswith("/events"):
+            await self.app(scope, receive, send)
+            return
+        method = str(scope.get("method", "GET")).upper()
+        is_read = method in {"GET", "HEAD", "OPTIONS"}
+        entered = self.gate.enter_read() if is_read else self.gate.enter_mutation()
+        if not entered:
+            response = JSONResponse(
+                status_code=503,
+                content={
+                    "code": "workspace_maintenance",
+                    "message": "工作区正在创建或恢复快照，请稍后重试",
+                    "details": None,
+                },
+                headers={"Retry-After": "2"},
+            )
+            await response(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            if is_read:
+                self.gate.exit_read()
+            else:
+                self.gate.exit_mutation()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     context = build_app_context(active_settings)
+    mcp_application = context.mcp_server.streamable_http_app()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         context.startup()
-        yield
-        context.shutdown()
+        try:
+            async with context.mcp_server.session_manager.run():
+                yield
+        finally:
+            context.shutdown()
 
     application = FastAPI(
-        title="Hxaxd Learning Workspace API",
+        title="Hxaxd Literature Workspace API",
         description=(
-            "学习项目、论文事实、项目判断、PDF/TeX 资源、转换任务和本地工具的唯一服务接口。"
-            "交互式文档位于 /docs，机器可读契约位于 /openapi.json。"
+            "文献元数据、候选判断、附件、持久任务、内嵌代理与集成的唯一服务接口。"
         ),
-        version="0.3.0",
+        version="3.0.0",
         lifespan=lifespan,
     )
     application.state.context = context
+    application.state.v3_database = context.database
+    application.state.zotero_service = context.zotero_service
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=list(active_settings.frontend_origins),
@@ -38,8 +84,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.add_middleware(WorkspaceConcurrencyMiddleware, gate=context.mutation_gate)
     register_error_handlers(application)
-    application.include_router(api_router)
+    application.include_router(create_api_router(context))
+    application.mount("/mcp", mcp_application)
     return application
 
 

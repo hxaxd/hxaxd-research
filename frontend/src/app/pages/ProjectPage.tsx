@@ -1,67 +1,86 @@
-import { useParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
-import { Link } from "react-router-dom";
-
-import { PaperLibrary } from "../../features/papers/PaperLibrary";
-import { useProjectPapers } from "../../features/papers/useProjectPapers";
+import { CandidateInbox } from "../../features/candidates/CandidateInbox";
+import { api } from "../../shared/api/client";
+import type { CandidateDecision, ProjectItem, ProjectItemStatus } from "../../shared/api/contracts";
+import { useApiResource } from "../../shared/api/useApiResource";
 import { AsyncMessage } from "../../shared/ui/AsyncMessage";
 import { Icon } from "../../shared/ui/Icon";
 import "./pages.css";
 
+type ProjectTab = "candidates" | "library";
+
 export function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  if (!projectId) return <AsyncMessage kind="error">项目地址无效</AsyncMessage>;
-  return <ProjectContent projectId={projectId} />;
-}
+  const [params, setParams] = useSearchParams();
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const tab = (params.get("tab") as ProjectTab | null) ?? "candidates";
+  const status = (params.get("status") as ProjectItemStatus | null) ?? "included";
+  const resource = useApiResource(
+    () => projectId ? Promise.all([api.project(projectId), api.candidates(projectId), api.projectItems(projectId, "all")]) : Promise.reject(new Error("项目地址无效")),
+    [projectId],
+  );
 
-function ProjectContent({ projectId }: { projectId: string }) {
-  const { project, papers, loading, error } = useProjectPapers(projectId);
-  if (loading) return <AsyncMessage kind="loading">正在读取论文…</AsyncMessage>;
-  if (error) return <AsyncMessage kind="error">{error}</AsyncMessage>;
-  if (!project) return <AsyncMessage kind="empty">项目不存在</AsyncMessage>;
+  if (resource.loading) return <AsyncMessage kind="loading">正在读取项目…</AsyncMessage>;
+  if (resource.error) return <AsyncMessage kind="error">{resource.error}</AsyncMessage>;
+  if (!projectId || !resource.data) return <AsyncMessage kind="empty">项目不存在</AsyncMessage>;
+  const validProjectId = projectId;
+  const [project, candidates, items] = resource.data;
+  const pending = candidates.filter(
+    (item) => item.state === "staged" || item.state === "matched",
+  ).length;
 
-  const included = papers.filter((entry) => entry.project.status === "included").length;
-  const discovered = papers.filter((entry) => entry.project.status === "discovered").length;
-  const years = papers.map((entry) => entry.paper.publication_year).filter((year): year is number => year !== null);
-  const yearRange = years.length > 0 ? `${Math.min(...years)} — ${Math.max(...years)}` : "—";
+  async function decide(decision: CandidateDecision) {
+    setDeciding(decision.candidate_id);
+    setDecisionError(null);
+    try {
+      await api.decideCandidates(validProjectId, [decision]);
+      await resource.reload();
+    } catch (reason) {
+      setDecisionError(reason instanceof Error ? reason.message : "无法提交候选判断");
+    } finally {
+      setDeciding(null);
+    }
+  }
+
+  function selectTab(next: ProjectTab) {
+    setParams((current) => {
+      current.set("tab", next);
+      return current;
+    });
+  }
 
   return (
-    <section className="project-page">
-      <div className="project-content">
-        <header className="page-header">
-          <div className="page-heading-copy">
-            <div className="breadcrumb"><Link to="/">学习</Link><Icon name="chevron-right" size={13} /><span>项目</span></div>
-            <h1>{project.name}</h1>
-            <p>{project.description || "尚未填写项目范围"}</p>
-          </div>
-          <div className="project-mark"><Icon name="book-open" size={26} /></div>
+    <section className="project-page workspace-page">
+      <div className="workspace-content">
+        <header className="page-header compact-page-header">
+          <div><div className="breadcrumb"><Link to="/">工作台</Link><Icon name="chevron-right" size={13} /><span>项目</span></div><h1>{project.name}</h1><p>{project.description || "尚未填写项目范围"}</p></div>
+          <div className="header-metrics"><span><small>文献</small><strong>{project.work_count}</strong></span><span className={pending ? "metric-warning" : ""}><small>待判断</small><strong>{pending}</strong></span></div>
         </header>
-
-        <div className="project-metrics" aria-label="项目统计">
-          <div className="metric-card metric-card--primary">
-            <span>论文总数</span><strong>{papers.length}</strong>
-          </div>
-          <div className="metric-card">
-            <span>已收录</span><strong>{included}</strong>
-          </div>
-          <div className="metric-card">
-            <span>待判断</span><strong>{discovered}</strong>
-          </div>
-          <div className="metric-card metric-card--range">
-            <span>发表年份</span><strong>{yearRange}</strong>
-          </div>
-        </div>
-
-        {papers.length > 0 ? (
-          <PaperLibrary papers={papers} />
-        ) : (
-          <div className="project-empty">
-            <span><Icon name="file-text" size={24} /></span>
-            <h2>项目里还没有论文</h2>
-            <p>Agent 提交候选论文后，它们会直接出现在这里。</p>
-          </div>
-        )}
+        <nav className="page-tabs" aria-label="项目视图">
+          <button className={tab === "candidates" ? "active" : ""} type="button" onClick={() => selectTab("candidates")}><Icon name="inbox" size={15} />候选收件箱{pending ? <em>{pending}</em> : null}</button>
+          <button className={tab === "library" ? "active" : ""} type="button" onClick={() => selectTab("library")}><Icon name="library" size={15} />项目文献</button>
+        </nav>
+        {decisionError ? <div className="page-error">{decisionError}</div> : null}
+        {tab === "candidates" ? <CandidateInbox candidates={candidates} deciding={deciding} onDecision={decide} /> : <ProjectLibrary projectId={projectId} items={items} status={status} onStatus={(next) => setParams({ tab: "library", status: next })} />}
       </div>
     </section>
   );
+}
+
+function ProjectLibrary({ projectId, items, status, onStatus }: { projectId: string; items: ProjectItem[]; status: ProjectItemStatus; onStatus: (status: ProjectItemStatus) => void }) {
+  const [query, setQuery] = useState("");
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return items.filter((item) => item.status === status && (!normalized || [item.title, item.translated_title ?? "", item.summary ?? "", item.relevance ?? ""].some((value) => value.toLocaleLowerCase().includes(normalized))));
+  }, [items, query, status]);
+  const statuses: Array<{ value: ProjectItemStatus; label: string }> = [
+    { value: "included", label: "已收录" },
+    { value: "discovered", label: "待判断" },
+    { value: "excluded", label: "已排除" },
+    { value: "archived", label: "已归档" },
+  ];
+  return <section className="project-library"><div className="library-controls"><label><Icon name="search" size={16} /><input placeholder="搜索标题、项目摘要或相关性" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div>{statuses.map((item) => <button className={status === item.value ? "active" : ""} key={item.value} type="button" onClick={() => onStatus(item.value)}>{item.label}<span>{items.filter((entry) => entry.status === item.value).length}</span></button>)}</div></div>{visible.length ? <div className="project-item-list">{visible.map((item) => <Link key={item.id} to={`/projects/${projectId}/items/${item.preferred_item_id}`}><span className="item-year">{item.issued_year ?? "—"}</span><span className="item-copy"><strong>{item.translated_title || item.title}</strong>{item.translated_title ? <small>{item.title}</small> : null}<em>{item.summary || item.relevance || "尚未补充项目判断"}</em></span><span className="item-roles">{item.roles.map((role) => <i key={role}>{role}</i>)}</span><Icon name="arrow-right" size={17} /></Link>)}</div> : <div className="library-empty"><Icon name="search" size={22} /><h3>没有匹配的文献</h3><p>切换状态或修改关键词。</p></div>}</section>;
 }
