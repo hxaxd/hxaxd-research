@@ -116,6 +116,25 @@
   color: #c8c9ff;
 }
 
+.toolbar-group--reader-mode {
+  border-color: rgb(166 167 255 / 22%);
+}
+
+.toolbar-group--reader-mode .segmented {
+  min-width: 82px;
+  min-height: 38px;
+}
+
+.toolbar-group--reader-mode .segmented.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.reader-mode-description {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
 .toolbar-divider {
   width: 1px;
   height: 23px;

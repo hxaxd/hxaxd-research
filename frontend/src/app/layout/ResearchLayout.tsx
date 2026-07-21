@@ -5,15 +5,25 @@ import { NavigationTree } from "../../features/navigation/NavigationTree";
 import { Icon } from "../../shared/ui/Icon";
 import "./layout.css";
 
+const compactNavigationQuery = "(max-width: 1180px)";
+
 export function ResearchLayout() {
   const location = useLocation();
   const [sidebarExpanded, setSidebarExpanded] = useState(
-    () => !window.matchMedia("(max-width: 820px)").matches,
+    () => !window.matchMedia(compactNavigationQuery).matches,
   );
 
   useEffect(() => {
-    if (window.matchMedia("(max-width: 820px)").matches) setSidebarExpanded(false);
+    const media = window.matchMedia(compactNavigationQuery);
+    if (media.matches) setSidebarExpanded(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const media = window.matchMedia(compactNavigationQuery);
+    const syncNavigation = () => setSidebarExpanded(!media.matches);
+    media.addEventListener("change", syncNavigation);
+    return () => media.removeEventListener("change", syncNavigation);
+  }, []);
 
   return (
     <div className={sidebarExpanded ? "research-shell" : "research-shell research-shell--collapsed"}>

@@ -11,7 +11,7 @@ import "./reader.css";
 GlobalWorkerOptions.workerSrc = workerUrl;
 export type PdfColorMode = "normal" | "dark" | "sepia";
 
-export function PdfViewer({ url, colorMode }: { url: string; colorMode: PdfColorMode }) {
+export function PdfViewer({ url, colorMode, initialPage }: { url: string; colorMode: PdfColorMode; initialPage?: number | null }) {
   const container = useRef<HTMLDivElement>(null);
   const viewerElement = useRef<HTMLDivElement>(null);
   const viewer = useRef<PdfJsViewer | null>(null);
@@ -64,6 +64,11 @@ export function PdfViewer({ url, colorMode }: { url: string; colorMode: PdfColor
       void task.destroy();
     };
   }, [url]);
+
+  useEffect(() => {
+    if (!document || !viewer.current || !initialPage) return;
+    viewer.current.currentPageNumber = Math.min(document.numPages, Math.max(1, initialPage));
+  }, [document, initialPage]);
 
   function setScaleValue(value: string) {
     if (!viewer.current) return;

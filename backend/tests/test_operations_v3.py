@@ -40,6 +40,8 @@ from app.operations.handlers import (
 from app.operations.models import (
     AttachmentDownloadRequest,
     CompileJobRequest,
+    ManagedToolName,
+    ManagedToolStatus,
     TranslationJobRequest,
 )
 from app.operations.service import OperationService
@@ -176,6 +178,39 @@ class FakeRunner:
             stdout_tail="",
             stderr_tail="",
         )
+
+
+def test_pdf_tool_reports_and_schedules_the_ocr_bundle_upgrade(tmp_path) -> None:
+    settings = _settings(tmp_path)
+    settings.pdf2zh_executable.parent.mkdir(parents=True)
+    settings.pdf2zh_executable.write_bytes(b"fake executable")
+    source_path = tmp_path / "source.pdf"
+    source_path.write_bytes(b"pdf")
+    scheduler = FakeScheduler()
+    service = OperationService(
+        settings,
+        FakeAttachmentService(
+            _attachment("source", AttachmentType.FULLTEXT, AttachmentFormat.PDF),
+            source_path,
+        ),  # type: ignore[arg-type]
+        scheduler,  # type: ignore[arg-type]
+        FakeJobRepository(),  # type: ignore[arg-type]
+        FakeRunner(),  # type: ignore[arg-type]
+    )
+
+    partial = service.get_tool(ManagedToolName.PDF2ZH)
+    assert partial.status is ManagedToolStatus.UPGRADE_REQUIRED
+    service.install_tool(ManagedToolName.PDF2ZH)
+    assert scheduler.requests[-1].kind == "tool.install.pdf2zh"
+
+    rapidocr = (
+        settings.pdf2zh_dir / ".venv" / "Lib" / "site-packages" / "rapidocr"
+    )
+    rapidocr.mkdir(parents=True)
+    ready = service.get_tool(ManagedToolName.PDF2ZH)
+    assert ready.status is ManagedToolStatus.READY
+    service.install_tool(ManagedToolName.PDF2ZH)
+    assert scheduler.requests[-1].kind == "tool.verify.pdf2zh"
 
 
 def test_scheduling_validates_attachment_kind_and_hides_url_from_concurrency_key(tmp_path):

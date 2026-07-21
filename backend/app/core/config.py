@@ -21,6 +21,10 @@ class Settings:
     codex_executable: Path | None = None
     zotero_local_url: str = "http://127.0.0.1:23119/api/"
     zotero_api_key: str | None = None
+    translation_api_base_url: str = "https://api.deepseek.com"
+    translation_api_key: str | None = None
+    translation_provider: str = "deepseek"
+    translation_model: str = "deepseek-v4-flash"
 
     @property
     def pdf2zh_dir(self) -> Path:
@@ -31,6 +35,27 @@ class Settings:
         executable = "pdf2zh_next.exe" if os.name == "nt" else "pdf2zh_next"
         scripts_directory = "Scripts" if os.name == "nt" else "bin"
         return self.pdf2zh_dir / ".venv" / scripts_directory / executable
+
+    @property
+    def babeldoc_executable(self) -> Path:
+        executable = "babeldoc.exe" if os.name == "nt" else "babeldoc"
+        scripts_directory = "Scripts" if os.name == "nt" else "bin"
+        return self.pdf2zh_dir / ".venv" / scripts_directory / executable
+
+    @property
+    def pdf2zh_python(self) -> Path:
+        executable = "python.exe" if os.name == "nt" else "python"
+        scripts_directory = "Scripts" if os.name == "nt" else "bin"
+        return self.pdf2zh_dir / ".venv" / scripts_directory / executable
+
+    @property
+    def rapidocr_package_dir(self) -> Path | None:
+        virtual_environment = self.pdf2zh_dir / ".venv"
+        candidates = [virtual_environment / "Lib" / "site-packages" / "rapidocr"]
+        candidates.extend(
+            virtual_environment.glob("lib/python*/site-packages/rapidocr")
+        )
+        return next((candidate for candidate in candidates if candidate.is_dir()), None)
 
     @property
     def tex_dir(self) -> Path:
@@ -89,4 +114,19 @@ class Settings:
                 "RESEARCH_ZOTERO_LOCAL_URL", "http://127.0.0.1:23119/api/"
             ),
             zotero_api_key=os.environ.get("RESEARCH_ZOTERO_API_KEY") or None,
+            translation_api_base_url=os.environ.get(
+                "RESEARCH_TRANSLATION_API_BASE_URL", "https://api.deepseek.com"
+            ).rstrip("/"),
+            translation_api_key=(
+                os.environ.get("RESEARCH_TRANSLATION_API_KEY")
+                or os.environ.get("PDF2ZH_DEEPSEEK_API_KEY")
+                or os.environ.get("DEEPSEEK_API_KEY")
+                or None
+            ),
+            translation_provider=os.environ.get(
+                "RESEARCH_TRANSLATION_PROVIDER", "deepseek"
+            ).strip(),
+            translation_model=os.environ.get(
+                "RESEARCH_TRANSLATION_MODEL", "deepseek-v4-flash"
+            ).strip(),
         )
