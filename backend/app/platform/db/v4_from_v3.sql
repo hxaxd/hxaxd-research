@@ -1,6 +1,9 @@
 ALTER TABLE bibliographic_items
     ADD COLUMN revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1);
 
+ALTER TABLE agent_runs ADD COLUMN target_type TEXT;
+ALTER TABLE agent_runs ADD COLUMN target_id TEXT;
+
 CREATE TABLE item_revisions (
     id TEXT PRIMARY KEY,
     item_id TEXT NOT NULL REFERENCES bibliographic_items(id) ON DELETE CASCADE,
@@ -58,6 +61,7 @@ CREATE TABLE change_items (
     )),
     payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
     evidence_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(evidence_json)),
+    result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)),
     rationale TEXT,
     error_code TEXT,
     error_message TEXT,

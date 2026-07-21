@@ -13,6 +13,9 @@ from mcp.server.auth.provider import AccessToken
 class CapabilityGrant:
     run_id: str
     project_id: str | None
+    item_id: str | None
+    target_type: str | None
+    target_id: str | None
     scopes: frozenset[str]
     expires_at: int
 
@@ -31,6 +34,9 @@ class AgentCapabilityRegistry:
         run_id: str,
         *,
         project_id: str | None,
+        item_id: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
         scopes: frozenset[str],
         ttl_seconds: int | None = None,
     ) -> str:
@@ -39,6 +45,9 @@ class AgentCapabilityRegistry:
         grant = CapabilityGrant(
             run_id=run_id,
             project_id=project_id,
+            item_id=item_id,
+            target_type=target_type,
+            target_id=target_id,
             scopes=scopes,
             expires_at=int(time.time()) + (ttl_seconds or self.default_ttl_seconds),
         )
@@ -71,6 +80,9 @@ class AgentCapabilityRegistry:
             claims={
                 "run_id": grant.run_id,
                 "project_id": grant.project_id,
+                "item_id": grant.item_id,
+                "target_type": grant.target_type,
+                "target_id": grant.target_id,
             },
         )
 

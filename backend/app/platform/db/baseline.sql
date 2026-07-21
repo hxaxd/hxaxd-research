@@ -206,6 +206,8 @@ CREATE TABLE agent_runs (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
     item_id TEXT REFERENCES bibliographic_items(id) ON DELETE SET NULL,
+    target_type TEXT,
+    target_id TEXT,
     task_kind TEXT NOT NULL,
     goal TEXT NOT NULL,
     status TEXT NOT NULL CHECK(status IN (
@@ -306,6 +308,7 @@ CREATE TABLE change_items (
     )),
     payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
     evidence_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(evidence_json)),
+    result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)),
     rationale TEXT,
     error_code TEXT,
     error_message TEXT,

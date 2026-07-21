@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
 import type {
@@ -15,6 +16,7 @@ import "./zotero.css";
 type ConflictChoice = "source" | "target" | "skip";
 
 export function ZoteroTransferWizard({ projects }: { projects: Project[] }) {
+  const navigate = useNavigate();
   const status = useApiResource(() => api.zoteroStatus(), []);
   const [direction, setDirection] = useState<"import" | "export">("import");
   const [kind, setKind] = useState<"users" | "groups">("users");
@@ -80,6 +82,24 @@ export function ZoteroTransferWizard({ projects }: { projects: Project[] }) {
     }
   }
 
+  async function analyzeConflicts() {
+    if (!preview) return;
+    setBusy("agent");
+    setError(null);
+    try {
+      const launch = await api.createAgentRun({
+        task_kind: "conflict_resolution",
+        goal: "逐项分析这份 Zotero 迁移预览中的冲突，引用字段差异并提交冲突处理建议。",
+        project_id: projectId,
+        zotero_preview_id: preview.id,
+      });
+      navigate(`/agent-runs/${launch.run.id}`);
+    } catch (reason) {
+      setError(errorMessage(reason, "无法启动冲突分析任务"));
+      setBusy(null);
+    }
+  }
+
   const unresolvedConflicts = preview?.items.flatMap((item) => item.conflicts)
     .filter((conflict) => !resolvedConflictIds.has(conflict.id)) ?? [];
   const hasBlockedItems = Boolean(preview?.summary.blocked);
@@ -110,7 +130,7 @@ export function ZoteroTransferWizard({ projects }: { projects: Project[] }) {
 
       {preview ? (
         <section className="transfer-preview">
-          <header><div><span className="eyebrow">PREVIEW</span><h2>迁移预览</h2><p>有效期至 {formatDateTime(preview.expires_at)}</p></div><code title={preview.preview_hash}>{preview.preview_hash.slice(0, 12)}</code></header>
+          <header><div><span className="eyebrow">PREVIEW</span><h2>迁移预览</h2><p>有效期至 {formatDateTime(preview.expires_at)}</p></div><div className="preview-header-actions">{unresolvedConflicts.length ? <button className="toolbar-button" disabled={busy !== null} type="button" onClick={() => void analyzeConflicts()}><Icon name="sparkles" size={15} />{busy === "agent" ? "正在启动…" : "请智能体分析"}</button> : null}<code title={preview.preview_hash}>{preview.preview_hash.slice(0, 12)}</code></div></header>
           <div className="transfer-summary">{(["new", "update", "unchanged", "conflict", "blocked"] as const).map((action) => <div className={`transfer-count transfer-count--${action}`} key={action}><span>{actionLabel(action)}</span><strong>{preview.summary[action] ?? 0}</strong></div>)}</div>
           <div className="transfer-table">
             <div className="transfer-table-head"><span>条目</span><span>动作</span><span>差异</span></div>

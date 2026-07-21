@@ -9,6 +9,10 @@ import type {
   Candidate,
   CandidateDecision,
   CandidateDecisionResult,
+  ChangeReviewDecision,
+  ChangeSet,
+  ChangeSetList,
+  ChangeSetStatus,
   Job,
   ManagedTool,
   ManagedToolName,
@@ -167,6 +171,36 @@ export const api = {
     request<Approval>(`/approvals/${approvalId}/approve`, { method: "POST" }),
   reject: (approvalId: string) =>
     request<Approval>(`/approvals/${approvalId}/reject`, { method: "POST" }),
+
+  changeSets: (filters: {
+    status?: ChangeSetStatus;
+    projectId?: string;
+    itemId?: string;
+  } = {}) =>
+    request<ChangeSetList>(
+      `/change-sets${query({
+        status: filters.status,
+        project_id: filters.projectId,
+        item_id: filters.itemId,
+      })}`,
+    ),
+  reviewChangeSet: (
+    changeSetId: string,
+    expectedContentHash: string,
+    decisions: ChangeReviewDecision[],
+  ) =>
+    request<ChangeSet>(`/change-sets/${changeSetId}/review`, {
+      method: "POST",
+      body: JSON.stringify({
+        expected_content_hash: expectedContentHash,
+        decisions,
+      }),
+    }),
+  applyChangeSet: (changeSetId: string, expectedContentHash: string) =>
+    request<ChangeSet>(`/change-sets/${changeSetId}/apply`, {
+      method: "POST",
+      body: JSON.stringify({ expected_content_hash: expectedContentHash }),
+    }),
 
   previewZoteroTransfer: (payload: TransferPreviewRequest) =>
     request<TransferPreview>("/zotero/transfers/preview", {

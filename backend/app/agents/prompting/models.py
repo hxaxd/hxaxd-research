@@ -11,6 +11,7 @@ class PromptContext(BaseModel):
     project: dict[str, Any] | None = None
     items: list[dict[str, Any]] = Field(default_factory=list)
     attachments: list[dict[str, Any]] = Field(default_factory=list)
+    task_data: dict[str, Any] = Field(default_factory=dict)
     capabilities: dict[str, Any] = Field(default_factory=dict)
     prior_decisions: list[dict[str, Any]] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)

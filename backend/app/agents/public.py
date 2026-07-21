@@ -20,6 +20,8 @@ def project_public_run(run: AgentRun) -> PublicAgentRun:
         goal=run.goal,
         project_id=run.project_id,
         item_id=run.item_id,
+        target_type=run.target_type,
+        target_id=run.target_id,
         tool_scopes=run.tool_scopes,
         runtime=run.runtime,
         runtime_version=run.runtime_version,

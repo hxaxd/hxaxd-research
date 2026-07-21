@@ -78,6 +78,46 @@ class BibliographicItemDraft(BaseModel):
     tags: list[TagInput] = Field(default_factory=list)
 
 
+class BibliographicItemPatch(BaseModel):
+    item_type: NonEmptyText | None = None
+    title: NonEmptyText | None = None
+    short_title: str | None = None
+    translated_title: str | None = None
+    abstract: str | None = None
+    language: str | None = None
+    issued_year: int | None = Field(default=None, ge=1000, le=3000)
+    issued_month: int | None = Field(default=None, ge=1, le=12)
+    issued_day: int | None = Field(default=None, ge=1, le=31)
+    issued_literal: str | None = None
+    container_title: str | None = None
+    publisher: str | None = None
+    place: str | None = None
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
+    edition: str | None = None
+    series: str | None = None
+    publication_state: str | None = Field(
+        default=None,
+        pattern="^(preprint|submitted|accepted|published|retracted|unknown)$",
+    )
+    creator_list_complete: bool | None = None
+    creators: list[CreatorInput] = Field(default_factory=list)
+    identifiers: list[IdentifierInput] = Field(default_factory=list)
+    links: list[LinkInput] = Field(default_factory=list)
+    tags: list[TagInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_a_real_patch(self) -> BibliographicItemPatch:
+        if not self.model_fields_set:
+            raise ValueError("metadata patch must contain at least one field")
+        non_nullable = {"item_type", "title", "publication_state", "creator_list_complete"}
+        for field in non_nullable & self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
 class CreatorView(CreatorInput):
     id: str
     position: int
@@ -104,6 +144,7 @@ class TagView(TagInput):
 class BibliographicItemView(BaseModel):
     id: str
     work_id: str
+    revision: int
     item_type: str
     title: str
     short_title: str | None

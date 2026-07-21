@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { ChangeSetReview } from "../changes/ChangeSetReview";
 import { api } from "../../shared/api/client";
-import type { AgentRun, Job, JobEvent } from "../../shared/api/contracts";
+import type { AgentRun, ChangeSet, Job, JobEvent } from "../../shared/api/contracts";
 import { useEventStream } from "../../shared/api/useEventStream";
 import { formatDateTime } from "../../shared/lib/format";
 import { Icon } from "../../shared/ui/Icon";
@@ -11,16 +12,64 @@ import "./tasks.css";
 interface Props {
   jobs: Job[];
   runs: AgentRun[];
+  changeSets: ChangeSet[];
   onChanged: () => Promise<unknown>;
 }
 
-export function TaskCenter({ jobs, runs, onChanged }: Props) {
-  const [kind, setKind] = useState<"jobs" | "agents">("agents");
+export function TaskCenter({ jobs, runs, changeSets, onChanged }: Props) {
+  const [kind, setKind] = useState<"changes" | "jobs" | "agents">("changes");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedJob = jobs.find((item) => item.id === selectedId) ?? (kind === "jobs" ? jobs[0] : null);
-  const sortedRuns = useMemo(() => [...runs].toSorted((a, b) => b.created_at.localeCompare(a.created_at)), [runs]);
+  const sortedRuns = useMemo(
+    () => [...runs].toSorted((a, b) => b.created_at.localeCompare(a.created_at)),
+    [runs],
+  );
   const selectedRun = sortedRuns.find((item) => item.id === selectedId) ?? (kind === "agents" ? sortedRuns[0] : null);
-  return <div className="task-center"><aside className="task-rail"><div className="task-kind-tabs"><button className={kind === "agents" ? "active" : ""} type="button" onClick={() => { setKind("agents"); setSelectedId(null); }}>智能体 <span>{runs.length}</span></button><button className={kind === "jobs" ? "active" : ""} type="button" onClick={() => { setKind("jobs"); setSelectedId(null); }}>后台任务 <span>{jobs.length}</span></button></div><div className="task-list">{kind === "agents" ? sortedRuns.map((run) => <button className={run.id === selectedRun?.id ? "active" : ""} key={run.id} type="button" onClick={() => setSelectedId(run.id)}><span className={`task-dot task-dot--${run.status}`} /><span><strong>{run.goal}</strong><small>{run.task_kind} · {formatDateTime(run.created_at)}</small></span></button>) : jobs.map((job) => <button className={job.id === selectedJob?.id ? "active" : ""} key={job.id} type="button" onClick={() => setSelectedId(job.id)}><span className={`task-dot task-dot--${job.status}`} /><span><strong>{job.kind}</strong><small>{job.status} · {formatDateTime(job.created_at)}</small></span></button>)}</div></aside><section className="task-detail">{kind === "agents" ? selectedRun ? <AgentSummary run={selectedRun} onChanged={onChanged} /> : <TaskEmpty kind="智能体运行" /> : selectedJob ? <JobDetail job={selectedJob} onChanged={onChanged} /> : <TaskEmpty kind="后台任务" />}</section></div>;
+  const selectedChange = changeSets.find((item) => item.id === selectedId) ?? (kind === "changes" ? changeSets[0] : null);
+
+  function choose(next: typeof kind) {
+    setKind(next);
+    setSelectedId(null);
+  }
+
+  return (
+    <div className="task-center">
+      <aside className="task-rail">
+        <div className="task-kind-tabs">
+          <button className={kind === "changes" ? "active" : ""} type="button" onClick={() => choose("changes")}>待审阅 <span>{changeSets.filter((item) => item.status === "submitted").length}</span></button>
+          <button className={kind === "agents" ? "active" : ""} type="button" onClick={() => choose("agents")}>智能体 <span>{runs.length}</span></button>
+          <button className={kind === "jobs" ? "active" : ""} type="button" onClick={() => choose("jobs")}>后台任务 <span>{jobs.length}</span></button>
+        </div>
+        <div className="task-list">
+          {kind === "changes" ? changeSets.map((changeSet) => (
+            <button className={changeSet.id === selectedChange?.id ? "active" : ""} key={changeSet.id} type="button" onClick={() => setSelectedId(changeSet.id)}>
+              <span className={`task-dot task-dot--${changeSet.status}`} />
+              <span><strong>{changeSet.summary}</strong><small>{changeSet.kind} · {formatDateTime(changeSet.created_at)}</small></span>
+            </button>
+          )) : kind === "agents" ? sortedRuns.map((run) => (
+            <button className={run.id === selectedRun?.id ? "active" : ""} key={run.id} type="button" onClick={() => setSelectedId(run.id)}>
+              <span className={`task-dot task-dot--${run.status}`} />
+              <span><strong>{run.goal}</strong><small>{run.task_kind} · {formatDateTime(run.created_at)}</small></span>
+            </button>
+          )) : jobs.map((job) => (
+            <button className={job.id === selectedJob?.id ? "active" : ""} key={job.id} type="button" onClick={() => setSelectedId(job.id)}>
+              <span className={`task-dot task-dot--${job.status}`} />
+              <span><strong>{job.kind}</strong><small>{job.status} · {formatDateTime(job.created_at)}</small></span>
+            </button>
+          ))}
+        </div>
+      </aside>
+      <section className="task-detail">
+        {kind === "changes" ? (
+          selectedChange ? <ChangeSetReview changeSet={selectedChange} onChanged={onChanged} /> : <TaskEmpty kind="待审阅变更" />
+        ) : kind === "agents" ? (
+          selectedRun ? <AgentSummary run={selectedRun} onChanged={onChanged} /> : <TaskEmpty kind="智能体运行" />
+        ) : selectedJob ? (
+          <JobDetail job={selectedJob} onChanged={onChanged} />
+        ) : <TaskEmpty kind="后台任务" />}
+      </section>
+    </div>
+  );
 }
 
 function AgentSummary({ run, onChanged }: { run: AgentRun; onChanged: Props["onChanged"] }) {

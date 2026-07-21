@@ -38,6 +38,8 @@ REQUIRED_TABLE_COLUMNS = {
         "context_hash",
         "project_id",
         "item_id",
+        "target_type",
+        "target_id",
         "tool_scopes_json",
         "runtime",
         "provider_thread_id",
@@ -79,15 +81,18 @@ class SqliteAgentRunRepository:
             connection.execute(
                 """
                 INSERT INTO agent_runs(
-                    id, project_id, item_id, task_kind, goal, status, prompt, prompt_version,
+                    id, project_id, item_id, target_type, target_id,
+                    task_kind, goal, status, prompt, prompt_version,
                     context_hash, cwd, tool_scopes_json, runtime, runtime_version,
                     model, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     request.id,
                     request.project_id,
                     request.item_id,
+                    request.target_type,
+                    request.target_id,
                     request.task_kind,
                     request.goal,
                     request.prompt,

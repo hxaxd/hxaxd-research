@@ -112,6 +112,7 @@ export interface BibliographicTag {
 export interface BibliographicItem {
   id: string;
   work_id: string;
+  revision: number;
   item_type: string;
   title: string;
   short_title: string | null;
@@ -261,6 +262,8 @@ export interface AgentRun {
   goal: string;
   project_id: string | null;
   item_id: string | null;
+  target_type: string | null;
+  target_id: string | null;
   tool_scopes: string[];
   runtime: string;
   runtime_version: string | null;
@@ -280,11 +283,90 @@ export interface AgentRunCreate {
   goal: string;
   project_id?: string | null;
   item_id?: string | null;
+  zotero_preview_id?: string | null;
 }
 
 export interface AgentRunLaunch {
   run: AgentRun;
   job_id: string;
+}
+
+export type ChangeSetStatus =
+  | "draft"
+  | "submitted"
+  | "partially_applied"
+  | "applied"
+  | "rejected"
+  | "stale"
+  | "failed";
+
+export type ChangeItemStatus =
+  | "proposed"
+  | "approved"
+  | "rejected"
+  | "applied"
+  | "stale"
+  | "failed";
+
+export interface ChangeEvidence {
+  source: string;
+  url: string | null;
+  locator: string | null;
+  quote: string | null;
+  metadata: Record<string, JsonValue>;
+}
+
+export interface ChangeItem {
+  id: string;
+  position: number;
+  operation: string;
+  target_type: string;
+  target_id: string;
+  base_revision: string | null;
+  status: ChangeItemStatus;
+  payload: Record<string, JsonValue>;
+  evidence: ChangeEvidence[];
+  result: Record<string, JsonValue> | null;
+  rationale: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  applied_at: string | null;
+}
+
+export interface ChangeSet {
+  id: string;
+  kind:
+    | "metadata_patch"
+    | "resource_acquisition"
+    | "project_insights"
+    | "zotero_conflict_resolution";
+  status: ChangeSetStatus;
+  agent_run_id: string | null;
+  project_id: string | null;
+  item_id: string | null;
+  source_version: string | null;
+  content_hash: string;
+  summary: string;
+  items: ChangeItem[];
+  created_at: string;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  applied_at: string | null;
+}
+
+export interface ChangeSetList {
+  items: ChangeSet[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ChangeReviewDecision {
+  change_item_id: string;
+  decision: "approve" | "reject";
 }
 
 export interface AgentEvent {

@@ -54,6 +54,8 @@ class AgentSupervisor:
         *,
         project_id: str | None = None,
         item_id: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
         tool_scopes: tuple[str, ...] = (),
         model: str | None = None,
     ) -> AgentRun:
@@ -73,6 +75,8 @@ class AgentSupervisor:
                     cwd=str(cwd),
                     project_id=project_id,
                     item_id=item_id,
+                    target_type=target_type,
+                    target_id=target_id,
                     tool_scopes=tool_scopes,
                     runtime=self.runtime.name,
                     runtime_version=self.runtime.version,

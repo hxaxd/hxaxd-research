@@ -45,6 +45,8 @@ class AgentRunCreate(BaseModel):
     cwd: str
     project_id: str | None = None
     item_id: str | None = None
+    target_type: str | None = None
+    target_id: str | None = None
     tool_scopes: tuple[str, ...] = ()
     runtime: str
     runtime_version: str | None = None
@@ -62,6 +64,8 @@ class AgentRun(BaseModel):
     cwd: str
     project_id: str | None
     item_id: str | None
+    target_type: str | None
+    target_id: str | None
     tool_scopes: tuple[str, ...]
     runtime: str
     runtime_version: str | None
@@ -89,6 +93,8 @@ class PublicAgentRun(BaseModel):
     goal: str
     project_id: str | None
     item_id: str | None
+    target_type: str | None
+    target_id: str | None
     tool_scopes: tuple[str, ...]
     runtime: str
     runtime_version: str | None

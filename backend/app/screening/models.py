@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from app.catalog.models import BibliographicItemDraft
 
@@ -93,6 +93,20 @@ class ProjectWorkDecision(BaseModel):
     relevance: str | None = None
     contributions: list[NonEmptyText] | None = None
     reading_focus: list[NonEmptyText] | None = None
+
+
+class ProjectInsightsPatch(BaseModel):
+    roles: list[NonEmptyText] = Field(default_factory=list)
+    summary: str | None = None
+    relevance: str | None = None
+    contributions: list[NonEmptyText] = Field(default_factory=list)
+    reading_focus: list[NonEmptyText] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_a_real_patch(self) -> ProjectInsightsPatch:
+        if not self.model_fields_set:
+            raise ValueError("project insights patch must contain at least one field")
+        return self
 
 
 class ProjectWorkView(BaseModel):

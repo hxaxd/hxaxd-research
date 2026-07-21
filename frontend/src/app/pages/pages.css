@@ -36,8 +36,9 @@
 .agent-launcher textarea:focus { border-color: rgb(166 167 255 / 55%); box-shadow: 0 0 0 3px rgb(139 141 246 / 9%); }
 .launcher-controls { display: flex; align-items: end; gap: 9px; }
 .launcher-controls label { display: grid; min-width: 170px; gap: 4px; color: var(--text-faint); font-size: 9px; }
-.launcher-controls select { height: 36px; border: 1px solid var(--border); border-radius: 8px; padding: 0 8px; background: var(--bg); color: var(--text); }
-.launcher-controls button { min-height: 36px; margin-left: auto; }
+.launcher-controls select,
+.launcher-controls input { height: 44px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; background: var(--bg); color: var(--text); }
+.launcher-controls button { min-height: 44px; margin-left: auto; }
 .launcher-capability-note { margin: -2px 0 0; color: var(--text-faint); font-size: 9px; line-height: 1.55; }
 .launcher-capability-note span { color: var(--warning); }
 .launcher-capability-note a { color: var(--accent); }

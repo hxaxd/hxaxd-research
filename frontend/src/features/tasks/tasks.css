@@ -1,7 +1,7 @@
 .task-center { display: grid; min-height: 620px; grid-template-columns: 340px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .task-rail { min-width: 0; border-right: 1px solid var(--border); background: #0d1017; }
-.task-kind-tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); padding: 10px; }
-.task-kind-tabs button { min-height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--text-faint); font-size: 11px; }
+.task-kind-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--border); padding: 10px; }
+.task-kind-tabs button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--text-faint); font-size: 11px; }
 .task-kind-tabs button.active { background: var(--surface-active); color: var(--text); }
 .task-kind-tabs span { margin-left: 4px; color: var(--text-faint); }
 .task-list { max-height: 720px; overflow: auto; }
