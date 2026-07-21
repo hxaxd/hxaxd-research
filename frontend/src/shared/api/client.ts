@@ -13,6 +13,7 @@ import type {
   ChangeSet,
   ChangeSetList,
   ChangeSetStatus,
+  DocumentBlocksPage,
   Job,
   ManagedTool,
   ManagedToolName,
@@ -20,6 +21,7 @@ import type {
   ProjectCreate,
   ProjectItem,
   ProjectItemStatus,
+  SemanticDocument,
   SnapshotOverview,
   TransferConflictResolution,
   TransferPreview,
@@ -135,6 +137,28 @@ export const api = {
     `/api/attachments/${attachmentId}/content${sha256 ? `?v=${sha256}` : ""}`,
   attachmentDownloadUrl: (attachmentId: string) =>
     `/api/attachments/${attachmentId}/content?download=true`,
+
+  documents: (itemId: string) =>
+    request<SemanticDocument[]>(`/items/${itemId}/documents`),
+  document: (documentId: string) =>
+    request<SemanticDocument>(`/documents/${documentId}`),
+  documentBlocks: (documentId: string, targetLanguage?: string | null) =>
+    request<DocumentBlocksPage>(
+      `/documents/${documentId}/blocks${query({
+        limit: 1000,
+        target_language: targetLanguage,
+      })}`,
+    ),
+  extractDocument: (attachmentId: string, ocrMode: "auto" | "force" | "off" = "auto") =>
+    request<Job>(`/attachments/${attachmentId}/documents`, {
+      method: "POST",
+      body: JSON.stringify({ ocr_mode: ocrMode }),
+    }),
+  translateDocument: (documentId: string, targetLanguage = "zh-CN") =>
+    request<Job>(`/documents/${documentId}/translate`, {
+      method: "POST",
+      body: JSON.stringify({ target_language: targetLanguage }),
+    }),
 
   jobs: () => request<Job[]>("/jobs"),
   job: (jobId: string) => request<Job>(`/jobs/${jobId}`),

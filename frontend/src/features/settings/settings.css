@@ -16,6 +16,7 @@
 .tool-status { border-radius: 999px; padding: 3px 7px; background: var(--surface-raised); color: var(--text-faint); font-size: 8px; }
 .tool-status--ready { background: rgb(98 211 153 / 10%); color: var(--success); }
 .tool-status--installing { background: var(--warning-soft); color: var(--warning); }
+.tool-status--upgrade_required { background: var(--warning-soft); color: var(--warning); }
 .tool-status--failed { background: var(--danger-soft); color: var(--danger); }
 .snapshot-list { display: grid; }
 .snapshot-row { display: grid; gap: 11px; border-bottom: 1px solid var(--border-soft); padding: 14px 18px; }

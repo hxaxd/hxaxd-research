@@ -112,6 +112,23 @@ describe("domain API client", () => {
     expect(JSON.parse(String((fetch.mock.calls[2]![1] as RequestInit).body))).toEqual({ qps: 6, workers: 3 });
   });
 
+  it("routes semantic extraction and whole-document translation through document commands", async () => {
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 202, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", fetch);
+
+    await api.extractDocument("attachment-1", "force");
+    await api.documentBlocks("document-1", "zh-CN");
+    await api.translateDocument("document-1", "zh-CN");
+
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual([
+      "/api/attachments/attachment-1/documents",
+      "/api/documents/document-1/blocks?limit=1000&target_language=zh-CN",
+      "/api/documents/document-1/translate",
+    ]);
+    expect(JSON.parse(String((fetch.mock.calls[0]![1] as RequestInit).body))).toEqual({ ocr_mode: "force" });
+    expect(JSON.parse(String((fetch.mock.calls[2]![1] as RequestInit).body))).toEqual({ target_language: "zh-CN" });
+  });
+
   it("requires the caller to supply the exact snapshot restore confirmation", async () => {
     const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 202, headers: { "Content-Type": "application/json" } })));
     vi.stubGlobal("fetch", fetch);

@@ -211,6 +211,86 @@ export interface Attachment {
   created_at: string;
 }
 
+export type DocumentStatus = "extracting" | "ready" | "failed" | "superseded";
+export type DocumentBlockKind =
+  | "title"
+  | "heading"
+  | "paragraph"
+  | "list"
+  | "formula"
+  | "table"
+  | "figure"
+  | "footnote"
+  | "reference"
+  | "other";
+export type SemanticRole =
+  | "background"
+  | "question"
+  | "method"
+  | "evidence"
+  | "result"
+  | "limitation"
+  | "conclusion"
+  | "other";
+
+export interface SemanticDocument {
+  id: string;
+  item_id: string;
+  source_attachment_id: string;
+  source_sha256: string;
+  extractor: string;
+  extractor_version: string;
+  structure_version: string;
+  status: DocumentStatus;
+  language: string | null;
+  page_count: number | null;
+  block_count: number;
+  structure_hash: string | null;
+  created_by_job_id: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface BlockTranslation {
+  id: string;
+  block_id: string;
+  target_language: string;
+  translated_text: string;
+  source_sha256: string;
+  provider: string;
+  model: string;
+  prompt_version: string;
+  batch_id: string;
+  validation_status: string;
+  created_by_job_id: string | null;
+  created_at: string;
+}
+
+export interface DocumentBlock {
+  id: string;
+  document_id: string;
+  parent_id: string | null;
+  ordinal: number;
+  kind: DocumentBlockKind;
+  semantic_role: SemanticRole | null;
+  source_text: string;
+  source_sha256: string;
+  page_start: number | null;
+  page_end: number | null;
+  anchor: Record<string, JsonValue>;
+  section_path: string[];
+  created_at: string;
+  translation: BlockTranslation | null;
+}
+
+export interface DocumentBlocksPage {
+  document_id: string;
+  offset: number;
+  limit: number;
+  total: number;
+  items: DocumentBlock[];
+}
+
 export type JobStatus =
   | "queued"
   | "running"
@@ -456,7 +536,7 @@ export interface TransferReceipt {
 }
 
 export type ManagedToolName = "pdf2zh" | "tex";
-export type ManagedToolStatus = "missing" | "installing" | "ready" | "failed";
+export type ManagedToolStatus = "missing" | "upgrade_required" | "installing" | "ready" | "failed";
 
 export interface ManagedTool {
   name: ManagedToolName;

@@ -1,0 +1,88 @@
+.semantic-reader { display: flex; min-height: 0; flex: 1; overflow: hidden; flex-direction: column; background: radial-gradient(circle at 50% -20%, rgb(139 141 246 / 8%), transparent 32%), #0c0f15; }
+.semantic-reader--empty { overflow: auto; align-items: center; justify-content: center; padding: 32px; }
+.semantic-onboarding { display: grid; width: min(600px, 100%); justify-items: start; border: 1px solid var(--border); border-radius: 24px; padding: clamp(28px, 5vw, 48px); background: linear-gradient(145deg, rgb(25 29 41 / 96%), rgb(14 17 24 / 98%)); box-shadow: var(--shadow-lg); }
+.semantic-onboarding__icon { display: grid; width: 54px; height: 54px; margin-bottom: 22px; place-items: center; border-radius: 17px; background: var(--accent-soft); color: var(--accent); }
+.semantic-onboarding h2 { max-width: 470px; margin: 8px 0 10px; font-size: clamp(24px, 4vw, 38px); letter-spacing: -.045em; line-height: 1.12; }
+.semantic-onboarding p { max-width: 500px; margin: 0 0 20px; color: var(--text-muted); line-height: 1.75; }
+.semantic-onboarding label { display: grid; min-width: 220px; gap: 6px; color: var(--text-faint); font-size: 10px; }
+.semantic-onboarding select,
+.semantic-settings select,
+.semantic-role-filter select { min-height: 44px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; background: var(--bg); color: var(--text); }
+.semantic-primary-action { min-height: 48px; margin-top: 14px; }
+.semantic-onboarding small { max-width: 500px; margin-top: 14px; color: var(--warning); line-height: 1.6; }
+.semantic-action-error { color: var(--danger) !important; }
+.semantic-toolbar { display: flex; min-height: 58px; flex: 0 0 auto; align-items: center; gap: 9px; border-bottom: 1px solid var(--border); padding: 7px 12px; background: rgb(16 20 28 / 94%); backdrop-filter: blur(16px); }
+.semantic-segments { display: flex; min-height: 42px; padding: 4px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--bg); }
+.semantic-segments button { min-width: 62px; border: 0; border-radius: 8px; background: transparent; color: var(--text-faint); }
+.semantic-segments button:disabled { opacity: .42; cursor: not-allowed; }
+.semantic-segments button.active { background: var(--surface-active); color: var(--text); box-shadow: 0 3px 10px rgb(0 0 0 / 20%); }
+.semantic-role-filter { display: flex; align-items: center; gap: 7px; color: var(--text-faint); font-size: 10px; }
+.semantic-role-filter select { min-height: 42px; }
+.semantic-toolbar__status { margin-left: auto; color: var(--text-faint); font-size: 10px; }
+.semantic-toolbar .toolbar-button,
+.semantic-toolbar .primary-toolbar-button { min-height: 42px; }
+.semantic-settings { display: flex; flex: 0 0 auto; align-items: end; gap: 12px; border-bottom: 1px solid var(--border-soft); padding: 12px; background: var(--surface); }
+.semantic-settings label { display: grid; min-width: 132px; gap: 5px; color: var(--text-faint); font-size: 9px; }
+.semantic-job-message { display: flex; min-height: 34px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; border-bottom: 1px solid rgb(166 167 255 / 15%); background: var(--accent-soft); color: var(--accent); font-size: 10px; }
+.semantic-job-message--error { background: var(--danger-soft); color: var(--danger); }
+.semantic-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 210px minmax(0, 1fr); }
+.semantic-outline { min-height: 0; overflow: auto; border-right: 1px solid var(--border-soft); padding: 18px 12px; background: rgb(10 12 18 / 70%); }
+.semantic-outline > span { display: block; margin: 0 8px 10px; color: var(--text-faint); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.semantic-outline button { display: block; width: 100%; min-height: 40px; overflow: hidden; border: 0; border-radius: 9px; padding: 8px; background: transparent; color: var(--text-muted); font-size: 10px; line-height: 1.4; text-align: left; text-overflow: ellipsis; }
+.semantic-outline button:hover { background: var(--surface-hover); color: var(--text); }
+.semantic-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
+.semantic-document { width: min(920px, calc(100% - 48px)); margin: 0 auto; padding: 42px 0 160px; }
+.semantic-reader--focused .semantic-document { width: min(720px, calc(100% - 48px)); }
+.semantic-reader--wide .semantic-document { width: min(1180px, calc(100% - 48px)); }
+.semantic-block { position: relative; padding: 18px 0 23px; border-bottom: 1px solid rgb(255 255 255 / 4%); scroll-margin: 100px; }
+.semantic-reader--compact .semantic-block { padding: 10px 0 14px; }
+.semantic-block__meta { display: flex; min-height: 27px; align-items: center; gap: 7px; margin-bottom: 9px; }
+.semantic-block__meta button { display: inline-flex; min-height: 32px; align-items: center; gap: 4px; border: 0; border-radius: 7px; padding: 0 7px; background: transparent; color: var(--text-faint); font-size: 9px; }
+.semantic-block__meta button:hover { background: var(--surface-hover); color: var(--accent); }
+.role-chip { display: inline-flex; min-height: 24px; align-items: center; border: 1px solid var(--border-soft); border-radius: 999px; padding: 0 8px; background: var(--surface); color: var(--text-faint); font-size: 9px; }
+.role-chip--question { color: #e9a8ff; background: rgb(205 107 244 / 10%); }
+.role-chip--method { color: #83c8ff; background: rgb(77 160 227 / 10%); }
+.role-chip--evidence { color: #efc46e; background: var(--warning-soft); }
+.role-chip--result { color: var(--success); background: var(--success-soft); }
+.role-chip--limitation { color: var(--danger); background: var(--danger-soft); }
+.role-chip--conclusion { color: var(--accent); background: var(--accent-soft); }
+.semantic-block__content { display: grid; gap: 0; }
+.semantic-block__content--bilingual { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(24px, 5vw, 64px); }
+.semantic-block__content--bilingual > div + div { position: relative; }
+.semantic-block__content--bilingual > div + div::before { position: absolute; top: 0; bottom: 0; left: calc(clamp(24px, 5vw, 64px) / -2); width: 1px; background: var(--border-soft); content: ""; }
+.semantic-block h2 { margin: 0; font-size: 1.52em; letter-spacing: -.025em; line-height: 1.3; }
+.semantic-block--title h2 { font-size: 2.15em; line-height: 1.14; }
+.semantic-block p { margin: 0; color: #d5d9e3; font-family: Charter, "Noto Serif", "Source Han Serif SC", Georgia, serif; font-size: 1em; line-height: 1.9; }
+.semantic-block [lang="zh-CN"] p { color: #f0f1f5; }
+.semantic-reader--small .semantic-document { font-size: 14px; }
+.semantic-reader--medium .semantic-document { font-size: 16px; }
+.semantic-reader--large .semantic-document { font-size: 19px; }
+.semantic-untranslated { color: var(--text-faint) !important; font-family: inherit !important; font-size: .86em !important; font-style: italic; }
+
+@media (max-width: 980px) {
+  .semantic-layout { grid-template-columns: 1fr; }
+  .semantic-outline { display: flex; min-height: 55px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border-soft); padding: 7px 10px; }
+  .semantic-outline > span { display: none; }
+  .semantic-outline button { width: auto; min-width: 150px; min-height: 44px; white-space: nowrap; }
+  .semantic-toolbar { overflow-x: auto; }
+  .semantic-toolbar__status { display: none; }
+}
+
+@media (max-width: 720px) {
+  .semantic-reader--empty { padding: 18px; }
+  .semantic-onboarding { border-radius: 18px; padding: 28px 22px; }
+  .semantic-toolbar { flex-wrap: wrap; }
+  .semantic-segments { flex: 1; }
+  .semantic-segments button { min-width: 0; flex: 1; }
+  .semantic-role-filter { flex: 1; }
+  .semantic-role-filter select { min-width: 0; flex: 1; }
+  .semantic-settings { overflow-x: auto; }
+  .semantic-settings label { min-width: 150px; }
+  .semantic-document,
+  .semantic-reader--focused .semantic-document,
+  .semantic-reader--wide .semantic-document { width: calc(100% - 30px); padding-top: 24px; }
+  .semantic-block__content--bilingual { grid-template-columns: 1fr; gap: 15px; }
+  .semantic-block__content--bilingual > div + div { border-left: 3px solid var(--accent-soft); padding-left: 14px; }
+  .semantic-block__content--bilingual > div + div::before { display: none; }
+  .semantic-block__meta button { min-height: 44px; }
+}

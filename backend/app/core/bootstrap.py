@@ -27,6 +27,13 @@ from app.agents.codex_app_server import (
 from app.agents.runtime import RuntimeOutcomeStatus, RuntimeRequest
 from app.catalog import CatalogCommands, CatalogQueries
 from app.changes import ChangeSetRepository, ChangeSetService
+from app.documents import (
+    BabelDocExtractor,
+    DocumentRepository,
+    DocumentService,
+    OpenAICompatibleTranslationProvider,
+    RapidOcrExtractor,
+)
 from app.integrations.zotero import (
     SqliteZoteroTransferRepository,
     V3ZoteroDomainGateway,
@@ -97,6 +104,7 @@ class AppContext:
     mutation_gate: WorkspaceMutationGate
     process_lock: WorkspaceProcessLock
     operations: OperationService
+    documents: DocumentService
     changes: ChangeSetService
     workspace: WorkspaceProjectionService
     agent_repository: SqliteAgentRunRepository
@@ -150,6 +158,7 @@ class AppContext:
             self.agent_repository.initialize_schema()
             self.snapshots.initialize()
             self.operations.reconcile_committed()
+            self.documents.reconcile_committed()
             self.snapshots.reconcile_committed()
             self.agent_repository.reconcile_interrupted()
             self.job_worker.start(recover=True)
@@ -209,6 +218,24 @@ def build_app_context(settings: Settings) -> AppContext:
     jobs = JobScheduler(job_repository, job_worker)
     operations = OperationService(settings, attachments, jobs, job_repository, process_runner)
     OperationHandlers(settings, attachments, process_runner).register(job_registry)
+    document_repository = DocumentRepository(database)
+    ocr_extractor = RapidOcrExtractor(settings, process_runner)
+    document_extractor = BabelDocExtractor(settings, process_runner, ocr_extractor)
+    translation_provider = OpenAICompatibleTranslationProvider(
+        name=settings.translation_provider,
+        model=settings.translation_model,
+        base_url=settings.translation_api_base_url,
+        api_key=settings.translation_api_key,
+    )
+    documents = DocumentService(
+        document_repository,
+        attachments,
+        jobs,
+        job_repository,
+        document_extractor,
+        translation_provider,
+    )
+    documents.register_handlers(job_registry)
     changes = ChangeSetService(
         ChangeSetRepository(database),
         catalog,
@@ -250,6 +277,38 @@ def build_app_context(settings: Settings) -> AppContext:
         capability_providers={
             "durable_jobs": lambda: _job_worker_capability(job_worker),
             "pdf_translation": lambda: tool_capability(ManagedToolName.PDF2ZH),
+            "semantic_documents": lambda: RuntimeCapability(
+                supported=True,
+                ready=document_extractor.ready,
+                message=(
+                    "BabelDOC 结构化提取与扫描件 OCR 已就绪"
+                    if document_extractor.ready and document_extractor.true_ocr_ready
+                    else "BabelDOC 结构化提取已就绪；升级 PDF 工具可启用扫描件 OCR"
+                    if document_extractor.ready
+                    else "安装 PDF 论文翻译工具后即可生成结构化文档"
+                ),
+                details={
+                    "extractor": document_extractor.name,
+                    "version": document_extractor.version,
+                    "true_ocr": document_extractor.true_ocr_ready,
+                    "ocr_engine": ocr_extractor.name,
+                    "ocr_version": ocr_extractor.version,
+                },
+            ),
+            "whole_document_translation": lambda: RuntimeCapability(
+                supported=True,
+                ready=translation_provider.ready,
+                message=(
+                    "整篇单次翻译已就绪"
+                    if translation_provider.ready
+                    else "尚未配置整篇翻译服务密钥"
+                ),
+                details={
+                    "provider": translation_provider.name,
+                    "model": translation_provider.model,
+                    "mode": "single_request",
+                },
+            ),
             "tex_compile": lambda: tool_capability(ManagedToolName.TEX),
             "embedded_agent": lambda: RuntimeCapability(
                 supported=True,
@@ -330,6 +389,7 @@ def build_app_context(settings: Settings) -> AppContext:
         mutation_gate=mutation_gate,
         process_lock=process_lock,
         operations=operations,
+        documents=documents,
         changes=changes,
         workspace=workspace,
         agent_repository=agent_repository,

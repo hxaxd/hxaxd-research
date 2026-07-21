@@ -8,6 +8,7 @@ from app.agents.supervisor import AgentSupervisor
 from app.catalog.api import router as catalog_router
 from app.catalog.domain import CatalogNotFoundError
 from app.changes.api import router as changes_router
+from app.documents.api import router as documents_router
 from app.integrations.zotero.router import router as zotero_router
 from app.integrations.zotero.service import TransferNotFoundError
 from app.jobs.repository import SqliteJobRepository
@@ -80,6 +81,7 @@ def create_api_router(context) -> APIRouter:
     router.include_router(catalog_router)
     router.include_router(changes_router)
     router.include_router(library_router)
+    router.include_router(documents_router)
     router.include_router(operations_router)
     router.include_router(create_job_router(jobs, job_repository))
     router.include_router(

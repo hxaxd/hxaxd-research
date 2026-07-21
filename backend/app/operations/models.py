@@ -21,6 +21,7 @@ class ManagedToolName(StrEnum):
 
 class ManagedToolStatus(StrEnum):
     MISSING = "missing"
+    UPGRADE_REQUIRED = "upgrade_required"
     INSTALLING = "installing"
     READY = "ready"
     FAILED = "failed"

@@ -186,14 +186,14 @@ function ToolCard({
         onClick={() => void onInstall(tool.name)}
       >
         <Icon name={tool.status === "ready" ? "check" : "download"} size={14} />
-        {busy ? "正在提交…" : tool.status === "ready" ? "验证工具" : tool.status === "failed" ? "重试安装" : "安装工具"}
+        {busy ? "正在提交…" : tool.status === "ready" ? "验证工具" : tool.status === "upgrade_required" ? "升级工具" : tool.status === "failed" ? "重试安装" : "安装工具"}
       </button>
     </article>
   );
 }
 
 function toolStatusLabel(status: ManagedTool["status"]) {
-  return ({ missing: "未安装", installing: "安装中", ready: "可用", failed: "失败" } as const)[status];
+  return ({ missing: "未安装", upgrade_required: "需要升级", installing: "安装中", ready: "可用", failed: "失败" } as const)[status];
 }
 
 function errorMessage(reason: unknown, fallback: string) {

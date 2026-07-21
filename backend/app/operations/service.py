@@ -81,7 +81,11 @@ class OperationService:
                 self.job_repository.reconcile_committed(job.id, result, records)
                 reconciled += 1
                 continue
-            if job.kind == "tool.install.pdf2zh" and self.settings.pdf2zh_executable.is_file():
+            if (
+                job.kind == "tool.install.pdf2zh"
+                and self.settings.pdf2zh_executable.is_file()
+                and self.settings.rapidocr_package_dir is not None
+            ):
                 self.job_repository.reconcile_committed(
                     job.id, {"tool": "pdf2zh", "version": self._version(
                         ManagedToolName.PDF2ZH, self.settings.pdf2zh_executable
@@ -99,9 +103,16 @@ class OperationService:
         executable = self._executable(name)
         installing = self._has_active_job(f"tool.install.{name.value}")
         last_failure = self._last_failure(f"tool.install.{name.value}")
+        upgrade_required = (
+            name is ManagedToolName.PDF2ZH
+            and executable is not None
+            and self.settings.rapidocr_package_dir is None
+        )
         status = (
             ManagedToolStatus.INSTALLING
             if installing
+            else ManagedToolStatus.UPGRADE_REQUIRED
+            if upgrade_required
             else ManagedToolStatus.READY
             if executable is not None
             else ManagedToolStatus.FAILED
@@ -124,6 +135,8 @@ class OperationService:
             message=(
                 "正在安装"
                 if installing
+                else "版面翻译可用；需要升级以启用真正的扫描件识别"
+                if upgrade_required
                 else "可以使用"
                 if executable
                 else "上次安装或校验失败；请查看任务事件"
@@ -133,7 +146,10 @@ class OperationService:
         )
 
     def install_tool(self, name: ManagedToolName) -> Job:
-        if self._executable(name) is not None:
+        if self._executable(name) is not None and not (
+            name is ManagedToolName.PDF2ZH
+            and self.settings.rapidocr_package_dir is None
+        ):
             return self.jobs.create(
                 JobCreate(
                     kind=f"tool.verify.{name.value}",
@@ -291,8 +307,8 @@ class OperationService:
     def _metadata(name: ManagedToolName) -> dict[str, str]:
         if name is ManagedToolName.PDF2ZH:
             return {
-                "label": "PDF 论文翻译",
-                "description": "保留版式并生成中文与双语 PDF",
+                "label": "PDF 论文处理",
+                "description": "保留版式、生成双语 PDF，并为扫描件提供离线文字识别",
             }
         return {
             "label": "TeX 编译环境",

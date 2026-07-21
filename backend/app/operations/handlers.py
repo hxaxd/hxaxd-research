@@ -43,6 +43,7 @@ from .models import (
 )
 
 PDF2ZH_VERSION = "2.9.0"
+RAPIDOCR_VERSION = "3.9.2"
 TEX_REPOSITORY = "https://mirror.ctan.org/systems/texlive/tlnet"
 TEX_INSTALLER_URL = f"{TEX_REPOSITORY}/install-tl.zip"
 MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024
@@ -374,15 +375,20 @@ class OperationHandlers:
                     str(python),
                     "--upgrade",
                     f"pdf2zh-next=={PDF2ZH_VERSION}",
+                    f"rapidocr=={RAPIDOCR_VERSION}",
                 ),
                 timeout=1_800,
             )
             if not _pdf2zh_executable_at(candidate).is_file():
                 raise JobFailure("installation_incomplete", "PDF2zh 安装后未找到可执行文件")
+            if not _rapidocr_package_at(candidate).is_dir():
+                raise JobFailure("installation_incomplete", "PDF 工具安装后未找到 RapidOCR")
             _raise_if_cancelled(context, "PDF2zh 安装")
             _activate_tool_directory(candidate, self.settings.pdf2zh_dir)
         if not self.settings.pdf2zh_executable.is_file():
             raise JobFailure("installation_incomplete", "PDF2zh 安装后未找到可执行文件")
+        if self.settings.rapidocr_package_dir is None:
+            raise JobFailure("installation_incomplete", "PDF 工具安装后未找到 RapidOCR")
         return JobExecutionResult(
             result={"tool": "pdf2zh", "version": PDF2ZH_VERSION},
             commit_point_reached=True,
@@ -462,6 +468,8 @@ class OperationHandlers:
     def verify_pdf2zh(self, _: JobExecutionContext) -> JobExecutionResult:
         if not self.settings.pdf2zh_executable.is_file():
             raise JobFailure("tool_missing", "PDF2zh 尚未安装")
+        if self.settings.rapidocr_package_dir is None:
+            raise JobFailure("tool_upgrade_required", "PDF 工具需要升级以启用扫描件识别")
         return JobExecutionResult(result={"tool": "pdf2zh", "ready": True})
 
     def verify_tex(self, _: JobExecutionContext) -> JobExecutionResult:
@@ -604,6 +612,17 @@ def _pdf2zh_executable_at(root: Path) -> Path:
     scripts = "Scripts" if os.name == "nt" else "bin"
     executable = "pdf2zh_next.exe" if os.name == "nt" else "pdf2zh_next"
     return root / ".venv" / scripts / executable
+
+
+def _rapidocr_package_at(root: Path) -> Path:
+    virtual_environment = root / ".venv"
+    windows = virtual_environment / "Lib" / "site-packages" / "rapidocr"
+    if windows.is_dir():
+        return windows
+    return next(
+        virtual_environment.glob("lib/python*/site-packages/rapidocr"),
+        virtual_environment / "lib" / "missing" / "rapidocr",
+    )
 
 
 def _tex_executable_at(root: Path) -> Path | None:
