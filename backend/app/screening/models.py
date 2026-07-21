@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
-from app.catalog.models import BibliographicItemDraft
+from app.catalog.models import BibliographicItemDraft, BibliographicItemView
 
 from .domain import CandidateState, ProjectWorkStatus
 
@@ -59,6 +59,7 @@ class CandidateView(BaseModel):
     item: BibliographicItemDraft
     dedupe_key: str | None
     matched_work_id: str | None
+    matched_item: BibliographicItemView | None = None
     rank: float | None
     rationale: str | None
     evidence: list[CandidateEvidence] = Field(default_factory=list)

@@ -38,6 +38,7 @@
 .settings-feedback a { margin-left: auto; color: var(--accent); }
 .settings-feedback--success { color: var(--success); }
 .settings-feedback--error { border-color: rgb(255 140 154 / 24%); background: var(--danger-soft); color: var(--danger); }
+.settings-feedback--error button { min-height: 44px; margin-left: auto; }
 
 @media (max-width: 820px) {
   .managed-tool-grid { grid-template-columns: 1fr; }

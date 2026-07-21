@@ -11,7 +11,7 @@ import { Icon } from "../../shared/ui/Icon";
 import "./pages.css";
 
 export function HomePage() {
-  const { projects, workspace, loading, connection, error } = useAppData();
+  const { projects, workspace, loading, connection, error, refresh } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
   const activity = useApiResource(() => Promise.all([api.jobs(), api.agentRuns()]), []);
   if (loading) return <AsyncMessage kind="loading">正在整理工作台…</AsyncMessage>;
@@ -55,6 +55,7 @@ export function HomePage() {
           <div className={`connection-card connection-card--${connection}`}>
             <span><i />{connection === "connected" ? "后端已连接" : connection === "connecting" ? "正在连接" : "后端未连接"}</span>
             <small>{workspace ? `契约 ${workspace.contract_version} · Schema ${workspace.schema_version}` : error || "等待工作区响应"}</small>
+            {connection === "disconnected" ? <button type="button" onClick={() => void refresh()}><Icon name="refresh" size={14} />重新连接</button> : null}
           </div>
         </header>
 

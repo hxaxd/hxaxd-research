@@ -48,6 +48,12 @@ def create_api_router(context) -> APIRouter:
         configured = context.preferences.get().agent
         return configured.model, configured.reasoning_effort
 
+    def agent_task_definitions():
+        return context.agent_prompt_context.task_definitions(
+            runtime_ready=context.agent_runtime_ready,
+            runtime_message=context.agent_runtime_message,
+        )
+
     def resolve_context(payload):
         try:
             return context.agent_prompt_context.resolve(
@@ -102,6 +108,7 @@ def create_api_router(context) -> APIRouter:
             resolve_context,
             resolve_scopes,
             agent_defaults,
+            agent_task_definitions,
         )
     )
     router.include_router(create_snapshot_router(snapshots))

@@ -3,21 +3,31 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
 import type { Project, ProjectItem } from "../../shared/api/contracts";
+import { useApiResource } from "../../shared/api/useApiResource";
 import { Icon } from "../../shared/ui/Icon";
 
 export function AgentTaskLauncher({ projects }: { projects: Project[] }) {
   const navigate = useNavigate();
   const [goal, setGoal] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
-  const [taskKind, setTaskKind] = useState("literature_search");
+  const [taskKind, setTaskKind] = useState("");
   const [items, setItems] = useState<ProjectItem[]>([]);
   const [itemId, setItemId] = useState("");
   const [zoteroPreviewId, setZoteroPreviewId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isLiteratureSearch = taskKind === "literature_search";
-  const isItemTask = ["metadata_enrichment", "resource_acquisition"].includes(taskKind);
-  const isConflictTask = taskKind === "conflict_resolution";
+  const definitions = useApiResource(() => api.agentTaskDefinitions(), []);
+  const task = definitions.data?.find((definition) => definition.id === taskKind) ?? null;
+  const isLiteratureSearch = task?.scope_requirement === "project";
+  const isItemTask = task?.scope_requirement === "item";
+  const isConflictTask = task?.scope_requirement === "zotero_preview";
+
+  useEffect(() => {
+    if (!definitions.data?.length || definitions.data.some((item) => item.id === taskKind)) return;
+    setTaskKind(
+      definitions.data.find((item) => item.ready)?.id ?? definitions.data[0]?.id ?? "",
+    );
+  }, [definitions.data, taskKind]);
 
   useEffect(() => {
     const projectStillExists = projects.some((project) => project.id === projectId);
@@ -52,6 +62,10 @@ export function AgentTaskLauncher({ projects }: { projects: Project[] }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!goal.trim()) return;
+    if (!task?.ready) {
+      setError(task?.missing_reason || "所选智能体任务当前尚未就绪。");
+      return;
+    }
     if (isLiteratureSearch && !projectId) {
       setError("文献检索必须先选择一个真实项目，候选结果才能进入正确的收件箱。");
       return;
@@ -96,11 +110,8 @@ export function AgentTaskLauncher({ projects }: { projects: Project[] }) {
       <div className="launcher-controls">
         <label>
           <span>任务类型</span>
-          <select value={taskKind} onChange={(event) => setTaskKind(event.target.value)}>
-            <option value="literature_search">文献检索 · 可使用网页搜索</option>
-            <option value="metadata_enrichment">元数据补全 · 仅工作台内容</option>
-            <option value="resource_acquisition">资源获取 · 仅工作台工具</option>
-            <option value="conflict_resolution">冲突分析 · 仅工作台内容</option>
+          <select value={taskKind} onChange={(event) => setTaskKind(event.target.value)} disabled={definitions.loading}>
+            {definitions.data?.map((definition) => <option key={definition.id} value={definition.id}>{definition.label} · {definition.web_search ? "可检索网页" : "不使用网页"}{definition.ready ? "" : " · 未就绪"}</option>)}
           </select>
         </label>
         <label>
@@ -112,18 +123,22 @@ export function AgentTaskLauncher({ projects }: { projects: Project[] }) {
         </label>
         {isItemTask ? <label><span>目标文献（必选）</span><select value={itemId} onChange={(event) => setItemId(event.target.value)}><option value="">选择项目文献</option>{items.map((item) => <option key={item.id} value={item.preferred_item_id}>{item.translated_title || item.title}</option>)}</select></label> : null}
         {isConflictTask ? <label><span>Zotero 预览 ID（必选）</span><input value={zoteroPreviewId} onChange={(event) => setZoteroPreviewId(event.target.value)} placeholder="传输预览 ID" /></label> : null}
-        <button className="primary-button" disabled={!goal.trim() || submitting || (isLiteratureSearch && !projectId) || (isItemTask && !itemId) || (isConflictTask && !zoteroPreviewId.trim())} type="submit">
+        <button className="primary-button" disabled={!goal.trim() || submitting || !task?.ready || (isLiteratureSearch && !projectId) || (isItemTask && !itemId) || (isConflictTask && !zoteroPreviewId.trim())} type="submit">
           <Icon name="arrow-right" size={15} />{submitting ? "正在启动…" : "创建独立运行"}
         </button>
       </div>
       <p className="launcher-capability-note">
-        {isLiteratureSearch
+        {definitions.error
+          ? definitions.error
+          : !task?.ready
+            ? task?.missing_reason || "正在读取后端任务能力…"
+            : isLiteratureSearch
           ? projects.length
-            ? "文献检索会启用网页搜索，并把候选与来源证据暂存到所选项目；最终判断仍由你完成。"
+            ? task.description
             : <><span>文献检索需要项目作用域。</span> <Link to="/?newProject=1">先创建项目</Link></>
           : isItemTask
-            ? "后端会注入所选文献的元数据、项目关系和附件；智能体只能提交待审阅建议。"
-            : "后端会注入不可变的 Zotero 预览；智能体只能建议冲突选择，不能直接执行同步。"}
+            ? `${task.description} 后端会注入所选文献上下文；智能体只能提交待审阅建议。`
+            : task.description}
       </p>
       {error ? <p className="inline-error">{error}</p> : null}
     </form>

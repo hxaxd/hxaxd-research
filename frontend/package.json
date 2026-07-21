@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.e2e.json --pretty false",
     "lint": "oxlint --deny-warnings src",
-    "test": "vitest run"
+    "test": "vitest run src",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots"
   },
   "dependencies": {
     "pdfjs-dist": "6.1.200",
@@ -17,6 +19,8 @@
     "react-router-dom": "7.18.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^24.0.10",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",

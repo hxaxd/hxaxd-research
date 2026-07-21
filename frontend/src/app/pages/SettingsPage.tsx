@@ -76,6 +76,8 @@ function Detail({ name, value }: { name: string; value: string | number | boolea
     ocr_confidence: "OCR 置信度",
     external_translation_injection: "外部块译文回注",
     external_translation_pdf: "外部译文 PDF 重排",
+    tex_structure_priority: "TeX 结构优先",
+    tex_structure_version: "TeX 结构适配器版本",
     executable: "可执行文件",
     endpoint: "端点",
   } as Record<string, string>)[name] ?? name;

@@ -11,3 +11,5 @@
   color: var(--danger);
 }
 
+.async-message > div { display: grid; max-width: 520px; justify-items: center; gap: 14px; }
+.async-message button { min-width: 132px; min-height: 44px; border: 1px solid var(--border); border-radius: 9px; padding: 0 16px; background: var(--surface-raised); color: var(--text); }

@@ -35,6 +35,7 @@ from app.documents import (
     OpenAICompatibleTranslationProvider,
     PdfPipelineCapabilityProbe,
     RapidOcrExtractor,
+    TexStructureExtractor,
 )
 from app.integrations.zotero import (
     SqliteZoteroTransferRepository,
@@ -246,6 +247,7 @@ def build_app_context(settings: Settings) -> AppContext:
     document_extractor = BabelDocExtractor(
         settings, process_runner, ocr_extractor, pdf_capability_probe
     )
+    tex_structure_extractor = TexStructureExtractor()
     translation_provider = OpenAICompatibleTranslationProvider(
         name=settings.translation_provider,
         model=settings.translation_model,
@@ -258,6 +260,7 @@ def build_app_context(settings: Settings) -> AppContext:
         jobs,
         job_repository,
         document_extractor,
+        tex_structure_extractor,
         translation_provider,
         preferences,
     )
@@ -362,6 +365,8 @@ def build_app_context(settings: Settings) -> AppContext:
                     "external_translation_pdf": (
                         pdf_capability_probe.get().translated_pdf_from_external_blocks
                     ),
+                    "tex_structure_priority": True,
+                    "tex_structure_version": tex_structure_extractor.version,
                 },
             ),
             "whole_document_translation": translation_capability,

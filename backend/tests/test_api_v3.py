@@ -161,6 +161,7 @@ def test_frontend_contract_field_sets_match_openapi(client) -> None:
         "PairingTicket": "PairingTicket",
         "Job": "PublicJob",
         "AgentRun": "PublicAgentRun",
+        "AgentTaskDefinition": "PublicAgentTaskDefinition",
         "AgentRunCreate": "CreateAgentRunRequest",
         "AgentRunLaunch": "AgentRunLaunch",
             "Approval": "PublicApproval",

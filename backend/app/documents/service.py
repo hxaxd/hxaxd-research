@@ -35,6 +35,7 @@ from .models import (
 )
 from .prompts import TRANSLATION_PROMPT_VERSION
 from .repository import DocumentConflictError, DocumentRepository
+from .tex import TexStructureError, TexStructureExtractor
 from .translation import (
     DocumentTranslationError,
     TranslationProvider,
@@ -65,6 +66,7 @@ class DocumentService:
         jobs: JobScheduler,
         job_repository: SqliteJobRepository,
         extractor: BabelDocExtractor,
+        tex_extractor: TexStructureExtractor,
         translation_provider: TranslationProvider,
         preferences: PreferencesService,
     ) -> None:
@@ -73,6 +75,7 @@ class DocumentService:
         self.jobs = jobs
         self.job_repository = job_repository
         self.extractor = extractor
+        self.tex_extractor = tex_extractor
         self.translation_provider = translation_provider
         self.preferences = preferences
 
@@ -110,21 +113,32 @@ class DocumentService:
             or attachment.format is not AttachmentFormat.PDF
         ):
             raise ValueError("只有 PDF 全文附件可以生成结构化文档")
+        tex_attachment = self._preferred_tex_attachment(attachment.item_id)
+        extractor_name = self.extractor.name
+        extractor_version = self.extractor.version
+        if tex_attachment is not None:
+            extractor_name = f"{extractor_name}+{self.tex_extractor.name}"
+            extractor_version = (
+                f"{extractor_version}+tex.{self.tex_extractor.version}."
+                f"{tex_attachment.sha256[:12]}"
+            )
         payload = DocumentExtractionJobInput(
             attachment_id=attachment.id,
             item_id=attachment.item_id,
             source_sha256=attachment.sha256,
-            extractor=self.extractor.name,
-            extractor_version=self.extractor.version,
+            extractor=extractor_name,
+            extractor_version=extractor_version,
             structure_version=self.extractor.structure_version,
+            tex_attachment_id=tex_attachment.id if tex_attachment else None,
+            tex_source_sha256=tex_attachment.sha256 if tex_attachment else None,
             **request.model_dump(mode="json"),
         )
         identity = ":".join(
             (
                 attachment.id,
                 attachment.sha256,
-                self.extractor.name,
-                self.extractor.version,
+                extractor_name,
+                extractor_version,
                 request.ocr_mode.value,
             )
         )
@@ -140,6 +154,25 @@ class DocumentService:
             )
         )
 
+    def _preferred_tex_attachment(self, item_id: str):
+        candidates = [
+            attachment
+            for attachment in self.attachments.list_for_item(item_id)
+            if attachment.format is AttachmentFormat.TEX
+            and attachment.attachment_type is AttachmentType.SOURCE_ARCHIVE
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda attachment: (
+                "structure" in attachment.preferred_for,
+                "compile" in attachment.preferred_for,
+                attachment.created_at,
+                attachment.id,
+            ),
+        )
+
     def translate_document(
         self, document_id: str, request: DocumentTranslationRequest
     ) -> Job:
@@ -149,6 +182,13 @@ class DocumentService:
         settings = self.preferences.get().translation
         if settings.provider.casefold() != self.translation_provider.name.casefold():
             raise ValueError("当前运行环境没有配置所选翻译提供者")
+        previous_translation_job_id = (
+            self.repository.latest_translation_job_id(
+                document.id, request.target_language
+            )
+            if settings.retranslate_scope == "document"
+            else None
+        )
         payload = DocumentTranslationJobInput(
             document_id=document.id,
             structure_hash=document.structure_hash,
@@ -158,6 +198,8 @@ class DocumentService:
             prompt_version=TRANSLATION_PROMPT_VERSION,
             style=settings.style,
             batching=settings.batching,
+            retranslate_scope=settings.retranslate_scope,
+            previous_translation_job_id=previous_translation_job_id,
             glossary=[
                 TranslationGlossaryTerm.model_validate(item.model_dump(mode="json"))
                 for item in settings.glossary
@@ -249,6 +291,33 @@ class DocumentService:
                     record_process=context.record_process,
                 ),
             )
+            if request.tex_attachment_id is not None:
+                tex_attachment, tex_path = self.attachments.locate(request.tex_attachment_id)
+                if (
+                    tex_attachment.item_id != request.item_id
+                    or tex_attachment.format is not AttachmentFormat.TEX
+                    or tex_attachment.sha256 != request.tex_source_sha256
+                ):
+                    raise JobFailure("tex_subject_mismatch", "TeX 源附件与任务快照不一致")
+                try:
+                    extracted = self.tex_extractor.enrich(tex_path, extracted)
+                    context.emit(
+                        "document.tex_structure_applied",
+                        {
+                            "tex_attachment_id": tex_attachment.id,
+                            "blocks": len(extracted.blocks),
+                            "anchor_matches": extracted.diagnostics.get(
+                                "tex_pdf_anchor_matches", 0
+                            ),
+                        },
+                        "info",
+                    )
+                except TexStructureError as error:
+                    context.emit(
+                        "document.tex_structure_fallback",
+                        {"reason": str(error), "fallback": "pdf_layout"},
+                        "warning",
+                    )
         except DocumentExtractionError as error:
             raise JobFailure(error.code, str(error), retryable=error.retryable) from error
         if context.cancellation.is_cancelled:
@@ -330,6 +399,8 @@ class DocumentService:
                 "provider": request.provider,
                 "model": request.model,
                 "mode": request.batching,
+                "retranslate_scope": request.retranslate_scope,
+                "previous_translation_job_id": request.previous_translation_job_id,
             },
             "info",
         )

@@ -10,6 +10,7 @@ from app.preferences import PreferencesService
 from app.reading import ReadingService
 from app.screening.queries import ScreeningQueries
 
+from ..models import PublicAgentTaskDefinition
 from .models import PromptContext
 from .policies import AgentTaskPolicyRegistry
 from .templates import constraints_for_task
@@ -66,6 +67,20 @@ class AgentPromptContextBuilder:
 
     def tools_for_scopes(self, scopes: tuple[str, ...]) -> tuple[str, ...]:
         return self.policies.tools_for_scopes(scopes)
+
+    def task_definitions(
+        self, *, runtime_ready: bool, runtime_message: str
+    ) -> list[PublicAgentTaskDefinition]:
+        configured = (
+            self.preferences.get().agent.enabled_capabilities
+            if self.preferences is not None
+            else list(self.policies.default_capabilities())
+        )
+        return self.policies.definitions(
+            configured,
+            runtime_ready=runtime_ready,
+            runtime_message=runtime_message,
+        )
 
     def resolve(
         self,
