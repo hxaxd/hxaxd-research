@@ -9,7 +9,8 @@ from enum import StrEnum
 from pathlib import Path
 
 BASELINE_PATH = Path(__file__).with_name("baseline.sql")
-V3_SCHEMA_VERSION = 3
+V4_MIGRATION_PATH = Path(__file__).with_name("v4_from_v3.sql")
+CURRENT_SCHEMA_VERSION = 4
 
 
 class DatabaseKind(StrEnum):
@@ -17,7 +18,8 @@ class DatabaseKind(StrEnum):
     EMPTY = "empty"
     LEGACY_V1 = "legacy_v1"
     LEGACY_V2 = "legacy_v2"
-    V3 = "v3"
+    LEGACY_V3 = "legacy_v3"
+    V4 = "v4"
     UNKNOWN = "unknown"
 
 
@@ -54,8 +56,10 @@ def inspect_database(path: Path) -> DatabaseState:
                     "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
                 ).fetchone()
                 version = int(row[0])
-            if version == V3_SCHEMA_VERSION and "bibliographic_items" in tables:
-                return DatabaseState(DatabaseKind.V3, version)
+            if version == CURRENT_SCHEMA_VERSION and "bibliographic_items" in tables:
+                return DatabaseState(DatabaseKind.V4, version)
+            if version == 3 and "bibliographic_items" in tables:
+                return DatabaseState(DatabaseKind.LEGACY_V3, version)
             if "papers" in tables:
                 columns = {
                     str(row[1])
@@ -73,6 +77,12 @@ def inspect_database(path: Path) -> DatabaseState:
 
 
 class V3Database:
+    """The current workspace database.
+
+    The historical class name remains internal while call sites are moved to the
+    domain-oriented database abstraction. It always represents the current schema.
+    """
+
     def __init__(self, path: Path):
         self.path = path.resolve()
 
@@ -80,12 +90,16 @@ class V3Database:
     def baseline_checksum() -> str:
         return hashlib.sha256(BASELINE_PATH.read_bytes()).hexdigest()
 
+    @staticmethod
+    def v4_migration_checksum() -> str:
+        return hashlib.sha256(V4_MIGRATION_PATH.read_bytes()).hexdigest()
+
     def initialize(self) -> None:
         state = inspect_database(self.path)
         if state.kind in {DatabaseKind.MISSING, DatabaseKind.EMPTY}:
             self._create_fresh()
             return
-        if state.kind is not DatabaseKind.V3:
+        if state.kind is not DatabaseKind.V4:
             raise RuntimeError(
                 f"database is {state.kind.value}; use the explicit legacy importer"
             )
@@ -100,7 +114,7 @@ class V3Database:
             connection.execute(
                 """
                 INSERT INTO schema_migrations(version, name, checksum, applied_at)
-                VALUES(3, 'v3_baseline', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                VALUES(4, 'v4_baseline', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 """,
                 (self.baseline_checksum(),),
             )
@@ -142,14 +156,22 @@ class V3Database:
 
     def verify(self) -> None:
         state = inspect_database(self.path)
-        if state.kind is not DatabaseKind.V3:
-            raise RuntimeError("database does not contain the v3 baseline")
+        if state.kind is not DatabaseKind.V4:
+            raise RuntimeError("database does not contain the v4 schema")
         with self.read() as connection:
             migration = connection.execute(
-                "SELECT checksum FROM schema_migrations WHERE version = 3"
+                "SELECT name, checksum FROM schema_migrations WHERE version = 4"
             ).fetchone()
-            if migration is None or migration["checksum"] != self.baseline_checksum():
-                raise RuntimeError("v3 baseline checksum does not match the applied schema")
+            expected_checksums = {
+                "v4_baseline": self.baseline_checksum(),
+                "v4_from_v3": self.v4_migration_checksum(),
+            }
+            if (
+                migration is None
+                or migration["name"] not in expected_checksums
+                or migration["checksum"] != expected_checksums[migration["name"]]
+            ):
+                raise RuntimeError("v4 schema checksum does not match the applied migration")
             integrity = connection.execute("PRAGMA integrity_check").fetchone()
             if integrity is None or integrity[0] != "ok":
                 raise RuntimeError("database integrity check failed")

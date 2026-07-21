@@ -48,6 +48,7 @@ from app.platform import (
     recover_pending_activation,
 )
 from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db.v4_migration import V3MigrationReport, migrate_v3_database
 from app.platform.processes import ExecutableRegistry, ProcessRunner
 from app.platform.processes.runner import DEFAULT_ENVIRONMENT_ALLOWLIST
 from app.screening import ScreeningCommands, ScreeningQueries
@@ -105,7 +106,7 @@ class AppContext:
     mcp_server: FastMCP
     snapshots: SnapshotService
     zotero_service: ZoteroTransferService
-    migration_report: V2MigrationReport | None = None
+    migration_report: V2MigrationReport | V3MigrationReport | None = None
 
     def startup(self) -> None:
         self.process_lock.acquire()
@@ -130,6 +131,11 @@ class AppContext:
                     self.settings.database_path,
                     data_dir=self.settings.data_dir,
                     verify_files=True,
+                    activation_journal=self.settings.activation_journal_path,
+                )
+            elif state.kind is DatabaseKind.LEGACY_V3:
+                self.migration_report = migrate_v3_database(
+                    self.settings.database_path,
                     activation_journal=self.settings.activation_journal_path,
                 )
             elif state.kind is DatabaseKind.LEGACY_V1:

@@ -79,7 +79,7 @@ def test_candidate_review_is_atomic_and_exposes_source_evidence(client) -> None:
     assert items[0]["relevance"] == "Directly relevant to the project scope."
 
     workspace = client.get("/api/workspace").json()
-    assert workspace["contract_version"] == "3.0"
+    assert workspace["contract_version"] == "4.0"
     assert workspace["counts"]["works"] == 1
     assert workspace["counts"]["attachments"] == 0
 

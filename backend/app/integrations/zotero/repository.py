@@ -203,14 +203,14 @@ class SqliteZoteroTransferRepository:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._schema_lock = RLock()
         self._initialized = False
-        if inspect_database(database.path).kind is DatabaseKind.V3:
+        if inspect_database(database.path).kind is DatabaseKind.V4:
             self.initialize()
 
     def initialize(self) -> None:
         with self._schema_lock:
             if self._initialized:
                 return
-            if inspect_database(self.database.path).kind is not DatabaseKind.V3:
+            if inspect_database(self.database.path).kind is not DatabaseKind.V4:
                 raise RuntimeError("v3 database must be initialized before Zotero state")
             self._validate_schema()
             self._initialized = True

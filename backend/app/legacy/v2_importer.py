@@ -102,7 +102,7 @@ def import_v2_to_v3(
     data_dir: Path | None = None,
     verify_files: bool = True,
 ) -> V2MigrationReport:
-    """Build a v3 database beside a v2 database without modifying the source."""
+    """Build the current database beside a v2 database without modifying the source."""
 
     source_database = source_database.resolve()
     target_database = target_database.resolve()
@@ -154,7 +154,7 @@ def migrate_v2_database(
     activation_journal: Path | None = None,
     fault_injector: FaultInjector | None = None,
 ) -> V2MigrationReport:
-    """Import v2 into a shadow database and atomically activate the validated v3 file.
+    """Import v2 into a shadow database and atomically activate the validated current file.
 
     The caller must stop the application before invoking this function. The v2 main,
     WAL, and shared-memory files are retained under a timestamped backup name.
@@ -163,7 +163,7 @@ def migrate_v2_database(
     database_path = database_path.resolve()
     if inspect_database(database_path).kind is not DatabaseKind.LEGACY_V2:
         raise V2ImportError("active database is not a v2 learning workspace")
-    shadow = database_path.with_name(f".{database_path.name}.v3-migrating-{uuid.uuid4().hex}")
+    shadow = database_path.with_name(f".{database_path.name}.v4-migrating-{uuid.uuid4().hex}")
     report = import_v2_to_v3(
         database_path,
         shadow,

@@ -18,12 +18,14 @@ from app.platform.activation import (
     default_activation_journal,
 )
 from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db.v4_migration import V3MigrationError, migrate_v3_database
 
 from .contract import (
     DATABASE_ARCHIVE_PATH,
     MANIFEST_PATH,
     SNAPSHOT_FORMAT,
     V2_SNAPSHOT_FORMAT,
+    V3_SNAPSHOT_FORMAT,
     SnapshotManifest,
 )
 from .errors import SnapshotCancelled, SnapshotError
@@ -182,8 +184,17 @@ class SnapshotRestorer:
             if migration.backup_database is not None:
                 SnapshotRestorer._remove_staged_migration_backup(migration.backup_database)
         elif manifest.format == SNAPSHOT_FORMAT:
-            if state.kind is not DatabaseKind.V3:
+            if state.kind is not DatabaseKind.V4:
+                raise SnapshotError("v4 快照清单与数据库结构不一致")
+        elif manifest.format == V3_SNAPSHOT_FORMAT:
+            if state.kind is not DatabaseKind.LEGACY_V3:
                 raise SnapshotError("v3 快照清单与数据库结构不一致")
+            try:
+                migration = migrate_v3_database(database_path)
+            except (V3MigrationError, OSError, sqlite3.DatabaseError) as error:
+                raise SnapshotError(f"v3 快照迁移失败: {error}") from error
+            if migration.backup_database is not None:
+                SnapshotRestorer._remove_staged_migration_backup(migration.backup_database)
         else:  # SnapshotManifest rejects unsupported formats; keep the boundary explicit.
             raise SnapshotError("快照容器格式不受支持")
 
@@ -191,7 +202,7 @@ class SnapshotRestorer:
         try:
             database.verify()
         except (RuntimeError, sqlite3.DatabaseError) as error:
-            raise SnapshotError("快照数据库未通过 v3 校验") from error
+            raise SnapshotError("快照数据库未通过当前结构校验") from error
         return database
 
     @staticmethod
@@ -234,7 +245,7 @@ class SnapshotRestorer:
                     """
                 ).fetchall()
         except sqlite3.DatabaseError as error:
-            raise SnapshotError("快照数据库不符合 v3 文件模型") from error
+            raise SnapshotError("快照数据库不符合当前文件模型") from error
 
         expected_paths = {DATABASE_ARCHIVE_PATH.removeprefix("payload/")}
         for row in rows:

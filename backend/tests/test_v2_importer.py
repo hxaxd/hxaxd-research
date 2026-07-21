@@ -228,7 +228,7 @@ def test_v2_is_imported_through_a_validated_shadow_database(tmp_path):
     assert report.counts.attachments == 2
     assert report.files_verified == 2
     assert report.backup_database is not None
-    assert inspect_database(path).kind is DatabaseKind.V3
+    assert inspect_database(path).kind is DatabaseKind.V4
     assert inspect_database(report.backup_database).kind is DatabaseKind.LEGACY_V2
 
     database = V3Database(path)
@@ -296,7 +296,7 @@ def test_v2_activation_is_replayed_after_process_crash_in_rename_window(tmp_path
     )
 
     assert recovered == "v2_migration:committed"
-    assert inspect_database(database_path).kind is DatabaseKind.V3
+    assert inspect_database(database_path).kind is DatabaseKind.V4
     assert not journal_path.exists()
     backups = list(data_dir.glob("research.sqlite3.v2-*.bak"))
     assert len(backups) == 1

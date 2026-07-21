@@ -80,7 +80,7 @@ class WorkspaceProjectionService:
                 )
         return WorkspaceProjection(
             generated_at=utc_now(),
-            contract_version="3.0",
+            contract_version="4.0",
             schema_version=self.database.schema_version(),
             counts=counts,
             projects=[

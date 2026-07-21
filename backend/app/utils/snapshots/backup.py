@@ -42,7 +42,7 @@ class _ResourceRecord:
 
 
 class SnapshotWriter:
-    """Create a verified v3 snapshot without exposing a half-written archive."""
+    """Create a verified current snapshot without exposing a half-written archive."""
 
     def __init__(self, data_dir: Path, database: V3Database):
         self.data_dir = data_dir.resolve()
@@ -120,7 +120,7 @@ class SnapshotWriter:
                         format=SNAPSHOT_FORMAT,
                         created_at=utc_now().isoformat(),
                         schema_version=V3Database(database_copy).schema_version(),
-                        contract_version="3.0",
+                        contract_version="4.0",
                         files=tuple(sorted(files, key=lambda item: item.path)),
                     )
                     archive.writestr(MANIFEST_PATH, manifest.to_json().encode("utf-8"))
@@ -195,7 +195,7 @@ class SnapshotWriter:
                 connection.close()
             V3Database(database_copy).verify()
         except sqlite3.DatabaseError as error:
-            raise SnapshotError("数据库副本不符合 v3 结构") from error
+            raise SnapshotError("数据库副本不符合当前结构") from error
 
     @staticmethod
     def _resource_records(database_copy: Path) -> list[_ResourceRecord]:
@@ -232,7 +232,7 @@ class SnapshotWriter:
             finally:
                 connection.close()
         except sqlite3.DatabaseError as error:
-            raise SnapshotError("无法读取 v3 文件索引") from error
+            raise SnapshotError("无法读取当前文件索引") from error
 
         records: list[_ResourceRecord] = []
         seen_paths = {DATABASE_ARCHIVE_PATH}
