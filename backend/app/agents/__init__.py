@@ -14,7 +14,13 @@ from .models import (
     PublicAgentRun,
     PublicApproval,
 )
-from .prompting import PromptAssembler, PromptContext, PromptSnapshot
+from .prompting import (
+    AgentPromptContextBuilder,
+    AgentTaskPolicyRegistry,
+    PromptAssembler,
+    PromptContext,
+    PromptSnapshot,
+)
 from .repository import AgentConflictError, AgentNotFoundError, SqliteAgentRunRepository
 from .runtime import (
     WEB_SEARCH_SCOPE,
@@ -36,7 +42,9 @@ __all__ = [
     "AgentRunStatus",
     "AgentRuntime",
     "AgentRunJobHandler",
+    "AgentPromptContextBuilder",
     "AgentSupervisor",
+    "AgentTaskPolicyRegistry",
     "Approval",
     "ApprovalDecision",
     "ApprovalStatus",

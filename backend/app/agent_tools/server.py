@@ -8,6 +8,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from app.agents.prompting import MCP_SERVER_INSTRUCTIONS, READ_SCOPE, STAGE_SCOPE
 from app.catalog.models import BibliographicItemDraft
 from app.catalog.queries import CatalogQueries
 from app.screening.commands import ScreeningCommands
@@ -17,9 +18,6 @@ from app.screening.queries import ScreeningQueries
 from app.workspace.service import WorkspaceProjectionService
 
 from .capabilities import AgentCapabilityRegistry
-
-READ_SCOPE = "literature:read"
-STAGE_SCOPE = "candidates:stage"
 
 
 class AgentToolPermissionError(PermissionError):
@@ -167,10 +165,7 @@ def create_agent_mcp_server(
     base = public_base_url.rstrip("/")
     server = FastMCP(
         "hxaxd-literature",
-        instructions=(
-            "Use these tools to inspect the literature workspace and stage candidates. "
-            "Screening decisions are intentionally unavailable: only the user can make them."
-        ),
+        instructions=MCP_SERVER_INSTRUCTIONS,
         token_verifier=registry,
         auth=AuthSettings(
             issuer_url=f"{base}/local-agent-authority",

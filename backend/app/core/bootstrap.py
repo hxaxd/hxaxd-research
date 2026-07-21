@@ -7,11 +7,11 @@ from mcp.server.fastmcp import FastMCP
 
 from app.agent_tools import (
     AgentCapabilityRegistry,
-    AgentContextService,
     AgentToolFacade,
     create_agent_mcp_server,
 )
 from app.agents import (
+    AgentPromptContextBuilder,
     AgentRun,
     AgentRunJobHandler,
     AgentSupervisor,
@@ -98,7 +98,7 @@ class AppContext:
     workspace: WorkspaceProjectionService
     agent_repository: SqliteAgentRunRepository
     agent_supervisor: AgentSupervisor
-    agent_context: AgentContextService
+    agent_prompt_context: AgentPromptContextBuilder
     agent_capabilities: AgentCapabilityRegistry
     agent_runtime_ready: bool
     agent_runtime_message: str
@@ -256,7 +256,7 @@ def build_app_context(settings: Settings) -> AppContext:
         public_base_url=settings.public_base_url,
     )
     agent_repository = SqliteAgentRunRepository(settings.database_path)
-    agent_context = AgentContextService(catalog, screening, attachments)
+    agent_prompt_context = AgentPromptContextBuilder(catalog, screening, attachments)
 
     def mcp_credentials(run: AgentRun) -> RuntimeMcpCredentials:
         agent_capabilities.revoke_run(run.id)
@@ -268,7 +268,7 @@ def build_app_context(settings: Settings) -> AppContext:
         return RuntimeMcpCredentials(
             url=f"{settings.public_base_url.rstrip('/')}/mcp/",
             bearer_token=token,
-            enabled_tools=agent_context.tools_for_scopes(run.tool_scopes),
+            enabled_tools=agent_prompt_context.tools_for_scopes(run.tool_scopes),
         )
 
     agent_supervisor = AgentSupervisor(
@@ -309,7 +309,7 @@ def build_app_context(settings: Settings) -> AppContext:
         workspace=workspace,
         agent_repository=agent_repository,
         agent_supervisor=agent_supervisor,
-        agent_context=agent_context,
+        agent_prompt_context=agent_prompt_context,
         agent_capabilities=agent_capabilities,
         agent_runtime_ready=agent_runtime_ready,
         agent_runtime_message=agent_runtime_message,
