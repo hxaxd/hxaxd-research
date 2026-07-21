@@ -1,4 +1,0 @@
--- Compatibility path retained for snapshot tooling.
--- The executable database contract is the ordered migration set in ./migrations/.
--- New databases and existing databases both run through MigrationRunner; do not edit
--- this file to change the schema.

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-import shutil
+import hashlib
+import json
+import os
 import sqlite3
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from app.platform.db import V3Database
 from app.utils.time import utc_now
 
 from .contract import (
@@ -16,114 +20,257 @@ from .contract import (
     SnapshotFile,
     SnapshotManifest,
 )
-from .database_validation import validate_database
-from .errors import SnapshotError
-from .hashing import sha256_file
-from .paths import resolve_data_path
+from .errors import SnapshotCancelled, SnapshotError
+from .paths import resolve_data_path, safe_archive_path
+
+_ACTIVE_JOB_STATUSES = ("queued", "running", "cancellation_requested")
+_COPY_CHUNK_SIZE = 1024 * 1024
 
 
 @dataclass(frozen=True)
 class SnapshotWriteResult:
     archive_path: Path
     file_count: int
+    size: int
+
+
+@dataclass(frozen=True)
+class _ResourceRecord:
+    storage_key: str
+    sha256: str
+    size: int
 
 
 class SnapshotWriter:
-    def __init__(self, data_dir: Path, database_path: Path, schema_path: Path):
-        self.data_dir = data_dir.resolve()
-        self.database_path = database_path.resolve()
-        self.schema_path = schema_path.resolve()
+    """Create a verified v3 snapshot without exposing a half-written archive."""
 
-    def write(self, archive_path: Path) -> SnapshotWriteResult:
-        if not self.database_path.is_file():
-            raise SnapshotError("数据目录中不存在学习数据库")
+    def __init__(self, data_dir: Path, database: V3Database):
+        self.data_dir = data_dir.resolve()
+        self.database = database
+        self.database_path = database.path
+
+    def write(
+        self,
+        archive_path: Path,
+        *,
+        operation_job_id: str | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+        source_idle_check: Callable[[], None] | None = None,
+    ) -> SnapshotWriteResult:
+        self._check_cancelled(should_cancel)
+        self.database.verify()
         archive_path = archive_path.resolve()
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         if archive_path.exists():
             raise SnapshotError(f"快照文件已存在: {archive_path}")
 
-        with tempfile.TemporaryDirectory(prefix="learning-snapshot-") as temporary:
-            stage = Path(temporary)
-            database_copy = stage / DATABASE_ARCHIVE_PATH
-            database_copy.parent.mkdir(parents=True)
+        temporary_archive: Path | None = None
+        with tempfile.TemporaryDirectory(
+            prefix=".snapshot-database-", dir=archive_path.parent
+        ) as temporary:
+            database_copy = Path(temporary) / "research.sqlite3"
             self._backup_database(database_copy)
-            validate_database(database_copy)
-            files = [self._stage_database(database_copy)]
-            files.extend(self._stage_resources(database_copy, stage))
-            manifest = SnapshotManifest(
-                format=SNAPSHOT_FORMAT,
-                created_at=utc_now().isoformat(),
-                schema_version=self._schema_version(database_copy),
-                contract_version="2.0",
-                schema_sha256=None,
-                files=tuple(sorted(files, key=lambda item: item.path)),
+            self._prepare_database_copy(database_copy, operation_job_id)
+            resources = self._resource_records(database_copy)
+
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{archive_path.name}.",
+                suffix=".building",
+                dir=archive_path.parent,
             )
-            (stage / MANIFEST_PATH).write_text(manifest.to_json(), encoding="utf-8")
-            temporary_archive = archive_path.with_suffix(f"{archive_path.suffix}.building")
+            os.close(descriptor)
+            temporary_archive = Path(temporary_name)
             try:
-                with ZipFile(temporary_archive, "w", compression=ZIP_DEFLATED) as archive:
-                    archive.write(stage / MANIFEST_PATH, MANIFEST_PATH)
-                    for item in manifest.files:
-                        archive.write(stage / item.path, item.path)
-                temporary_archive.replace(archive_path)
+                files: list[SnapshotFile] = []
+                with ZipFile(
+                    temporary_archive,
+                    "w",
+                    compression=ZIP_DEFLATED,
+                    compresslevel=1,
+                    allowZip64=True,
+                ) as archive:
+                    files.append(
+                        self._write_file(
+                            archive,
+                            database_copy,
+                            DATABASE_ARCHIVE_PATH,
+                            should_cancel=should_cancel,
+                        )
+                    )
+                    for resource in resources:
+                        self._check_cancelled(should_cancel)
+                        source = resolve_data_path(self.data_dir, resource.storage_key)
+                        if not source.is_file():
+                            raise SnapshotError(
+                                f"数据库引用的文件不存在: {resource.storage_key}"
+                            )
+                        item = self._write_file(
+                            archive,
+                            source,
+                            f"payload/{resource.storage_key}",
+                            should_cancel=should_cancel,
+                        )
+                        if item.sha256 != resource.sha256 or item.size != resource.size:
+                            raise SnapshotError(
+                                "文件与数据库记录不一致，快照已取消: "
+                                f"{resource.storage_key}"
+                            )
+                        files.append(item)
+                    manifest = SnapshotManifest(
+                        format=SNAPSHOT_FORMAT,
+                        created_at=utc_now().isoformat(),
+                        schema_version=V3Database(database_copy).schema_version(),
+                        contract_version="3.0",
+                        files=tuple(sorted(files, key=lambda item: item.path)),
+                    )
+                    archive.writestr(MANIFEST_PATH, manifest.to_json().encode("utf-8"))
+
+                self._check_cancelled(should_cancel)
+                if source_idle_check is not None:
+                    source_idle_check()
+                self._check_cancelled(should_cancel)
+                # Windows requires a writable descriptor for fsync.
+                with temporary_archive.open("r+b") as stream:
+                    os.fsync(stream.fileno())
+                os.replace(temporary_archive, archive_path)
+                temporary_archive = None
             finally:
-                temporary_archive.unlink(missing_ok=True)
-        return SnapshotWriteResult(archive_path=archive_path, file_count=len(files))
+                if temporary_archive is not None:
+                    temporary_archive.unlink(missing_ok=True)
 
-    def _backup_database(self, target: Path) -> None:
-        source = sqlite3.connect(self.database_path, timeout=30)
-        destination = sqlite3.connect(target)
-        try:
-            source.backup(destination)
-        finally:
-            destination.close()
-            source.close()
-
-    @staticmethod
-    def _stage_database(database_copy: Path) -> SnapshotFile:
-        return SnapshotFile(
-            path=DATABASE_ARCHIVE_PATH,
-            sha256=sha256_file(database_copy),
-            size=database_copy.stat().st_size,
+        return SnapshotWriteResult(
+            archive_path=archive_path,
+            file_count=len(files),
+            size=archive_path.stat().st_size,
         )
 
+    def _backup_database(self, target: Path) -> None:
+        try:
+            with self.database.read() as source:
+                destination = sqlite3.connect(target)
+                try:
+                    source.backup(destination)
+                finally:
+                    destination.close()
+        except sqlite3.DatabaseError as error:
+            raise SnapshotError("无法创建一致的数据库副本") from error
+
     @staticmethod
-    def _schema_version(database_copy: Path) -> int:
-        connection = sqlite3.connect(database_copy)
+    def _prepare_database_copy(database_copy: Path, operation_job_id: str | None) -> None:
         try:
-            row = connection.execute(
-                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
-            ).fetchone()
-        finally:
-            connection.close()
-        return int(row[0])
+            connection = sqlite3.connect(database_copy)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys=ON")
+            try:
+                placeholders = ", ".join("?" for _ in _ACTIVE_JOB_STATUSES)
+                rows = connection.execute(
+                    f"SELECT id FROM jobs WHERE status IN ({placeholders})",  # noqa: S608
+                    _ACTIVE_JOB_STATUSES,
+                ).fetchall()
+                other_jobs = [row["id"] for row in rows if row["id"] != operation_job_id]
+                if other_jobs:
+                    raise SnapshotError("数据库副本中存在其他尚未结束的任务")
+                if operation_job_id is not None:
+                    connection.execute("DELETE FROM jobs WHERE id = ?", (operation_job_id,))
+                    connection.execute(
+                        """
+                        INSERT INTO audit_events(
+                            id, occurred_at, actor_type, actor_id, action,
+                            entity_type, entity_id, metadata_json
+                        ) VALUES(
+                            lower(hex(randomblob(16))), ?, 'system', 'snapshot',
+                            'snapshot.control_job_omitted', 'workspace', 'local', ?
+                        )
+                        """,
+                        (
+                            utc_now().isoformat(),
+                            json.dumps({"job_id": operation_job_id}, ensure_ascii=False),
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                connection.close()
+            V3Database(database_copy).verify()
+        except sqlite3.DatabaseError as error:
+            raise SnapshotError("数据库副本不符合 v3 结构") from error
 
-    def _stage_resources(self, database_copy: Path, stage: Path) -> list[SnapshotFile]:
-        connection = sqlite3.connect(database_copy)
+    @staticmethod
+    def _resource_records(database_copy: Path) -> list[_ResourceRecord]:
         try:
-            active_jobs = connection.execute(
-                "SELECT COUNT(*) FROM jobs WHERE status IN ('queued', 'running')"
-            ).fetchone()[0]
-            if active_jobs:
-                raise SnapshotError("存在尚未结束的翻译任务，请等待任务结束后再备份")
-            rows = connection.execute(
-                "SELECT relative_path, sha256, size FROM resources ORDER BY relative_path"
-            ).fetchall()
-        finally:
-            connection.close()
+            connection = sqlite3.connect(database_copy)
+            connection.row_factory = sqlite3.Row
+            try:
+                unavailable = connection.execute(
+                    """
+                    SELECT a.id
+                    FROM attachments a
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM blob_objects bo
+                        WHERE bo.blob_id = a.blob_id
+                          AND bo.storage_backend = 'local'
+                          AND bo.state = 'available'
+                    )
+                    LIMIT 1
+                    """
+                ).fetchone()
+                if unavailable is not None:
+                    raise SnapshotError(
+                        f"附件没有可备份的本地对象: {unavailable['id']}"
+                    )
+                rows = connection.execute(
+                    """
+                    SELECT bo.storage_key, b.sha256, b.size
+                    FROM blob_objects bo
+                    JOIN blobs b ON b.id = bo.blob_id
+                    WHERE bo.storage_backend = 'local' AND bo.state = 'available'
+                    ORDER BY bo.storage_key
+                    """
+                ).fetchall()
+            finally:
+                connection.close()
+        except sqlite3.DatabaseError as error:
+            raise SnapshotError("无法读取 v3 文件索引") from error
 
-        files: list[SnapshotFile] = []
-        for relative_path, expected_sha256, expected_size in rows:
-            source = resolve_data_path(self.data_dir, relative_path)
-            if not source.is_file():
-                raise SnapshotError(f"数据库引用的文件不存在: {relative_path}")
-            archive_path = f"payload/{relative_path}"
-            target = stage / archive_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
-            actual_size = target.stat().st_size
-            actual_sha256 = sha256_file(target)
-            if actual_size != expected_size or actual_sha256 != expected_sha256:
-                raise SnapshotError(f"文件与数据库记录不一致，快照已取消: {relative_path}")
-            files.append(SnapshotFile(path=archive_path, sha256=actual_sha256, size=actual_size))
-        return files
+        records: list[_ResourceRecord] = []
+        seen_paths = {DATABASE_ARCHIVE_PATH}
+        for row in rows:
+            archive_path = f"payload/{row['storage_key']}"
+            safe_archive_path(archive_path)
+            if archive_path in seen_paths:
+                raise SnapshotError(f"文件索引包含保留或重复路径: {row['storage_key']}")
+            seen_paths.add(archive_path)
+            records.append(
+                _ResourceRecord(
+                    storage_key=str(row["storage_key"]),
+                    sha256=str(row["sha256"]),
+                    size=int(row["size"]),
+                )
+            )
+        return records
+
+    @staticmethod
+    def _write_file(
+        archive: ZipFile,
+        source: Path,
+        archive_path: str,
+        *,
+        should_cancel: Callable[[], bool] | None,
+    ) -> SnapshotFile:
+        safe_archive_path(archive_path)
+        digest = hashlib.sha256()
+        size = 0
+        with source.open("rb") as input_stream, archive.open(archive_path, "w") as output:
+            while chunk := input_stream.read(_COPY_CHUNK_SIZE):
+                SnapshotWriter._check_cancelled(should_cancel)
+                output.write(chunk)
+                digest.update(chunk)
+                size += len(chunk)
+        return SnapshotFile(path=archive_path, sha256=digest.hexdigest(), size=size)
+
+    @staticmethod
+    def _check_cancelled(should_cancel: Callable[[], bool] | None) -> None:
+        if should_cancel is not None and should_cancel():
+            raise SnapshotCancelled("快照操作已取消")

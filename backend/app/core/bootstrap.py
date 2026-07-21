@@ -1,96 +1,356 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from app.modules.papers.repository import SqlitePaperRepository
-from app.modules.papers.service import PaperService
-from app.modules.projects.repository import SqliteProjectRepository
-from app.modules.projects.service import ProjectService
-from app.modules.resources.repository import SqliteResourceRepository
-from app.modules.resources.service import ResourceService
-from app.modules.resources.storage import LocalResourceStorage
-from app.modules.snapshots.service import SnapshotService
-from app.modules.tools.service import ToolService
-from app.modules.translations.backend import Pdf2zhBackend
-from app.modules.translations.executor import ThreadedJobExecutor
-from app.modules.translations.repository import SqliteJobRepository
-from app.modules.translations.service import JobService
-from app.modules.workspace.service import WorkspaceService
+from mcp.server.fastmcp import FastMCP
+
+from app.agent_tools import (
+    AgentCapabilityRegistry,
+    AgentContextService,
+    AgentToolFacade,
+    create_agent_mcp_server,
+)
+from app.agents import (
+    AgentRun,
+    AgentRunJobHandler,
+    AgentSupervisor,
+    PromptAssembler,
+    RuntimeMcpCredentials,
+    RuntimeOutcome,
+    SqliteAgentRunRepository,
+)
+from app.agents.codex_app_server import (
+    CodexAppServerRuntime,
+    register_codex_executable,
+)
+from app.agents.runtime import RuntimeOutcomeStatus, RuntimeRequest
+from app.catalog import CatalogCommands, CatalogQueries
+from app.integrations.zotero import (
+    SqliteZoteroTransferRepository,
+    V3ZoteroDomainGateway,
+    ZoteroLocalClient,
+    ZoteroSyncEngine,
+    ZoteroTransferService,
+    ZoteroWebClient,
+)
+from app.jobs import JobRegistry, JobScheduler, JobWorker, SqliteJobRepository
+from app.legacy.v2_importer import V2MigrationReport, migrate_v2_database
+from app.library.repository import AttachmentRepository
+from app.library.service import AttachmentService
+from app.library.storage import AttachmentStorage
+from app.operations import OperationHandlers, OperationService
+from app.operations.models import ManagedToolName
+from app.platform import (
+    WorkspaceMutationGate,
+    WorkspaceProcessLock,
+    ensure_no_activation_residue,
+    recover_pending_activation,
+)
+from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.processes import ExecutableRegistry, ProcessRunner
+from app.platform.processes.runner import DEFAULT_ENVIRONMENT_ALLOWLIST
+from app.screening import ScreeningCommands, ScreeningQueries
+from app.snapshots import SnapshotService
+from app.workspace.models import RuntimeCapability
+from app.workspace.service import WorkspaceProjectionService
 
 from .config import Settings
-from .database import Database
 
 
-@dataclass(frozen=True)
+class _UnavailableAgentRuntime:
+    name = "codex-app-server"
+    version = None
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def run(self, request: RuntimeRequest, *_: Any) -> RuntimeOutcome:
+        return RuntimeOutcome(
+            status=RuntimeOutcomeStatus.FAILED,
+            thread_id=request.thread_id,
+            turn_id=None,
+            error_code="agent_runtime_unavailable",
+            error_message=self.reason,
+        )
+
+    def interrupt(self, _: str) -> None:
+        return None
+
+
+@dataclass
 class AppContext:
     settings: Settings
-    database: Database
-    storage: LocalResourceStorage
+    database: V3Database
+    attachments: AttachmentService
+    catalog: CatalogQueries
+    catalog_commands: CatalogCommands
+    screening: ScreeningQueries
+    screening_commands: ScreeningCommands
     job_repository: SqliteJobRepository
-    job_executor: ThreadedJobExecutor
-    projects: ProjectService
-    papers: PaperService
-    resources: ResourceService
-    jobs: JobService
-    tools: ToolService
-    workspace: WorkspaceService
+    job_registry: JobRegistry
+    job_worker: JobWorker
+    jobs: JobScheduler
+    process_runner: ProcessRunner
+    mutation_gate: WorkspaceMutationGate
+    process_lock: WorkspaceProcessLock
+    operations: OperationService
+    workspace: WorkspaceProjectionService
+    agent_repository: SqliteAgentRunRepository
+    agent_supervisor: AgentSupervisor
+    agent_context: AgentContextService
+    agent_capabilities: AgentCapabilityRegistry
+    agent_runtime_ready: bool
+    agent_runtime_message: str
+    mcp_server: FastMCP
     snapshots: SnapshotService
+    zotero_service: ZoteroTransferService
+    migration_report: V2MigrationReport | None = None
 
     def startup(self) -> None:
-        self.database.initialize()
-        self.storage.initialize()
-        self.tools.initialize()
-        self.snapshots.initialize()
-        self.job_repository.fail_interrupted()
+        self.process_lock.acquire()
+        try:
+            recover_pending_activation(
+                self.settings.activation_journal_path,
+                data_dir=self.settings.data_dir,
+                database_path=self.settings.database_path,
+            )
+            ensure_no_activation_residue(
+                journal_path=self.settings.activation_journal_path,
+                data_dir=self.settings.data_dir,
+                database_path=self.settings.database_path,
+            )
+            self.settings.data_dir.mkdir(parents=True, exist_ok=True)
+            self.settings.tools_dir.mkdir(parents=True, exist_ok=True)
+            self.settings.agent_work_dir.mkdir(parents=True, exist_ok=True)
+            self.settings.operation_staging_dir.mkdir(parents=True, exist_ok=True)
+            state = inspect_database(self.settings.database_path)
+            if state.kind is DatabaseKind.LEGACY_V2:
+                self.migration_report = migrate_v2_database(
+                    self.settings.database_path,
+                    data_dir=self.settings.data_dir,
+                    verify_files=True,
+                    activation_journal=self.settings.activation_journal_path,
+                )
+            elif state.kind is DatabaseKind.LEGACY_V1:
+                raise RuntimeError("v1 数据库不能直接启动；请先用安全快照恢复到 v3")
+            elif state.kind is DatabaseKind.UNKNOWN:
+                raise RuntimeError("数据库格式无法识别，拒绝启动以避免覆盖数据")
+            self.database.initialize()
+            self.attachments.storage.initialize()
+            self.job_repository.initialize_schema()
+            self.agent_repository.initialize_schema()
+            self.snapshots.initialize()
+            self.operations.reconcile_committed()
+            self.snapshots.reconcile_committed()
+            self.agent_repository.reconcile_interrupted()
+            self.job_worker.start(recover=True)
+        except Exception:
+            self.process_lock.release()
+            raise
 
     def shutdown(self) -> None:
-        self.job_executor.shutdown()
-        self.tools.shutdown()
-        self.snapshots.shutdown()
+        try:
+            self.job_worker.stop()
+            self.process_runner.shutdown()
+        finally:
+            self.process_lock.release()
 
 
 def build_app_context(settings: Settings) -> AppContext:
-    database = Database(settings.database_path)
-    storage = LocalResourceStorage(settings)
+    mutation_gate = WorkspaceMutationGate()
+    process_lock = WorkspaceProcessLock(settings.runtime_dir / "workspace.lock")
+    database = V3Database(settings.database_path)
+    storage = AttachmentStorage(settings)
+    attachment_repository = AttachmentRepository(database)
+    attachments = AttachmentService(attachment_repository, storage)
+    catalog = CatalogQueries(database)
+    catalog_commands = CatalogCommands(database)
+    screening = ScreeningQueries(database)
+    screening_commands = ScreeningCommands(database)
 
-    project_repository = SqliteProjectRepository(database)
-    paper_repository = SqlitePaperRepository(database)
-    resource_repository = SqliteResourceRepository(database)
-    job_repository = SqliteJobRepository(database)
-
-    projects = ProjectService(project_repository)
-    papers = PaperService(paper_repository, project_repository)
-    resources = ResourceService(resource_repository, storage, paper_repository)
-    tools = ToolService(settings)
-    snapshots = SnapshotService(settings, job_repository)
-    workspace = WorkspaceService(projects, papers, resources, tools, database)
-
-    translation_backend = Pdf2zhBackend(settings)
-    job_executor = ThreadedJobExecutor(
-        jobs=job_repository,
-        resources=resource_repository,
-        storage=storage,
-        registrar=resources,
-        backend=translation_backend,
-        tools=tools,
+    zotero_repository = SqliteZoteroTransferRepository(database)
+    zotero_domain = V3ZoteroDomainGateway(
+        catalog_queries=catalog,
+        catalog_commands=catalog_commands,
+        screening_queries=screening,
+        screening_commands=screening_commands,
+        attachments=attachments,
     )
-    jobs = JobService(
-        jobs=job_repository,
-        resources=resource_repository,
-        executor=job_executor,
+    zotero_local = ZoteroLocalClient(base_url=settings.zotero_local_url, timeout=1.0)
+    zotero_web = (
+        ZoteroWebClient(settings.zotero_api_key) if settings.zotero_api_key is not None else None
     )
+    zotero_engine = ZoteroSyncEngine(
+        domain=zotero_domain,
+        repository=zotero_repository,
+        local_client=zotero_local,
+        web_client=zotero_web,
+    )
+    zotero_service = ZoteroTransferService(zotero_repository, zotero_engine)
+
+    executable_registry = ExecutableRegistry()
+    process_runner = ProcessRunner(
+        executable_registry,
+        allowed_environment=DEFAULT_ENVIRONMENT_ALLOWLIST
+        | frozenset({"PDF2ZH_DEEPSEEK_API_KEY", "HXAXD_MCP_TOKEN"}),
+    )
+    job_repository = SqliteJobRepository(settings.database_path)
+    job_registry = JobRegistry()
+    job_worker = JobWorker(job_repository, job_registry)
+    jobs = JobScheduler(job_repository, job_worker)
+    operations = OperationService(settings, attachments, jobs, job_repository, process_runner)
+    OperationHandlers(settings, attachments, process_runner).register(job_registry)
+
+    agent_runtime_ready = True
+    agent_runtime_message = "Codex 应用服务器已就绪"
+    try:
+        register_codex_executable(
+            executable_registry,
+            settings.codex_executable,
+        )
+        agent_runtime = CodexAppServerRuntime(
+            process_runner,
+            settings.agent_work_dir,
+        )
+    except (FileNotFoundError, OSError, ValueError) as error:
+        agent_runtime_ready = False
+        agent_runtime_message = "Codex 应用服务器不可用；请检查本机运行时配置"
+        agent_runtime = _UnavailableAgentRuntime(str(error))
+
+    def tool_capability(name: ManagedToolName) -> RuntimeCapability:
+        tool = operations.get_tool(name)
+        return RuntimeCapability(
+            supported=True,
+            ready=tool.status.value == "ready",
+            message=tool.message,
+            details={"version": tool.version},
+        )
+
+    workspace = WorkspaceProjectionService(
+        database,
+        settings.data_dir,
+        capability_providers={
+            "durable_jobs": lambda: _job_worker_capability(job_worker),
+            "pdf_translation": lambda: tool_capability(ManagedToolName.PDF2ZH),
+            "tex_compile": lambda: tool_capability(ManagedToolName.TEX),
+            "embedded_agent": lambda: RuntimeCapability(
+                supported=True,
+                ready=agent_runtime_ready,
+                message=agent_runtime_message,
+            ),
+            "zotero": lambda: _zotero_capability(zotero_service),
+        },
+    )
+
+    agent_capabilities = AgentCapabilityRegistry()
+    agent_tools = AgentToolFacade(
+        workspace,
+        catalog,
+        screening,
+        screening_commands,
+    )
+    mcp_server = create_agent_mcp_server(
+        agent_tools,
+        agent_capabilities,
+        public_base_url=settings.public_base_url,
+    )
+    agent_repository = SqliteAgentRunRepository(settings.database_path)
+    agent_context = AgentContextService(catalog, screening, attachments)
+
+    def mcp_credentials(run: AgentRun) -> RuntimeMcpCredentials:
+        agent_capabilities.revoke_run(run.id)
+        token = agent_capabilities.issue(
+            run.id,
+            project_id=run.project_id,
+            scopes=frozenset(run.tool_scopes),
+        )
+        return RuntimeMcpCredentials(
+            url=f"{settings.public_base_url.rstrip('/')}/mcp/",
+            bearer_token=token,
+            enabled_tools=agent_context.tools_for_scopes(run.tool_scopes),
+        )
+
+    agent_supervisor = AgentSupervisor(
+        agent_repository,
+        agent_runtime,
+        PromptAssembler(),
+        settings.agent_work_dir,
+        mcp_credentials=mcp_credentials,
+        mcp_revoke=agent_capabilities.revoke_run,
+    )
+    job_registry.register("agent.run", AgentRunJobHandler(agent_supervisor))
+
+    snapshots = SnapshotService(
+        settings,
+        database,
+        job_repository,
+        jobs,
+        mutation_gate=mutation_gate,
+    )
+    snapshots.register_handlers(job_registry)
 
     return AppContext(
         settings=settings,
         database=database,
-        storage=storage,
+        attachments=attachments,
+        catalog=catalog,
+        catalog_commands=catalog_commands,
+        screening=screening,
+        screening_commands=screening_commands,
         job_repository=job_repository,
-        job_executor=job_executor,
-        projects=projects,
-        papers=papers,
-        resources=resources,
+        job_registry=job_registry,
+        job_worker=job_worker,
         jobs=jobs,
-        tools=tools,
+        process_runner=process_runner,
+        mutation_gate=mutation_gate,
+        process_lock=process_lock,
+        operations=operations,
         workspace=workspace,
+        agent_repository=agent_repository,
+        agent_supervisor=agent_supervisor,
+        agent_context=agent_context,
+        agent_capabilities=agent_capabilities,
+        agent_runtime_ready=agent_runtime_ready,
+        agent_runtime_message=agent_runtime_message,
+        mcp_server=mcp_server,
         snapshots=snapshots,
+        zotero_service=zotero_service,
+    )
+
+
+def _zotero_capability(service: ZoteroTransferService) -> RuntimeCapability:
+    status = service.status()
+    ready = status.import_available or status.export_available
+    messages = [status.local.message, status.web.message]
+    return RuntimeCapability(
+        supported=True,
+        ready=ready,
+        message=" ".join(messages),
+        details={
+            "import_available": status.import_available,
+            "export_available": status.export_available,
+            "local_read_only": status.local.read_only,
+        },
+    )
+
+
+def _job_worker_capability(worker: JobWorker) -> RuntimeCapability:
+    worker_alive = worker.is_alive
+    last_error = worker.last_error
+    ready = worker_alive and last_error is None
+    if ready:
+        message = "持久任务工作线程运行中"
+    elif last_error is not None:
+        message = "持久任务工作线程发生异常，正在重试"
+    else:
+        message = "持久任务工作线程未运行"
+    return RuntimeCapability(
+        supported=True,
+        ready=ready,
+        message=message,
+        details={
+            "worker_alive": worker_alive,
+            "error_code": "job_worker_error" if last_error is not None else None,
+        },
     )

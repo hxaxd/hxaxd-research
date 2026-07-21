@@ -1,2 +1,6 @@
 class SnapshotError(RuntimeError):
-    """Raised when an exact snapshot cannot be safely created or restored."""
+    """Raised when a snapshot cannot be created or restored safely."""
+
+
+class SnapshotCancelled(SnapshotError):
+    """Raised when a snapshot operation observes cooperative cancellation."""

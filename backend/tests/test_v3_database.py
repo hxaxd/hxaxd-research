@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import sqlite3
+
+import pytest
+
+from app.jobs import JobCreate, JobStatus, SqliteJobRepository
+from app.platform.db import DatabaseKind, V3Database, inspect_database
+
+REQUIRED_TABLES = {
+    "works",
+    "bibliographic_items",
+    "item_creators",
+    "item_identifiers",
+    "item_links",
+    "source_records",
+    "project_works",
+    "project_work_roles",
+    "project_work_notes",
+    "candidates",
+    "blobs",
+    "blob_objects",
+    "attachments",
+    "attachment_preferences",
+    "attachment_relations",
+    "jobs",
+    "job_attempts",
+    "job_events",
+    "job_attachments",
+    "audit_events",
+    "external_bindings",
+    "sync_runs",
+    "sync_conflicts",
+    "zotero_transfer_previews",
+    "zotero_transfer_resolutions",
+    "zotero_transfer_receipts",
+    "agent_runs",
+    "agent_events",
+    "approvals",
+}
+
+
+def test_fresh_database_uses_only_the_v3_baseline(tmp_path):
+    path = tmp_path / "research.sqlite3"
+    database = V3Database(path)
+    database.initialize()
+
+    assert database.schema_version() == 3
+    assert inspect_database(path).kind is DatabaseKind.V3
+    with database.read() as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        migration = connection.execute("SELECT * FROM schema_migrations").fetchone()
+    assert tables >= REQUIRED_TABLES
+    assert migration["version"] == 3
+    assert migration["name"] == "v3_baseline"
+    assert migration["checksum"] == database.baseline_checksum()
+    assert "papers" not in tables
+    assert "resources" not in tables
+
+
+def test_applied_baseline_is_immutable(tmp_path):
+    path = tmp_path / "research.sqlite3"
+    database = V3Database(path)
+    database.initialize()
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE schema_migrations SET checksum='changed' WHERE version=3")
+
+    with pytest.raises(RuntimeError, match="checksum"):
+        database.verify()
+
+
+def test_durable_job_repository_uses_the_v3_baseline_tables(tmp_path):
+    path = tmp_path / "research.sqlite3"
+    V3Database(path).initialize()
+    repository = SqliteJobRepository(path)
+
+    # This validates the schema contract but must not create a second jobs shape.
+    repository.initialize_schema()
+    job = repository.enqueue(JobCreate(kind="test.v3", input={"value": 1}))
+    claimed = repository.claim_next("v3-worker")
+
+    assert job.status is JobStatus.QUEUED
+    assert claimed is not None
+    assert claimed.job.id == job.id
+    assert repository.list_events(job.id)[0].event_type == "job.queued"

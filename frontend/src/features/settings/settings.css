@@ -1,0 +1,47 @@
+.operations-settings { display: grid; gap: 12px; margin-top: 12px; }
+.settings-operation-section { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.settings-operation-section > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--border-soft); padding: 16px 18px; }
+.settings-operation-section > header h2 { margin: 3px 0; font-size: 16px; }
+.settings-operation-section > header p { margin: 0; color: var(--text-faint); font-size: 9px; }
+.settings-operation-section > header button { flex: 0 0 auto; }
+.managed-tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; }
+.managed-tool-card { display: grid; gap: 12px; border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px; background: #0d1017; }
+.managed-tool-card > header { display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: start; gap: 8px; color: var(--accent); }
+.managed-tool-card h3 { margin: 0; color: var(--text); font-size: 13px; }
+.managed-tool-card header p { margin: 2px 0 0; color: var(--text-faint); font-size: 9px; }
+.managed-tool-card dl { display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 7px; margin: 0; font-size: 9px; }
+.managed-tool-card dt { color: var(--text-faint); }
+.managed-tool-card dd { overflow: hidden; margin: 0; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.managed-tool-card > button { justify-self: start; }
+.tool-status { border-radius: 999px; padding: 3px 7px; background: var(--surface-raised); color: var(--text-faint); font-size: 8px; }
+.tool-status--ready { background: rgb(98 211 153 / 10%); color: var(--success); }
+.tool-status--installing { background: var(--warning-soft); color: var(--warning); }
+.tool-status--failed { background: var(--danger-soft); color: var(--danger); }
+.snapshot-list { display: grid; }
+.snapshot-row { display: grid; gap: 11px; border-bottom: 1px solid var(--border-soft); padding: 14px 18px; }
+.snapshot-row:last-child { border: 0; }
+.snapshot-summary { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; color: var(--accent); }
+.snapshot-summary > span { display: grid; min-width: 0; }
+.snapshot-summary strong,
+.snapshot-summary small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snapshot-summary strong { color: var(--text); font-size: 10px; }
+.snapshot-summary small { color: var(--text-faint); font-size: 9px; }
+.snapshot-restore { display: grid; gap: 5px; padding-left: 32px; }
+.snapshot-restore label { color: var(--warning); font-size: 8px; }
+.snapshot-restore > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.snapshot-restore input { min-width: 0; height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; outline: 0; background: var(--bg); color: var(--text); font-size: 9px; }
+.snapshot-restore input:focus { border-color: rgb(239 196 110 / 45%); }
+.snapshot-restore-button { border: 1px solid rgb(255 140 154 / 24%); border-radius: 8px; padding: 0 10px; background: var(--danger-soft); color: var(--danger); font-size: 9px; }
+.settings-empty { grid-column: 1 / -1; margin: 0; padding: 20px; color: var(--text-faint); font-size: 10px; text-align: center; }
+.settings-feedback { display: flex; align-items: center; gap: 6px; margin: 0; border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; color: var(--text-muted); font-size: 10px; }
+.settings-feedback a { margin-left: auto; color: var(--accent); }
+.settings-feedback--success { color: var(--success); }
+.settings-feedback--error { border-color: rgb(255 140 154 / 24%); background: var(--danger-soft); color: var(--danger); }
+
+@media (max-width: 820px) {
+  .managed-tool-grid { grid-template-columns: 1fr; }
+  .settings-operation-section > header { align-items: flex-start; flex-direction: column; }
+  .snapshot-restore { padding-left: 0; }
+  .snapshot-restore > div { grid-template-columns: 1fr; }
+  .snapshot-restore-button { min-height: 34px; }
+}
