@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.identity import new_id
 
 from .models import UserPreferences, UserPreferencesUpdate
@@ -15,7 +15,7 @@ class PreferencesConflictError(RuntimeError):
 
 
 class PreferencesRepository:
-    def __init__(self, database: V3Database) -> None:
+    def __init__(self, database: WorkspaceDatabase) -> None:
         self.database = database
 
     def get(self) -> UserPreferences:

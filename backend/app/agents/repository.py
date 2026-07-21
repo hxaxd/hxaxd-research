@@ -64,7 +64,7 @@ class SqliteAgentRunRepository:
 
     def initialize_schema(self) -> None:
         if not self.database_path.is_file():
-            raise RuntimeError("initialize the v3 database baseline before agent repositories")
+            raise RuntimeError("initialize the workspace database before agent repositories")
         with self._connection() as connection:
             for table, required in REQUIRED_TABLE_COLUMNS.items():
                 existing = {
@@ -73,7 +73,7 @@ class SqliteAgentRunRepository:
                 }
                 if not required.issubset(existing):
                     raise RuntimeError(
-                        f"v3 baseline table {table} does not match the agent runtime contract"
+                        f"workspace table {table} does not match the agent runtime contract"
                     )
 
     def create(self, request: AgentRunCreate) -> AgentRun:

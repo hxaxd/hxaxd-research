@@ -4,8 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.catalog.api import get_v3_database
-from app.platform.db import V3Database
+from app.catalog.api import get_workspace_database
+from app.platform.db import WorkspaceDatabase
 
 from .commands import ScreeningCommands
 from .domain import CandidateState, ScreeningConflictError, ScreeningNotFoundError
@@ -25,11 +25,15 @@ from .queries import ScreeningQueries
 router = APIRouter(tags=["screening"])
 
 
-def get_queries(database: Annotated[V3Database, Depends(get_v3_database)]) -> ScreeningQueries:
+def get_queries(
+    database: Annotated[WorkspaceDatabase, Depends(get_workspace_database)],
+) -> ScreeningQueries:
     return ScreeningQueries(database)
 
 
-def get_commands(database: Annotated[V3Database, Depends(get_v3_database)]) -> ScreeningCommands:
+def get_commands(
+    database: Annotated[WorkspaceDatabase, Depends(get_workspace_database)],
+) -> ScreeningCommands:
     return ScreeningCommands(database)
 
 
@@ -80,9 +84,7 @@ def list_project_works(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ProjectWorkView]:
     try:
-        return queries.list_project_works(
-            project_id, status=status, limit=limit, offset=offset
-        )
+        return queries.list_project_works(project_id, status=status, limit=limit, offset=offset)
     except ScreeningNotFoundError as error:
         _raise_http(error)
 
@@ -102,9 +104,7 @@ def decide_candidates(
         _raise_http(error)
 
 
-@router.patch(
-    "/projects/{project_id}/works/{work_id}", response_model=ProjectWorkView
-)
+@router.patch("/projects/{project_id}/works/{work_id}", response_model=ProjectWorkView)
 def decide_project_work(
     project_id: str,
     work_id: str,
@@ -126,16 +126,12 @@ def list_candidates(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[CandidateView]:
     try:
-        return queries.list_candidates(
-            project_id, state=state, limit=limit, offset=offset
-        )
+        return queries.list_candidates(project_id, state=state, limit=limit, offset=offset)
     except ScreeningNotFoundError as error:
         _raise_http(error)
 
 
-@router.post(
-    "/projects/{project_id}/candidates", response_model=CandidateView, status_code=201
-)
+@router.post("/projects/{project_id}/candidates", response_model=CandidateView, status_code=201)
 def stage_candidate(
     project_id: str,
     payload: CandidateCreate,

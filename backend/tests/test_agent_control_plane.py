@@ -46,7 +46,7 @@ from app.jobs import (
     JobWorker,
     SqliteJobRepository,
 )
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.platform.processes import (
     ExecutableIdentity,
     ExecutableRegistry,
@@ -143,7 +143,7 @@ def test_codex_mcp_events_split_public_status_from_internal_audit() -> None:
 
 def _supervisor(tmp_path, runtime):
     database_path = tmp_path / "agents.sqlite3"
-    V3Database(database_path).initialize()
+    WorkspaceDatabase(database_path).initialize()
     repository = SqliteAgentRunRepository(database_path)
     repository.initialize_schema()
     supervisor = AgentSupervisor(
@@ -192,7 +192,7 @@ def test_supervisor_persists_runtime_events_and_approval(tmp_path):
 
 def test_supervisor_revokes_run_capability_after_execution(tmp_path):
     database_path = tmp_path / "agents.sqlite3"
-    V3Database(database_path).initialize()
+    WorkspaceDatabase(database_path).initialize()
     repository = SqliteAgentRunRepository(database_path)
     repository.initialize_schema()
     revoked = []
@@ -250,7 +250,7 @@ def test_cancel_resolves_pending_approval_and_finishes_run(tmp_path):
 
 def test_restart_reconciles_agent_and_recovered_job_then_allows_new_thread(tmp_path):
     database_path = tmp_path / "agents.sqlite3"
-    V3Database(database_path).initialize()
+    WorkspaceDatabase(database_path).initialize()
     repository = SqliteAgentRunRepository(database_path)
     repository.initialize_schema()
     supervisor = AgentSupervisor(

@@ -122,11 +122,14 @@ export function WorkspacePreferencesSettings() {
 
 function ReaderFields({ value, onChange }: { value: ReaderPreferences; onChange: (value: ReaderPreferences) => void }) {
   return <fieldset><legend>阅读排版与默认入口</legend><div className="preferences-fields">
+    <Select label="目标语言" value={value.target_language} onChange={(target_language) => onChange({ ...value, target_language })} options={[["zh-CN","简体中文"],["zh-TW","繁体中文"],["en","English"]]} />
+    <Select label="默认语言视图" value={value.default_mode} onChange={(default_mode) => onChange({ ...value, default_mode: default_mode as ReaderPreferences["default_mode"] })} options={[["source","原文"],["bilingual","双语"],["translation","译文"]]} />
     <Select label="默认面板" value={value.default_panel} onChange={(default_panel) => onChange({ ...value, default_panel: default_panel as ReaderPreferences["default_panel"] })} options={[['structured','结构阅读'],['pdf','PDF 版面'],['split','分屏']]} />
     <Select label="字体" value={value.font_family} onChange={(font_family) => onChange({ ...value, font_family: font_family as ReaderPreferences["font_family"] })} options={[['serif','衬线'],['sans','无衬线'],['system','系统字体']]} />
     <Select label="字号" value={value.font_size} onChange={(font_size) => onChange({ ...value, font_size: font_size as ReaderPreferences["font_size"] })} options={[['small','紧凑'],['medium','标准'],['large','大字']]} />
     <Select label="行距" value={value.line_height} onChange={(line_height) => onChange({ ...value, line_height: line_height as ReaderPreferences["line_height"] })} options={[['compact','紧凑'],['standard','标准'],['relaxed','舒展']]} />
     <Select label="内容宽度" value={value.measure} onChange={(measure) => onChange({ ...value, measure: measure as ReaderPreferences["measure"] })} options={[['focused','专注'],['balanced','均衡'],['wide','宽屏']]} />
+    <Select label="块间距" value={value.density} onChange={(density) => onChange({ ...value, density: density as ReaderPreferences["density"] })} options={[["compact","紧密"],["comfortable","舒展"]]} />
     <Select label="阅读流" value={value.flow} onChange={(flow) => onChange({ ...value, flow: flow as ReaderPreferences["flow"] })} options={[['continuous','连续滚动'],['paged','分页吸附']]} />
     <Select label="分栏" value={value.columns} onChange={(columns) => onChange({ ...value, columns: columns as ReaderPreferences["columns"] })} options={[['auto','自动'],['single','单栏'],['double','双栏']]} />
     <Select label="阅读配色" value={value.theme} onChange={(theme) => onChange({ ...value, theme: theme as ReaderPreferences["theme"] })} options={[['dark','深色'],['light','浅色'],['sepia','柔和棕']]} />

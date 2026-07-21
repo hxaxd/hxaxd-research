@@ -5,7 +5,7 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 from .domain import ChangeSetConflictError, ChangeSetNotFoundError
 from .models import (
@@ -32,7 +32,7 @@ def _json(value) -> str:
 
 
 class ChangeSetRepository:
-    def __init__(self, database: V3Database) -> None:
+    def __init__(self, database: WorkspaceDatabase) -> None:
         self.database = database
 
     def create(
@@ -263,6 +263,33 @@ class ChangeSetRepository:
             if cursor.rowcount != 1:
                 raise ChangeSetNotFoundError("change item does not exist")
 
+    def reject_unselected(self, change_set_id: str, *, reviewed_by: str) -> int:
+        """Make applying a selection terminal and auditable for every omitted item."""
+
+        now = _now()
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE change_items
+                SET status = 'rejected', reviewed_at = ?,
+                    error_code = NULL, error_message = NULL
+                WHERE change_set_id = ? AND status = 'proposed'
+                """,
+                (now, change_set_id),
+            )
+            if cursor.rowcount:
+                self._audit(
+                    connection,
+                    now=now,
+                    actor_type="user",
+                    actor_id=reviewed_by,
+                    action="changes.unselected_rejected",
+                    entity_type="change_set",
+                    entity_id=change_set_id,
+                    metadata={"count": cursor.rowcount},
+                )
+            return cursor.rowcount
+
     def finish_apply(self, change_set_id: str, status: ChangeSetStatus) -> ChangeSetView:
         now = _now()
         with self.database.transaction() as connection:
@@ -305,8 +332,15 @@ class ChangeSetRepository:
             ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                _id(), now, actor_type, actor_id, action, entity_type, entity_id,
-                correlation_id, _json(metadata),
+                _id(),
+                now,
+                actor_type,
+                actor_id,
+                action,
+                entity_type,
+                entity_id,
+                correlation_id,
+                _json(metadata),
             ),
         )
 
@@ -348,9 +382,7 @@ class ChangeSetRepository:
                     "payload": json.loads(item["payload_json"]),
                     "evidence": json.loads(item["evidence_json"]),
                     "result": (
-                        json.loads(item["result_json"])
-                        if item["result_json"] is not None
-                        else None
+                        json.loads(item["result_json"]) if item["result_json"] is not None else None
                     ),
                 }
             )

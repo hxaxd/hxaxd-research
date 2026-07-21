@@ -20,7 +20,7 @@ from app.integrations.zotero.mapping import (
     zotero_item_to_draft,
 )
 from app.integrations.zotero.models import CreatorKind
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 
 def test_zotero_mapping_preserves_people_organizations_identifiers_and_raw_fields():
@@ -124,7 +124,7 @@ def test_create_export_removes_server_owned_fields_but_keeps_unknown_data():
 
 
 def test_v3_catalog_mapping_round_trips_deterministic_metadata(tmp_path):
-    database = V3Database(tmp_path / "research.sqlite3")
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
     database.initialize()
     work = CatalogCommands(database).create_work(
         CatalogItemDraft(
@@ -142,9 +142,7 @@ def test_v3_catalog_mapping_round_trips_deterministic_metadata(tmp_path):
                     raw_name="Ada Lovelace",
                 )
             ],
-            identifiers=[
-                IdentifierInput(scheme="doi", value="10.1000/catalog", is_primary=True)
-            ],
+            identifiers=[IdentifierInput(scheme="doi", value="10.1000/catalog", is_primary=True)],
             links=[LinkInput(relation_type="paper", url="https://example.test/paper")],
             tags=[TagInput(name="agent", kind="automatic")],
         )
@@ -169,7 +167,7 @@ def test_v3_catalog_mapping_round_trips_deterministic_metadata(tmp_path):
 
 
 def test_catalog_append_keeps_old_version_and_rejects_cross_work_identity(tmp_path):
-    database = V3Database(tmp_path / "research.sqlite3")
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
     database.initialize()
     commands = CatalogCommands(database)
     first = commands.create_work(

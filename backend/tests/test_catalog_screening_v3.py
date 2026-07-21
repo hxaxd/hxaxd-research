@@ -4,18 +4,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.catalog.api import router as catalog_router
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.screening.api import router as screening_router
 from app.screening.commands import ScreeningCommands
 from app.screening.domain import ScreeningConflictError
 from app.screening.models import ProjectWorkDecision
 
 
-def _client(tmp_path) -> tuple[TestClient, V3Database]:
-    database = V3Database(tmp_path / "research.sqlite3")
+def _client(tmp_path) -> tuple[TestClient, WorkspaceDatabase]:
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
     database.initialize()
     app = FastAPI()
-    app.state.v3_database = database
+    app.state.workspace_database = database
     app.include_router(catalog_router, prefix="/api")
     app.include_router(screening_router, prefix="/api")
     return TestClient(app), database
@@ -63,9 +63,7 @@ def test_candidate_is_staged_then_promoted_and_explicitly_decided(tmp_path):
         "/api/projects", json={"name": "Agent Research", "description": "scope"}
     ).json()
 
-    staged = client.post(
-        f"/api/projects/{project['id']}/candidates", json=CANDIDATE
-    )
+    staged = client.post(f"/api/projects/{project['id']}/candidates", json=CANDIDATE)
     assert staged.status_code == 201, staged.text
     candidate = staged.json()
     assert candidate["state"] == "staged"
@@ -127,15 +125,11 @@ def test_identifier_match_is_visible_before_candidate_promotion(tmp_path):
     ).json()
 
     other_project = client.post("/api/projects", json={"name": "Two"}).json()
-    matched = client.post(
-        f"/api/projects/{other_project['id']}/candidates", json=CANDIDATE
-    )
+    matched = client.post(f"/api/projects/{other_project['id']}/candidates", json=CANDIDATE)
     assert matched.status_code == 201, matched.text
     payload = matched.json()
     assert payload["state"] == "matched"
     assert payload["matched_work_id"] == promoted["work_id"]
     assert payload["matched_item"]["id"] == promoted["preferred_item_id"]
     assert payload["matched_item"]["title"] == CANDIDATE["item"]["title"]
-    assert payload["matched_item"]["identifiers"][0]["normalized_value"] == (
-        "10.0000/candidate"
-    )
+    assert payload["matched_item"]["identifiers"][0]["normalized_value"] == ("10.0000/candidate")

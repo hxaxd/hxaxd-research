@@ -70,14 +70,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title="Hxaxd Literature Workspace API",
-        description=(
-            "文献元数据、候选判断、附件、持久任务、内嵌代理与集成的唯一服务接口。"
-        ),
+        description=("文献元数据、候选判断、附件、持久任务、内嵌代理与集成的唯一服务接口。"),
         version="4.0.0",
         lifespan=lifespan,
     )
     application.state.context = context
-    application.state.v3_database = context.database
+    application.state.workspace_database = context.database
     application.state.zotero_service = context.zotero_service
 
     application.add_middleware(

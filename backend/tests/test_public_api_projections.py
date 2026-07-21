@@ -9,7 +9,7 @@ from app.agents.router import create_agent_router
 from app.agents.runtime import RuntimeOutcome, RuntimeOutcomeStatus
 from app.jobs import JobCreate, JobScheduler, SqliteJobRepository
 from app.jobs.router import create_job_router
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.platform.public_projection import sanitize_public_text
 
 
@@ -38,7 +38,7 @@ def test_public_text_redacts_forward_slash_windows_paths() -> None:
 
 def _job_repository(tmp_path) -> SqliteJobRepository:
     database_path = tmp_path / "public-jobs.sqlite3"
-    V3Database(database_path).initialize()
+    WorkspaceDatabase(database_path).initialize()
     repository = SqliteJobRepository(database_path)
     repository.initialize_schema()
     return repository
@@ -135,15 +135,10 @@ def test_job_api_projects_state_and_redacts_event_payloads(tmp_path) -> None:
     assert secret in internal.input["url"]
     assert secret in internal.result["download_url"]
     internal_download = next(
-        event
-        for event in repository.list_events(job.id)
-        if event.event_type == "download.started"
+        event for event in repository.list_events(job.id) if event.event_type == "download.started"
     )
     assert secret in internal_download.payload["url"]
-    assert any(
-        event.event_type == "extractor.stdout"
-        for event in repository.list_events(job.id)
-    )
+    assert any(event.event_type == "extractor.stdout" for event in repository.list_events(job.id))
 
     contract = client.get("/openapi.json").json()
     properties = contract["components"]["schemas"]["PublicJob"]["properties"]
@@ -177,9 +172,7 @@ def test_public_job_error_removes_secrets_urls_and_local_paths(tmp_path) -> None
     )
     scheduler = JobScheduler(repository)
     app = FastAPI()
-    app.include_router(
-        create_job_router(lambda: scheduler, lambda: repository), prefix="/api"
-    )
+    app.include_router(create_job_router(lambda: scheduler, lambda: repository), prefix="/api")
     client = TestClient(app)
 
     response = client.get(f"/api/jobs/{job.id}")
@@ -196,7 +189,7 @@ def test_public_job_error_removes_secrets_urls_and_local_paths(tmp_path) -> None
 
 def test_agent_api_redacts_runtime_ids_approval_details_and_public_events(tmp_path) -> None:
     database_path = tmp_path / "public-agents.sqlite3"
-    V3Database(database_path).initialize()
+    WorkspaceDatabase(database_path).initialize()
     repository = SqliteAgentRunRepository(database_path)
     repository.initialize_schema()
     supervisor = AgentSupervisor(
@@ -293,9 +286,7 @@ def test_agent_api_redacts_runtime_ids_approval_details_and_public_events(tmp_pa
     assert internal_run.provider_thread_id == "provider-thread-private"
     assert secret in internal_run.error_message
     assert secret in repository.list_events(run.id)[1].payload["url"]
-    assert repository.get_approval(approval.id).provider_request_id == (
-        "provider-approval-private"
-    )
+    assert repository.get_approval(approval.id).provider_request_id == ("provider-approval-private")
 
 
 def test_openapi_uses_public_job_projection_for_every_job_response(client) -> None:
@@ -313,14 +304,12 @@ def test_openapi_uses_public_job_projection_for_every_job_response(client) -> No
         ("/api/snapshots/{filename}/restore", "post", "202"),
     )
     for path, method, status in single_job_responses:
-        schema = paths[path][method]["responses"][status]["content"][
-            "application/json"
-        ]["schema"]
+        schema = paths[path][method]["responses"][status]["content"]["application/json"]["schema"]
         assert schema == {"$ref": "#/components/schemas/PublicJob"}
 
-    list_schema = paths["/api/jobs"]["get"]["responses"]["200"]["content"][
-        "application/json"
-    ]["schema"]
+    list_schema = paths["/api/jobs"]["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]
     assert list_schema["items"] == {"$ref": "#/components/schemas/PublicJob"}
 
     public_properties = contract["components"]["schemas"]["PublicJob"]["properties"]

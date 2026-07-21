@@ -15,7 +15,7 @@ from app.platform.activation import (
     activate_v2_database,
     default_activation_journal,
 )
-from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
 
 IMPORT_NAMESPACE = uuid.UUID("d84a7589-2022-48a6-ad77-dfc6605931e0")
 
@@ -112,7 +112,7 @@ def import_v2_to_v3(
         raise V2ImportError("target database already exists")
     resolved_data_dir = (data_dir or source_database.parent).resolve()
 
-    database = V3Database(target_database)
+    database = WorkspaceDatabase(target_database)
     database.initialize()
     source = _read_only(source_database)
     try:
@@ -683,7 +683,7 @@ def _copy_v2(source: sqlite3.Connection, target: sqlite3.Connection) -> ImportCo
 
 def _validate_import(
     source: sqlite3.Connection,
-    database: V3Database,
+    database: WorkspaceDatabase,
     data_dir: Path,
     *,
     verify_files: bool,

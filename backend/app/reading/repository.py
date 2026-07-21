@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.identity import new_id
 
 from .models import (
@@ -28,7 +28,7 @@ class ReadingConflictError(RuntimeError):
 
 
 class ReadingRepository:
-    def __init__(self, database: V3Database) -> None:
+    def __init__(self, database: WorkspaceDatabase) -> None:
         self.database = database
 
     def list_annotations(self, project_id: str, item_id: str) -> list[Annotation]:
@@ -93,9 +93,7 @@ class ReadingRepository:
             )
         return result
 
-    def update_annotation(
-        self, annotation_id: str, payload: AnnotationUpdate
-    ) -> Annotation:
+    def update_annotation(self, annotation_id: str, payload: AnnotationUpdate) -> Annotation:
         now = _now()
         with self.database.transaction() as connection:
             row = connection.execute(
@@ -242,13 +240,9 @@ class ReadingRepository:
                 for bookmark in state.bookmarks
             ):
                 return state
-            bookmark = ReadingBookmark(
-                id=new_id(), created_at=_now(), **payload.model_dump()
-            )
+            bookmark = ReadingBookmark(id=new_id(), created_at=_now(), **payload.model_dump())
             bookmarks = [*state.bookmarks, bookmark]
-            result = self._write_bookmarks(
-                connection, project_id, item_id, row, bookmarks
-            )
+            result = self._write_bookmarks(connection, project_id, item_id, row, bookmarks)
             self._audit(
                 connection,
                 action="reading_bookmark.created",
@@ -259,9 +253,7 @@ class ReadingRepository:
             )
         return result
 
-    def delete_bookmark(
-        self, project_id: str, item_id: str, bookmark_id: str
-    ) -> ReadingState:
+    def delete_bookmark(self, project_id: str, item_id: str, bookmark_id: str) -> ReadingState:
         with self.database.transaction() as connection:
             self._require_scope(connection, project_id, item_id)
             row = connection.execute(
@@ -276,9 +268,7 @@ class ReadingRepository:
             if removed is None:
                 raise ReadingNotFoundError("书签不存在")
             bookmarks = [bookmark for bookmark in state.bookmarks if bookmark.id != bookmark_id]
-            result = self._write_bookmarks(
-                connection, project_id, item_id, row, bookmarks
-            )
+            result = self._write_bookmarks(connection, project_id, item_id, row, bookmarks)
             self._audit(
                 connection,
                 action="reading_bookmark.deleted",
@@ -290,9 +280,7 @@ class ReadingRepository:
         return result
 
     @staticmethod
-    def _require_scope(
-        connection: sqlite3.Connection, project_id: str, item_id: str
-    ) -> None:
+    def _require_scope(connection: sqlite3.Connection, project_id: str, item_id: str) -> None:
         row = connection.execute(
             """
             SELECT 1 FROM project_works pw
@@ -439,12 +427,8 @@ class ReadingRepository:
         return result
 
     @staticmethod
-    def _replace_tags(
-        connection: sqlite3.Connection, annotation_id: str, tags: list[str]
-    ) -> None:
-        connection.execute(
-            "DELETE FROM annotation_tags WHERE annotation_id = ?", (annotation_id,)
-        )
+    def _replace_tags(connection: sqlite3.Connection, annotation_id: str, tags: list[str]) -> None:
+        connection.execute("DELETE FROM annotation_tags WHERE annotation_id = ?", (annotation_id,))
         connection.executemany(
             "INSERT INTO annotation_tags(annotation_id, tag) VALUES(?, ?)",
             [(annotation_id, tag) for tag in tags],
@@ -458,9 +442,7 @@ class ReadingRepository:
         return Annotation.model_validate(values)
 
     @staticmethod
-    def _reading_state(
-        row: sqlite3.Row | None, project_id: str, item_id: str
-    ) -> ReadingState:
+    def _reading_state(row: sqlite3.Row | None, project_id: str, item_id: str) -> ReadingState:
         if row is None:
             return ReadingState(project_id=project_id, item_id=item_id)
         return ReadingState(

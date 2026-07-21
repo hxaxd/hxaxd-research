@@ -1,8 +1,8 @@
 from .database import (
     DatabaseKind,
     DatabaseState,
-    V3Database,
+    WorkspaceDatabase,
     inspect_database,
 )
 
-__all__ = ["DatabaseKind", "DatabaseState", "V3Database", "inspect_database"]
+__all__ = ["DatabaseKind", "DatabaseState", "WorkspaceDatabase", "inspect_database"]

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from app.catalog.commands import CatalogCommands
 from app.catalog.domain import CatalogConflictError, normalize_identifier
 from app.catalog.models import BibliographicItemDraft
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 from .domain import ScreeningConflictError, ScreeningNotFoundError
 from .models import (
@@ -40,7 +40,7 @@ def _json(value) -> str:
 
 
 class ScreeningCommands:
-    def __init__(self, database: V3Database):
+    def __init__(self, database: WorkspaceDatabase):
         self.database = database
         self.queries = ScreeningQueries(database)
         self.catalog = CatalogCommands(database)
@@ -197,9 +197,12 @@ class ScreeningCommands:
             else:
                 work_id = payload.matched_work_id or row["matched_work_id"]
                 if work_id is not None:
-                    if connection.execute(
-                        "SELECT 1 FROM works WHERE id = ?", (work_id,)
-                    ).fetchone() is None:
+                    if (
+                        connection.execute(
+                            "SELECT 1 FROM works WHERE id = ?", (work_id,)
+                        ).fetchone()
+                        is None
+                    ):
                         raise ScreeningNotFoundError("matched work does not exist")
                 else:
                     draft = BibliographicItemDraft.model_validate(
@@ -278,9 +281,12 @@ class ScreeningCommands:
                     raise ScreeningConflictError("candidate has already been resolved")
                 work_id = decision.matched_work_id or row["matched_work_id"]
                 if work_id is not None:
-                    if connection.execute(
-                        "SELECT 1 FROM works WHERE id = ?", (work_id,)
-                    ).fetchone() is None:
+                    if (
+                        connection.execute(
+                            "SELECT 1 FROM works WHERE id = ?", (work_id,)
+                        ).fetchone()
+                        is None
+                    ):
                         raise ScreeningNotFoundError("matched work does not exist")
                 else:
                     draft = BibliographicItemDraft.model_validate(
@@ -522,18 +528,14 @@ class ScreeningCommands:
                     "only an explicit user action may change a screening decision"
                 )
             scalar_changes = {
-                key: changes[key]
-                for key in ("status", "summary", "relevance")
-                if key in changes
+                key: changes[key] for key in ("status", "summary", "relevance") if key in changes
             }
             if "status" in scalar_changes:
                 scalar_changes["decided_at"] = (
                     now if scalar_changes["status"] != "discovered" else None
                 )
                 scalar_changes["decided_by"] = (
-                    actor_id or "local-user"
-                    if scalar_changes["status"] != "discovered"
-                    else None
+                    actor_id or "local-user" if scalar_changes["status"] != "discovered" else None
                 )
             if scalar_changes:
                 assignments = ", ".join(f"{key} = ?" for key in scalar_changes)
@@ -586,9 +588,10 @@ class ScreeningCommands:
 
     @staticmethod
     def _require_project(connection: sqlite3.Connection, project_id: str) -> None:
-        if connection.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,)
-        ).fetchone() is None:
+        if (
+            connection.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone()
+            is None
+        ):
             raise ScreeningNotFoundError("project does not exist")
 
     @staticmethod

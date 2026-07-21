@@ -16,9 +16,15 @@ from app.documents.models import (
     ExtractedDocument,
     GlossaryOutputItem,
     SemanticRole,
+    TranslationInputBlock,
     TranslationOutputItem,
 )
 from app.documents.ocr import parse_rapidocr_output
+from app.documents.service import (
+    _chapter_batches,
+    _protect_blocks,
+    _validate_translation_output,
+)
 from app.documents.tex import (
     TexStructureError,
     TexStructureExtractor,
@@ -29,6 +35,7 @@ from app.documents.translation import (
     TranslationCapacity,
     TranslationProviderResponse,
     _consume_streaming_response,
+    estimate_translation_output_tokens,
 )
 from app.jobs.models import JobCreate, JobStatus
 
@@ -63,6 +70,57 @@ The results improve reading quality.
 
 def _box(x: float, y: float, x2: float, y2: float) -> dict:
     return {"x": x, "y": y, "x2": x2, "y2": y2}
+
+
+def test_translation_budget_accounts_for_output_and_rejects_corrupted_blocks() -> None:
+    blocks = [
+        TranslationInputBlock(
+            id=f"block-{index}",
+            kind=BlockKind.PARAGRAPH,
+            source_text=("A" * 280 if index else "Keep $x_i$ and citation [1]."),
+            section_path=["Methods"],
+            page=index + 1,
+        )
+        for index in range(3)
+    ]
+    capacity = TranslationCapacity(
+        max_input_characters=10_000,
+        max_output_tokens=350,
+    )
+    assert estimate_translation_output_tokens(blocks) > capacity.max_output_tokens
+    assert [len(batch) for batch in _chapter_batches(blocks, capacity)] == [1, 1, 1]
+
+    protected, placeholders = _protect_blocks(blocks[:1])
+    duplicated = DocumentTranslationOutput(
+        translations=[
+            TranslationOutputItem(
+                id=protected[0].id,
+                translated_text=protected[0].source_text,
+                semantic_role=SemanticRole.METHOD,
+            ),
+            TranslationOutputItem(
+                id=protected[0].id,
+                translated_text=protected[0].source_text,
+                semantic_role=SemanticRole.METHOD,
+            ),
+        ]
+    )
+    with pytest.raises(DocumentTranslationError) as duplicate_error:
+        _validate_translation_output(protected, duplicated, placeholders)
+    assert duplicate_error.value.code == "invalid_translation_output"
+
+    damaged = DocumentTranslationOutput(
+        translations=[
+            TranslationOutputItem(
+                id=protected[0].id,
+                translated_text="占位符已经丢失",
+                semantic_role=SemanticRole.METHOD,
+            )
+        ]
+    )
+    with pytest.raises(DocumentTranslationError) as placeholder_error:
+        _validate_translation_output(protected, damaged, placeholders)
+    assert placeholder_error.value.code == "translation_placeholder_damaged"
 
 
 def test_tex_structure_drives_blocks_and_reuses_pdf_anchors() -> None:
@@ -294,44 +352,46 @@ def test_babeldoc_il_parser_uses_render_order_and_available_specialized_labels()
     formula["pdf_paragraph_composition"] = [{"pdf_formula": {"unicode": "E = mc2"}}]
     payload = {
         "total_pages": 1,
-        "page": [{
-            "page_number": 0,
-            "mediabox": {"box": _box(0, 0, 595, 842)},
-            "page_layout": layouts,
-            "pdf_paragraph": [
-                right,
-                _paragraph(
-                    "Two-column evidence",
-                    label="title",
-                    layout_id=1,
-                    order=1,
-                    box=_box(40, 740, 550, 780),
-                ),
-                left,
-                formula,
-                _paragraph(
-                    "Metric 0.98",
-                    label="fallback_line",
-                    layout_id=3,
-                    order=5,
-                    box=_box(50, 45, 250, 70),
-                ),
-                _paragraph(
-                    "Figure 1",
-                    label="figure",
-                    layout_id=4,
-                    order=6,
-                    box=_box(330, 45, 540, 70),
-                ),
-                _paragraph(
-                    "Footnote evidence",
-                    label="footnote",
-                    layout_id=1,
-                    order=7,
-                    box=_box(40, 10, 270, 25),
-                ),
-            ],
-        }],
+        "page": [
+            {
+                "page_number": 0,
+                "mediabox": {"box": _box(0, 0, 595, 842)},
+                "page_layout": layouts,
+                "pdf_paragraph": [
+                    right,
+                    _paragraph(
+                        "Two-column evidence",
+                        label="title",
+                        layout_id=1,
+                        order=1,
+                        box=_box(40, 740, 550, 780),
+                    ),
+                    left,
+                    formula,
+                    _paragraph(
+                        "Metric 0.98",
+                        label="fallback_line",
+                        layout_id=3,
+                        order=5,
+                        box=_box(50, 45, 250, 70),
+                    ),
+                    _paragraph(
+                        "Figure 1",
+                        label="figure",
+                        layout_id=4,
+                        order=6,
+                        box=_box(330, 45, 540, 70),
+                    ),
+                    _paragraph(
+                        "Footnote evidence",
+                        label="footnote",
+                        layout_id=1,
+                        order=7,
+                        box=_box(40, 10, 270, 25),
+                    ),
+                ],
+            }
+        ],
     }
 
     document = parse_babeldoc_il(payload)
@@ -407,9 +467,7 @@ def test_streaming_translation_response_is_one_interruptible_document_response()
         b'"finish_reason":"stop"}]}\n\n'
         b"data: [DONE]\n\n"
     )
-    content, finish_reason, request_id, usage = _consume_streaming_response(
-        response, lambda: False
-    )
+    content, finish_reason, request_id, usage = _consume_streaming_response(response, lambda: False)
     assert content == '{"translations":[]}'
     assert finish_reason == "stop"
     assert request_id is None
@@ -470,9 +528,7 @@ class _FakeProvider:
     name = "deepseek"
     model = "deepseek-v4-flash"
     ready = True
-    capacity = TranslationCapacity(
-        max_input_characters=1_000_000, max_output_tokens=384_000
-    )
+    capacity = TranslationCapacity(max_input_characters=1_000_000, max_output_tokens=384_000)
 
     def __init__(self) -> None:
         self.calls: list[list] = []
@@ -547,9 +603,7 @@ class _CancelableProvider(_FakeProvider):
         deadline = monotonic() + 3
         while monotonic() < deadline:
             if cancellation():
-                raise DocumentTranslationError(
-                    "canceled", "整篇翻译已取消", retryable=True
-                )
+                raise DocumentTranslationError("canceled", "整篇翻译已取消", retryable=True)
             sleep(0.01)
         raise AssertionError("translation cancellation did not arrive")
 
@@ -674,9 +728,7 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
     context.documents.extractor = extractor
     context.documents.translation_provider = provider
 
-    launched = client.post(
-        f"/api/attachments/{attachment_id}/documents", json={"ocr_mode": "auto"}
-    )
+    launched = client.post(f"/api/attachments/{attachment_id}/documents", json={"ocr_mode": "auto"})
     assert launched.status_code == 202, launched.text
     extraction_job = launched.json()
     assert _wait_for_job(client, extraction_job["id"])["status"] == "succeeded"
@@ -748,9 +800,7 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
         **current_preferences["translation"],
         "retranslate_scope": "document",
     }
-    saved_preferences = client.put(
-        "/api/user-preferences", json=full_retranslation_preferences
-    )
+    saved_preferences = client.put("/api/user-preferences", json=full_retranslation_preferences)
     assert saved_preferences.status_code == 200, saved_preferences.text
 
     forced_provider = _BlockingProvider()

@@ -55,7 +55,7 @@ class SqliteJobRepository:
 
     def initialize_schema(self) -> None:
         if not self.database_path.is_file():
-            raise JobSchemaError("initialize the v3 database baseline before jobs")
+            raise JobSchemaError("initialize the workspace database before jobs")
         with self._connection() as connection:
             for table, required in REQUIRED_TABLE_COLUMNS.items():
                 existing = {
@@ -64,7 +64,7 @@ class SqliteJobRepository:
                 }
                 if not required.issubset(existing):
                     raise JobSchemaError(
-                        f"v3 baseline table {table} does not match the jobs contract"
+                        f"workspace table {table} does not match the jobs contract"
                     )
 
     def enqueue(self, request: JobCreate) -> Job:
@@ -416,9 +416,7 @@ class SqliteJobRepository:
         now = _now()
         with self._transaction(immediate=True) as connection:
             row = self._require_owned(connection, claimed)
-            cancellation_requested = (
-                row["status"] == JobStatus.CANCELLATION_REQUESTED.value
-            )
+            cancellation_requested = row["status"] == JobStatus.CANCELLATION_REQUESTED.value
             cancellation = cancellation_requested and not commit_point_reached
             final_status = JobStatus.CANCELED if cancellation else JobStatus.SUCCEEDED
             attempt_status = (

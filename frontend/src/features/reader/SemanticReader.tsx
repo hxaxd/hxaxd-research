@@ -73,13 +73,16 @@ interface Props {
   itemId: string;
   attachment: Attachment;
   annotationRefreshToken?: number;
+  initialBlockId?: string | null;
+  onReadingLocation?: (blockId: string, page: number | null) => void;
   onOpenPdf: (page: number | null) => void;
 }
 
-export function SemanticReader({ projectId, itemId, attachment, annotationRefreshToken = 0, onOpenPdf }: Props) {
+export function SemanticReader({ projectId, itemId, attachment, annotationRefreshToken = 0, initialBlockId = null, onReadingLocation, onOpenPdf }: Props) {
   const scrollRef = useRef<HTMLElement>(null);
   const saveTimer = useRef<number | null>(null);
   const restoredDocument = useRef<string | null>(null);
+  const restoredDeepLink = useRef<string | null>(null);
   const preferencesApplied = useRef(false);
   const lastSavedPosition = useRef({ blockId: "", progress: -1 });
   const [readerSettings, setReaderSettings] = useState(defaultPreferences);
@@ -175,13 +178,29 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     if (
       !document ||
       blocks.loading ||
-      !blocks.data?.items.length ||
-      !readingState.data ||
-      !readerSettings.restore_position ||
-      restoredDocument.current === document.id
+      !blocks.data?.items.length
     ) {
       return;
     }
+    const deepLink = initialBlockId
+      ? blocks.data.items.find((block) => block.id === initialBlockId)
+      : null;
+    const deepLinkKey = deepLink ? `${document.id}:${deepLink.id}` : null;
+    if (deepLink && restoredDeepLink.current !== deepLinkKey) {
+      restoredDeepLink.current = deepLinkKey;
+      restoredDocument.current = document.id;
+      const frame = window.requestAnimationFrame(() => {
+        globalThis.document
+          .getElementById(`block-${deepLink.id}`)
+          ?.scrollIntoView({ block: "center" });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (
+      !readingState.data ||
+      !readerSettings.restore_position ||
+      restoredDocument.current === document.id
+    ) return;
     restoredDocument.current = document.id;
     const frame = window.requestAnimationFrame(() => {
       const savedBlock = readingState.data?.block_id;
@@ -196,7 +215,7 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [blocks.data, blocks.loading, document, readerSettings.restore_position, readingState.data]);
+  }, [blocks.data, blocks.loading, document, initialBlockId, readerSettings.restore_position, readingState.data]);
 
   useEffect(
     () => () => {
@@ -242,6 +261,8 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   }
 
   function jumpToBlock(blockId: string) {
+    const block = blocks.data?.items.find((candidate) => candidate.id === blockId);
+    onReadingLocation?.(blockId, block?.page_start ?? null);
     globalThis.document
       .getElementById(`block-${blockId}`)
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -314,11 +335,15 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   }
 
   async function savePreferences() {
+    if (!preferences.data) {
+      setActionError("尚未读取到当前设置，请恢复连接后再保存。");
+      return;
+    }
     setActionError(null);
     setNotice(null);
     try {
       const saved = await api.updateUserPreferences({
-        expected_revision: preferences.data?.revision ?? 0,
+        expected_revision: preferences.data.revision,
         reader: { ...readerSettings, default_mode: mode },
         bilingual: preferences.data?.bilingual ?? {
           layout: "side_by_side", highlight_terms: true, synchronize_blocks: true,
@@ -524,7 +549,7 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
         <label><input checked={readerSettings.restore_position} type="checkbox" onChange={(event) => patchSettings({ restore_position: event.target.checked })} />恢复进度</label>
         <label><input checked={readerSettings.large_touch_targets} type="checkbox" onChange={(event) => patchSettings({ large_touch_targets: event.target.checked })} />大触控区</label>
       </div>
-      <button className="settings-save-button" disabled={preferences.loading} type="button" onClick={() => void savePreferences()}><Icon name="check" size={15} />保存为所有设备默认</button>
+      <button className="settings-save-button" disabled={preferences.loading || !preferences.data} type="button" onClick={() => void savePreferences()}><Icon name="check" size={15} />保存为所有设备默认</button>
     </section> : null}
     {notice ? <div className="semantic-job-message semantic-job-message--success">{notice}</div> : null}
     {actionError || activeJob?.error_message ? <div className="semantic-job-message semantic-job-message--error">{actionError || activeJob?.error_message}</div> : isRunning ? <div className="semantic-job-message"><Icon name="activity" size={14} />后台任务进行中；可以继续阅读现有内容。</div> : null}

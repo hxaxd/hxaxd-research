@@ -5,12 +5,12 @@ from app.library.models import GeneratedAttachment, LanguageMode
 from app.library.repository import AttachmentRepository
 from app.library.service import AttachmentService
 from app.library.storage import AttachmentStorage
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from tests.sample_data import PDF
 
 
-def _service(app_settings) -> tuple[V3Database, AttachmentService]:
-    database = V3Database(app_settings.database_path)
+def _service(app_settings) -> tuple[WorkspaceDatabase, AttachmentService]:
+    database = WorkspaceDatabase(app_settings.database_path)
     database.initialize()
     with database.transaction() as connection:
         connection.execute(
@@ -31,9 +31,7 @@ def _service(app_settings) -> tuple[V3Database, AttachmentService]:
     return database, AttachmentService(AttachmentRepository(database), storage)
 
 
-def test_generated_outputs_are_registered_atomically_and_deduplicate_blobs(
-    app_settings, tmp_path
-):
+def test_generated_outputs_are_registered_atomically_and_deduplicate_blobs(app_settings, tmp_path):
     database, service = _service(app_settings)
     original = tmp_path / "original.pdf"
     translated = tmp_path / "translated.pdf"
@@ -51,12 +49,16 @@ def test_generated_outputs_are_registered_atomically_and_deduplicate_blobs(
     children = service.register_generated_batch(
         "item-1",
         [
-            (translated, GeneratedAttachment(
-                filename="translated.pdf", language_mode=LanguageMode.TRANSLATED
-            )),
-            (bilingual, GeneratedAttachment(
-                filename="bilingual.pdf", language_mode=LanguageMode.BILINGUAL
-            )),
+            (
+                translated,
+                GeneratedAttachment(
+                    filename="translated.pdf", language_mode=LanguageMode.TRANSLATED
+                ),
+            ),
+            (
+                bilingual,
+                GeneratedAttachment(filename="bilingual.pdf", language_mode=LanguageMode.BILINGUAL),
+            ),
         ],
         parent_attachment_id=parent.id,
         job_id=None,

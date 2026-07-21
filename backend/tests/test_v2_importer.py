@@ -9,7 +9,7 @@ import pytest
 
 from app.legacy.v2_importer import migrate_v2_database
 from app.platform.activation import recover_pending_activation
-from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
 from tests.sample_data import PDF
 
 
@@ -231,7 +231,7 @@ def test_v2_is_imported_through_a_validated_shadow_database(tmp_path):
     assert inspect_database(path).kind is DatabaseKind.V4
     assert inspect_database(report.backup_database).kind is DatabaseKind.LEGACY_V2
 
-    database = V3Database(path)
+    database = WorkspaceDatabase(path)
     database.verify()
     with database.read() as connection:
         item = connection.execute("SELECT * FROM bibliographic_items WHERE id='paper-1'").fetchone()

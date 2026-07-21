@@ -17,7 +17,7 @@ from .models import BibliographicDraft
 
 
 class ZoteroDomainPort(Protocol):
-    """Only the public v3 domain operations needed by deterministic synchronization."""
+    """Only public domain operations needed by deterministic synchronization."""
 
     def list_project_items(self, project_id: str) -> list[BibliographicItemView]: ...
 

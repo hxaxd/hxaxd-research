@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 from .domain import CatalogConflictError, CatalogNotFoundError, normalize_identifier
 from .models import (
@@ -27,7 +27,7 @@ def _now() -> str:
 
 
 class CatalogCommands:
-    def __init__(self, database: V3Database):
+    def __init__(self, database: WorkspaceDatabase):
         self.database = database
         self.queries = CatalogQueries(database)
 
@@ -299,9 +299,17 @@ class CatalogCommands:
                         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
-                            _id(), item_id, position, creator.role, creator.creator_type,
-                            creator.given_name, creator.family_name, creator.literal_name,
-                            creator.suffix, creator.orcid, creator.raw_name,
+                            _id(),
+                            item_id,
+                            position,
+                            creator.role,
+                            creator.creator_type,
+                            creator.given_name,
+                            creator.family_name,
+                            creator.literal_name,
+                            creator.suffix,
+                            creator.orcid,
+                            creator.raw_name,
                         ),
                     )
             if "identifiers" in changes:
@@ -348,9 +356,14 @@ class CatalogCommands:
                         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
-                            _id(), item_id, identifier.scheme, identifier.value,
-                            identifier.normalized_value, identifier.version,
-                            int(position == primary_index), int(identifier.is_identity),
+                            _id(),
+                            item_id,
+                            identifier.scheme,
+                            identifier.value,
+                            identifier.normalized_value,
+                            identifier.version,
+                            int(position == primary_index),
+                            int(identifier.is_identity),
                         ),
                     )
             if "links" in changes:
@@ -410,7 +423,12 @@ class CatalogCommands:
                 )
                 """,
                 (
-                    _id(), now, actor_type, actor_id, item_id, correlation_id,
+                    _id(),
+                    now,
+                    actor_type,
+                    actor_id,
+                    item_id,
+                    correlation_id,
                     json.dumps(
                         {key: current[key] for key in scalar_changes},
                         ensure_ascii=False,
@@ -456,9 +474,7 @@ class CatalogCommands:
         )
 
         with self.database.transaction() as connection:
-            work = connection.execute(
-                "SELECT id FROM works WHERE id = ?", (work_id,)
-            ).fetchone()
+            work = connection.execute("SELECT id FROM works WHERE id = ?", (work_id,)).fetchone()
             if work is None:
                 raise CatalogNotFoundError("work does not exist")
             previous = connection.execute(
@@ -489,9 +505,9 @@ class CatalogCommands:
                         f"identifier {normalized.scheme}:{normalized.normalized_value} "
                         "already belongs to another work"
                     )
-                reusable_identifiers[
-                    (normalized.scheme, normalized.normalized_value)
-                ] = str(existing["id"])
+                reusable_identifiers[(normalized.scheme, normalized.normalized_value)] = str(
+                    existing["id"]
+                )
 
             connection.execute(
                 "UPDATE bibliographic_items SET is_preferred_for_work = 0 WHERE work_id = ?",

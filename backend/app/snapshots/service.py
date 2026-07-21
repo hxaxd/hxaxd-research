@@ -19,7 +19,7 @@ from app.jobs.models import (
 from app.jobs.repository import JobConflictError, SqliteJobRepository
 from app.jobs.scheduler import JobExecutionContext, JobRegistry, JobScheduler
 from app.platform import WorkspaceBusyError, WorkspaceMutationGate
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.snapshots.backup import SnapshotWriter
 from app.utils.snapshots.contract import MANIFEST_PATH, SnapshotManifest
 from app.utils.snapshots.errors import SnapshotCancelled, SnapshotError
@@ -49,7 +49,7 @@ class SnapshotService:
     def __init__(
         self,
         settings: Settings,
-        database: V3Database,
+        database: WorkspaceDatabase,
         jobs: SqliteJobRepository,
         scheduler: JobScheduler,
         *,
@@ -220,7 +220,7 @@ class SnapshotService:
             context.emit("snapshot.create.started", {"filename": filename}, "info")
             result = SnapshotWriter(
                 self.settings.data_dir,
-                V3Database(self.settings.database_path),
+                WorkspaceDatabase(self.settings.database_path),
             ).write(
                 target,
                 operation_job_id=context.claimed.job.id,
@@ -307,7 +307,7 @@ class SnapshotService:
 
     @staticmethod
     def _seed_restore_continuity(
-        database: V3Database,
+        database: WorkspaceDatabase,
         claimed: ClaimedJob,
         filename: str,
     ) -> None:
