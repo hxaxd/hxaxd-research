@@ -11,6 +11,22 @@ RESOURCE_PROPOSE_SCOPE = "changes:resource:propose"
 PROJECT_INSIGHTS_PROPOSE_SCOPE = "changes:project-insights:propose"
 ZOTERO_CONFLICT_PROPOSE_SCOPE = "changes:zotero-conflict:propose"
 
+_CAPABILITY_SCOPES = {
+    "catalog_read": READ_SCOPE,
+    "candidate_propose": STAGE_SCOPE,
+    "metadata_propose": METADATA_PROPOSE_SCOPE,
+    "resource_propose": RESOURCE_PROPOSE_SCOPE,
+    "zotero_conflict_propose": ZOTERO_CONFLICT_PROPOSE_SCOPE,
+    "web_search": WEB_SEARCH_SCOPE,
+}
+
+_REQUIRED_CAPABILITIES = {
+    "literature_search": frozenset({"catalog_read", "candidate_propose", "web_search"}),
+    "metadata_enrichment": frozenset({"catalog_read", "metadata_propose"}),
+    "resource_acquisition": frozenset({"catalog_read", "resource_propose"}),
+    "conflict_resolution": frozenset({"catalog_read", "zotero_conflict_propose"}),
+}
+
 
 @dataclass(frozen=True)
 class AgentTaskPolicy:
@@ -108,6 +124,23 @@ class AgentTaskPolicyRegistry:
                 ("get_zotero_transfer_preview", "propose_zotero_conflict_resolution")
             )
         return tuple(tools)
+
+    @staticmethod
+    def restrict_scopes(
+        policy: AgentTaskPolicy, enabled_capabilities: list[str]
+    ) -> tuple[str, ...]:
+        enabled = set(enabled_capabilities)
+        missing = _REQUIRED_CAPABILITIES.get(policy.name, frozenset()) - enabled
+        if missing:
+            raise ValueError(
+                "当前智能体设置关闭了任务必需能力：" + ", ".join(sorted(missing))
+            )
+        enabled_scopes = {
+            scope for capability, scope in _CAPABILITY_SCOPES.items() if capability in enabled
+        }
+        if "metadata_propose" in enabled:
+            enabled_scopes.add(PROJECT_INSIGHTS_PROPOSE_SCOPE)
+        return tuple(scope for scope in policy.scopes if scope in enabled_scopes)
 
 
 def normalize_task_kind(task_kind: str) -> str:

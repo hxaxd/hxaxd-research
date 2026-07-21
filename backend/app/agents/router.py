@@ -51,6 +51,7 @@ def create_agent_router(
     scheduler_dependency: Callable[..., JobScheduler],
     context_resolver: Callable[[CreateAgentRunRequest], PromptContext],
     scope_resolver: Callable[[CreateAgentRunRequest], tuple[str, ...]],
+    run_defaults: Callable[[], tuple[str | None, str | None]] | None = None,
 ) -> APIRouter:
     """Builds the public control plane around trusted, server-side context resolvers."""
 
@@ -102,6 +103,7 @@ def create_agent_router(
         if context.objective != payload.goal:
             raise RuntimeError("agent context resolver changed the user-visible goal")
         tool_scopes = scope_resolver(payload)
+        model, reasoning_effort = run_defaults() if run_defaults is not None else (None, None)
         run = supervisor.create(
             payload.task_kind,
             context,
@@ -112,6 +114,8 @@ def create_agent_router(
             ),
             target_id=payload.zotero_preview_id,
             tool_scopes=tool_scopes,
+            model=model,
+            reasoning_effort=reasoning_effort,
         )
         try:
             return enqueue(scheduler, repository, run)

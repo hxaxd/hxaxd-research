@@ -8,12 +8,14 @@ import pytest
 from app.agent_tools.capabilities import AgentCapabilityRegistry
 from app.agents import WEB_SEARCH_SCOPE, AgentPromptContextBuilder
 from app.agents.prompting import READ_SCOPE
+from app.documents.models import BlockKind, ExtractedBlock, ExtractedDocument
 from app.integrations.zotero.models import (
     TransferDirection,
     TransferPreview,
     TransferSummary,
     ZoteroLibraryRef,
 )
+from tests.sample_data import PDF
 from tests.test_api_v3 import _candidate
 
 
@@ -210,12 +212,53 @@ def test_bound_agent_can_only_submit_an_idempotent_metadata_proposal(client) -> 
     item_id = membership["preferred_item_id"]
     item = client.get(f"/api/items/{item_id}").json()
     context = client.app.state.context
+    uploaded = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={"upload": ("agent-context.pdf", PDF, "application/pdf")},
+    ).json()
+    attachment, _ = context.attachments.locate(uploaded["id"])
+    document = context.documents.repository.commit_extraction(
+        item_id=item_id,
+        source_attachment_id=attachment.id,
+        source_sha256=attachment.sha256,
+        extractor="context-fixture",
+        extractor_version="1",
+        structure_version="semantic-blocks-v2",
+        structure_hash="d" * 64,
+        extracted=ExtractedDocument(
+            language="en",
+            page_count=1,
+            blocks=[
+                ExtractedBlock(
+                    kind=BlockKind.PARAGRAPH,
+                    source_text="A structured paragraph is injected into the task snapshot.",
+                    page_start=1,
+                    page_end=1,
+                    anchor={"page": 1},
+                )
+            ],
+        ),
+        job_id=None,
+    )
+    block = context.documents.blocks(
+        document.id, offset=0, limit=10, target_language=None
+    ).items[0]
+    annotation = client.post(
+        f"/api/projects/{project['id']}/items/{item_id}/annotations",
+        json={"block_id": block.id, "kind": "claim", "body": "Keep this claim."},
+    )
+    assert annotation.status_code == 201, annotation.text
     task_context = context.agent_prompt_context.resolve(
         task_kind="metadata_enrichment",
         goal="核验并补全标题",
         project_id=project["id"],
         item_id=item_id,
     )
+    assert task_context.documents[0]["blocks"][0]["id"] == block.id
+    assert task_context.documents[0]["blocks"][0]["source_text"].startswith(
+        "A structured paragraph"
+    )
+    assert task_context.reading_memory["annotations"][0]["body"] == "Keep this claim."
     scopes = context.agent_prompt_context.scopes_for(
         "metadata_enrichment", project["id"], item_id
     )

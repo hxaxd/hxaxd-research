@@ -178,6 +178,8 @@
 .pdf-viewer--sepia .pdfViewer .page {
   filter: sepia(0.18) brightness(0.93) contrast(0.96);
 }
+.pdf-viewer--toolbar-compact .pdf-findbar,
+.pdf-viewer--toolbar-compact .pdf-page-controls { min-height: 38px; }
 
 .pdf-findbar {
   position: relative;

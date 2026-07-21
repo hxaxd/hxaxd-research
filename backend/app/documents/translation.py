@@ -4,12 +4,14 @@ import json
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 
 from pydantic import ValidationError
 
 from .models import (
     DocumentTranslationOutput,
+    TranslationGlossaryTerm,
     TranslationInputBlock,
 )
 from .prompts import assemble_document_translation_prompt
@@ -24,6 +26,20 @@ class DocumentTranslationError(RuntimeError):
         self.retryable = retryable
 
 
+@dataclass(frozen=True)
+class TranslationCapacity:
+    max_input_characters: int
+    max_output_tokens: int
+
+
+@dataclass(frozen=True)
+class TranslationProviderResponse:
+    output: DocumentTranslationOutput
+    request_id: str | None = None
+    usage: dict[str, int | float | str | None] | None = None
+    finish_reason: str | None = None
+
+
 class TranslationProvider(Protocol):
     name: str
     model: str
@@ -31,13 +47,23 @@ class TranslationProvider(Protocol):
     @property
     def ready(self) -> bool: ...
 
+    @property
+    def capacity(self) -> TranslationCapacity: ...
+
     def translate_document(
         self,
         blocks: list[TranslationInputBlock],
         target_language: str,
         *,
+        model: str,
+        style: str,
+        glossary: list[TranslationGlossaryTerm],
+        document_outline: list[str],
+        batch_label: str,
+        preceding_context: str | None,
+        following_context: str | None,
         cancellation: Callable[[], bool],
-    ) -> DocumentTranslationOutput: ...
+    ) -> TranslationProviderResponse: ...
 
 
 class OpenAICompatibleTranslationProvider:
@@ -49,24 +75,41 @@ class OpenAICompatibleTranslationProvider:
         base_url: str,
         api_key: str | None,
         timeout_seconds: float = 900,
+        max_input_characters: int = MAX_SOURCE_CHARACTERS,
+        max_output_tokens: int = 384_000,
     ) -> None:
         self.name = name
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        self._capacity = TranslationCapacity(
+            max_input_characters=max_input_characters,
+            max_output_tokens=max_output_tokens,
+        )
 
     @property
     def ready(self) -> bool:
         return bool(self.api_key)
+
+    @property
+    def capacity(self) -> TranslationCapacity:
+        return self._capacity
 
     def translate_document(
         self,
         blocks: list[TranslationInputBlock],
         target_language: str,
         *,
+        model: str,
+        style: str,
+        glossary: list[TranslationGlossaryTerm],
+        document_outline: list[str],
+        batch_label: str,
+        preceding_context: str | None,
+        following_context: str | None,
         cancellation: Callable[[], bool],
-    ) -> DocumentTranslationOutput:
+    ) -> TranslationProviderResponse:
         if not self.api_key:
             raise DocumentTranslationError(
                 "credential_missing", "没有配置整篇翻译服务的 API 密钥"
@@ -74,18 +117,27 @@ class OpenAICompatibleTranslationProvider:
         if cancellation():
             raise DocumentTranslationError("canceled", "整篇翻译已取消", retryable=True)
         source_characters = sum(len(block.source_text) for block in blocks)
-        if source_characters > MAX_SOURCE_CHARACTERS:
+        if source_characters > self.capacity.max_input_characters:
             raise DocumentTranslationError(
                 "document_too_large",
                 "文档超过整篇单次翻译的安全输入上限；不会静默退回碎片翻译",
             )
-        prompt = assemble_document_translation_prompt(blocks, target_language)
+        prompt = assemble_document_translation_prompt(
+            blocks,
+            target_language,
+            style=style,
+            glossary=glossary,
+            document_outline=document_outline,
+            batch_label=batch_label,
+            preceding_context=preceding_context,
+            following_context=following_context,
+        )
         body: dict[str, object] = {
-            "model": self.model,
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
             "stream": True,
-            "max_tokens": 384_000,
+            "max_tokens": self.capacity.max_output_tokens,
         }
         if self.name.casefold() == "deepseek":
             body["thinking"] = {"type": "disabled"}
@@ -106,7 +158,7 @@ class OpenAICompatibleTranslationProvider:
             with urllib.request.urlopen(  # noqa: S310 - configured provider is trusted
                 request, timeout=self.timeout_seconds
             ) as response:
-                content, finish_reason = _consume_streaming_response(
+                content, finish_reason, request_id, usage = _consume_streaming_response(
                     response, cancellation
                 )
         except urllib.error.HTTPError as error:
@@ -135,18 +187,26 @@ class OpenAICompatibleTranslationProvider:
             )
         try:
             decoded = json.loads(content)
-            return DocumentTranslationOutput.model_validate(decoded)
+            output = DocumentTranslationOutput.model_validate(decoded)
         except (json.JSONDecodeError, ValidationError) as error:
             raise DocumentTranslationError(
                 "invalid_translation_output", "整篇翻译结果不符合严格 JSON 契约"
             ) from error
+        return TranslationProviderResponse(
+            output=output,
+            request_id=request_id,
+            usage=usage,
+            finish_reason=finish_reason,
+        )
 
 
 def _consume_streaming_response(
     response, cancellation: Callable[[], bool]
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, str | None, dict[str, int | float | str | None]]:
     content: list[str] = []
     finish_reason: str | None = None
+    request_id: str | None = None
+    usage: dict[str, int | float | str | None] = {}
     try:
         for raw_line in response:
             if cancellation():
@@ -162,6 +222,14 @@ def _consume_streaming_response(
             if data == "[DONE]":
                 break
             payload = json.loads(data)
+            if request_id is None and isinstance(payload.get("id"), str):
+                request_id = payload["id"]
+            if isinstance(payload.get("usage"), dict):
+                usage = {
+                    str(key): value
+                    for key, value in payload["usage"].items()
+                    if value is None or isinstance(value, (int, float, str))
+                }
             choice = payload["choices"][0]
             delta = choice.get("delta", {})
             part = delta.get("content")
@@ -175,4 +243,4 @@ def _consume_streaming_response(
         raise DocumentTranslationError(
             "invalid_provider_response", "整篇翻译服务返回了无效流式响应"
         ) from error
-    return "".join(content), finish_reason
+    return "".join(content), finish_reason, request_id, usage

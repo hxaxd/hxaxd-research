@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AsyncMessage } from "../shared/ui/AsyncMessage";
 import { AppDataProvider } from "./AppDataContext";
 import { ResearchLayout } from "./layout/ResearchLayout";
+import { DeviceAccessGate } from "../features/device-access/DeviceAccessGate";
 
 const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
 const ProjectPage = lazy(() => import("./pages/ProjectPage").then((module) => ({ default: module.ProjectPage })));
@@ -18,8 +19,9 @@ function LoadingPage() {
 }
 export function AppRouter() {
   return (
-    <AppDataProvider>
-      <BrowserRouter>
+    <DeviceAccessGate>
+      <AppDataProvider>
+        <BrowserRouter>
         <Routes>
           <Route element={<ResearchLayout />}>
             <Route index element={<Suspense fallback={<LoadingPage />}><HomePage /></Suspense>} />
@@ -32,7 +34,8 @@ export function AppRouter() {
             <Route path="settings" element={<Suspense fallback={<LoadingPage />}><SettingsPage /></Suspense>} />
           </Route>
         </Routes>
-      </BrowserRouter>
-    </AppDataProvider>
+        </BrowserRouter>
+      </AppDataProvider>
+    </DeviceAccessGate>
   );
 }

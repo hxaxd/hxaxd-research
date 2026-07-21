@@ -5,12 +5,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.router import create_api_router
 from app.core.bootstrap import build_app_context
 from app.core.config import Settings
+from app.core.frontend import mount_frontend
 from app.core.http_errors import register_error_handlers
+from app.device_access.middleware import DeviceAccessMiddleware
 from app.platform import WorkspaceMutationGate
 
 
@@ -80,14 +83,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_middleware(
         CORSMiddleware,
         allow_origins=list(active_settings.frontend_origins),
-        allow_credentials=False,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     application.add_middleware(WorkspaceConcurrencyMiddleware, gate=context.mutation_gate)
+    if active_settings.lan_access_enabled:
+        application.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=list(active_settings.allowed_hosts),
+        )
+    application.add_middleware(
+        DeviceAccessMiddleware,
+        service=context.device_access,
+        public_origin=active_settings.public_base_url,
+    )
     register_error_handlers(application)
     application.include_router(create_api_router(context))
     application.mount("/mcp", mcp_application)
+    mount_frontend(application, active_settings.frontend_dist_dir)
     return application
 
 

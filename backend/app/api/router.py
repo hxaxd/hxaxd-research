@@ -8,6 +8,7 @@ from app.agents.supervisor import AgentSupervisor
 from app.catalog.api import router as catalog_router
 from app.catalog.domain import CatalogNotFoundError
 from app.changes.api import router as changes_router
+from app.device_access.api import router as device_access_router
 from app.documents.api import router as documents_router
 from app.integrations.zotero.router import router as zotero_router
 from app.integrations.zotero.service import TransferNotFoundError
@@ -16,6 +17,8 @@ from app.jobs.router import create_job_router
 from app.jobs.scheduler import JobScheduler
 from app.library.api import router as library_router
 from app.operations.api import router as operations_router
+from app.preferences.api import router as preferences_router
+from app.reading.api import router as reading_router
 from app.screening.api import router as screening_router
 from app.screening.domain import ScreeningNotFoundError
 from app.snapshots.router import create_snapshot_router
@@ -40,6 +43,10 @@ def create_api_router(context) -> APIRouter:
 
     def snapshots(_: Request) -> SnapshotService:
         return context.snapshots
+
+    def agent_defaults() -> tuple[str | None, str | None]:
+        configured = context.preferences.get().agent
+        return configured.model, configured.reasoning_effort
 
     def resolve_context(payload):
         try:
@@ -76,6 +83,7 @@ def create_api_router(context) -> APIRouter:
 
     router = APIRouter(prefix="/api")
     router.include_router(health_router)
+    router.include_router(device_access_router)
     router.include_router(workspace_router)
     router.include_router(screening_router)
     router.include_router(catalog_router)
@@ -83,6 +91,8 @@ def create_api_router(context) -> APIRouter:
     router.include_router(library_router)
     router.include_router(documents_router)
     router.include_router(operations_router)
+    router.include_router(reading_router)
+    router.include_router(preferences_router)
     router.include_router(create_job_router(jobs, job_repository))
     router.include_router(
         create_agent_router(
@@ -91,6 +101,7 @@ def create_api_router(context) -> APIRouter:
             jobs,
             resolve_context,
             resolve_scopes,
+            agent_defaults,
         )
     )
     router.include_router(create_snapshot_router(snapshots))

@@ -49,3 +49,32 @@ def test_agent_runtime_path_is_normalized(monkeypatch, tmp_path) -> None:
     settings = Settings.from_environment()
 
     assert settings.agent_work_dir == Path(configured).resolve()
+
+
+def test_lan_access_requires_explicit_environment_and_limits_hosts(monkeypatch) -> None:
+    monkeypatch.setenv("RESEARCH_APP_LAN_ACCESS", "true")
+    monkeypatch.setenv("RESEARCH_APP_PUBLIC_URL", "http://192.168.1.12:8000")
+    monkeypatch.setenv("RESEARCH_APP_ALLOWED_HOSTS", "workspace.home, 192.168.1.13")
+
+    settings = Settings.from_environment()
+
+    assert settings.lan_access_enabled is True
+    assert settings.device_cookie_secure is False
+    assert settings.public_base_url == "http://192.168.1.12:8000"
+    assert settings.agent_base_url == "http://127.0.0.1:8000"
+    assert settings.allowed_hosts == (
+        "127.0.0.1",
+        "localhost",
+        "192.168.1.12",
+        "workspace.home",
+        "192.168.1.13",
+    )
+
+
+def test_https_public_url_enables_secure_device_cookie(monkeypatch) -> None:
+    monkeypatch.setenv("RESEARCH_APP_PUBLIC_URL", "https://workspace.home:8443")
+
+    settings = Settings.from_environment()
+
+    assert settings.device_cookie_secure is True
+    assert "workspace.home" in settings.allowed_hosts

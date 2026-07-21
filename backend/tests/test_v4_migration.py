@@ -15,6 +15,7 @@ V4_TABLES = (
     "annotations",
     "block_translations",
     "document_glossary_entries",
+    "translation_batch_checkpoints",
     "document_blocks",
     "documents",
     "change_items",
@@ -95,6 +96,7 @@ def _create_v3_workspace(path) -> None:
         connection.execute("ALTER TABLE bibliographic_items DROP COLUMN revision")
         connection.execute("ALTER TABLE agent_runs DROP COLUMN target_type")
         connection.execute("ALTER TABLE agent_runs DROP COLUMN target_id")
+        connection.execute("ALTER TABLE agent_runs DROP COLUMN reasoning_effort")
         connection.execute("DELETE FROM schema_migrations")
         connection.execute(
             """

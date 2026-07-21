@@ -26,6 +26,7 @@ def project_public_run(run: AgentRun) -> PublicAgentRun:
         runtime=run.runtime,
         runtime_version=run.runtime_version,
         model=run.model,
+        reasoning_effort=run.reasoning_effort,
         final_message=sanitize_public_text(run.final_message),
         error_code=run.error_code,
         error_message=sanitize_public_text(run.error_message),

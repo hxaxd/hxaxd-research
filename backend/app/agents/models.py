@@ -51,6 +51,7 @@ class AgentRunCreate(BaseModel):
     runtime: str
     runtime_version: str | None = None
     model: str | None = None
+    reasoning_effort: str | None = None
 
 
 class AgentRun(BaseModel):
@@ -70,6 +71,7 @@ class AgentRun(BaseModel):
     runtime: str
     runtime_version: str | None
     model: str | None
+    reasoning_effort: str | None = None
     provider_thread_id: str | None
     provider_turn_id: str | None
     final_message: str | None
@@ -99,6 +101,7 @@ class PublicAgentRun(BaseModel):
     runtime: str
     runtime_version: str | None
     model: str | None
+    reasoning_effort: str | None = None
     final_message: str | None
     error_code: str | None
     error_message: str | None

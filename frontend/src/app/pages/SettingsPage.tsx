@@ -1,5 +1,7 @@
 import { useAppData } from "../AppDataContext";
 import { OperationsSettings } from "../../features/settings/OperationsSettings";
+import { DeviceAccessSettings } from "../../features/device-access/DeviceAccessSettings";
+import { WorkspacePreferencesSettings } from "../../features/settings/WorkspacePreferencesSettings";
 import { Icon } from "../../shared/ui/Icon";
 import "./pages.css";
 
@@ -28,6 +30,8 @@ export function SettingsPage() {
             </section>
           ))}
         </div>
+        <WorkspacePreferencesSettings />
+        <DeviceAccessSettings />
         <OperationsSettings />
       </div>
     </section>

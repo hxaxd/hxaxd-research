@@ -24,6 +24,24 @@ npm run dev
 
 后端默认位于 `http://127.0.0.1:8000`，前端位于 `http://127.0.0.1:5173`。前端开发服务器会把 `/api` 转发到后端。
 
+日常单进程启动（自动构建并由后端提供前端）：
+
+```powershell
+cd backend
+uv run python -m app serve
+```
+
+需要平板访问时必须显式开启局域网模式：
+
+```powershell
+uv run python -m app serve --lan `
+  --ssl-certfile C:\certs\workspace.pem `
+  --ssl-keyfile C:\certs\workspace-key.pem `
+  --public-url https://workspace.home:8000
+```
+
+电脑与平板必须信任同一份 HTTPS 证书，命令会显示平板访问地址。随后在电脑的“设置 → 局域网与受信任设备”生成一次性配对码；远程设备没有配对会话时无法访问数据或智能体工具端点。只有临时诊断时才使用 `--allow-insecure-http`，该模式不提供安全 Cookie，也不能作为可安装的平板 PWA 使用。
+
 ## 代码结构
 
 - `backend/`：领域模型、SQLite 持久化、受控进程、智能体运行时与集成。

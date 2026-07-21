@@ -27,6 +27,7 @@ from app.agents.codex_app_server import (
 from app.agents.runtime import RuntimeOutcomeStatus, RuntimeRequest
 from app.catalog import CatalogCommands, CatalogQueries
 from app.changes import ChangeSetRepository, ChangeSetService
+from app.device_access import DeviceAccessRepository, DeviceAccessService
 from app.documents import (
     BabelDocExtractor,
     DocumentRepository,
@@ -59,6 +60,8 @@ from app.platform.db import DatabaseKind, V3Database, inspect_database
 from app.platform.db.v4_migration import V3MigrationReport, migrate_v3_database
 from app.platform.processes import ExecutableRegistry, ProcessRunner
 from app.platform.processes.runner import DEFAULT_ENVIRONMENT_ALLOWLIST
+from app.preferences import PreferencesRepository, PreferencesService
+from app.reading import ReadingRepository, ReadingService
 from app.screening import ScreeningCommands, ScreeningQueries
 from app.snapshots import SnapshotService
 from app.workspace.models import RuntimeCapability
@@ -105,6 +108,9 @@ class AppContext:
     process_lock: WorkspaceProcessLock
     operations: OperationService
     documents: DocumentService
+    reading: ReadingService
+    preferences: PreferencesService
+    device_access: DeviceAccessService
     changes: ChangeSetService
     workspace: WorkspaceProjectionService
     agent_repository: SqliteAgentRunRepository
@@ -214,7 +220,13 @@ def build_app_context(settings: Settings) -> AppContext:
     )
     job_repository = SqliteJobRepository(settings.database_path)
     job_registry = JobRegistry()
-    job_worker = JobWorker(job_repository, job_registry)
+    preferences = PreferencesService(PreferencesRepository(database))
+    job_worker = JobWorker(
+        job_repository,
+        job_registry,
+        max_workers=8,
+        concurrency_provider=lambda: preferences.get().tasks.max_concurrent_jobs,
+    )
     jobs = JobScheduler(job_repository, job_worker)
     operations = OperationService(settings, attachments, jobs, job_repository, process_runner)
     OperationHandlers(settings, attachments, process_runner).register(job_registry)
@@ -234,8 +246,15 @@ def build_app_context(settings: Settings) -> AppContext:
         job_repository,
         document_extractor,
         translation_provider,
+        preferences,
     )
     documents.register_handlers(job_registry)
+    reading = ReadingService(ReadingRepository(database))
+    device_access = DeviceAccessService(
+        DeviceAccessRepository(database),
+        lan_enabled=settings.lan_access_enabled,
+        session_days=settings.device_session_days,
+    )
     changes = ChangeSetService(
         ChangeSetRepository(database),
         catalog,
@@ -271,6 +290,27 @@ def build_app_context(settings: Settings) -> AppContext:
             details={"version": tool.version},
         )
 
+    def translation_capability() -> RuntimeCapability:
+        configured = preferences.get().translation
+        ready = (
+            translation_provider.ready
+            and configured.provider.casefold() == translation_provider.name.casefold()
+        )
+        return RuntimeCapability(
+            supported=True,
+            ready=ready,
+            message=(
+                "整篇翻译与章节自动降级已就绪"
+                if ready
+                else "尚未配置所选整篇翻译服务或密钥"
+            ),
+            details={
+                "provider": configured.provider,
+                "model": configured.model,
+                "mode": configured.batching,
+            },
+        )
+
     workspace = WorkspaceProjectionService(
         database,
         settings.data_dir,
@@ -295,20 +335,7 @@ def build_app_context(settings: Settings) -> AppContext:
                     "ocr_version": ocr_extractor.version,
                 },
             ),
-            "whole_document_translation": lambda: RuntimeCapability(
-                supported=True,
-                ready=translation_provider.ready,
-                message=(
-                    "整篇单次翻译已就绪"
-                    if translation_provider.ready
-                    else "尚未配置整篇翻译服务密钥"
-                ),
-                details={
-                    "provider": translation_provider.name,
-                    "model": translation_provider.model,
-                    "mode": "single_request",
-                },
-            ),
+            "whole_document_translation": translation_capability,
             "tex_compile": lambda: tool_capability(ManagedToolName.TEX),
             "embedded_agent": lambda: RuntimeCapability(
                 supported=True,
@@ -331,11 +358,17 @@ def build_app_context(settings: Settings) -> AppContext:
     mcp_server = create_agent_mcp_server(
         agent_tools,
         agent_capabilities,
-        public_base_url=settings.public_base_url,
+        public_base_url=settings.agent_base_url,
     )
     agent_repository = SqliteAgentRunRepository(settings.database_path)
     agent_prompt_context = AgentPromptContextBuilder(
-        catalog, screening, attachments, zotero_service
+        catalog,
+        screening,
+        attachments,
+        zotero_service,
+        documents=documents,
+        reading=reading,
+        preferences=preferences,
     )
 
     def mcp_credentials(run: AgentRun) -> RuntimeMcpCredentials:
@@ -349,7 +382,7 @@ def build_app_context(settings: Settings) -> AppContext:
             scopes=frozenset(run.tool_scopes),
         )
         return RuntimeMcpCredentials(
-            url=f"{settings.public_base_url.rstrip('/')}/mcp/",
+            url=f"{settings.agent_base_url.rstrip('/')}/mcp/",
             bearer_token=token,
             enabled_tools=agent_prompt_context.tools_for_scopes(run.tool_scopes),
         )
@@ -390,6 +423,9 @@ def build_app_context(settings: Settings) -> AppContext:
         process_lock=process_lock,
         operations=operations,
         documents=documents,
+        reading=reading,
+        preferences=preferences,
+        device_access=device_access,
         changes=changes,
         workspace=workspace,
         agent_repository=agent_repository,

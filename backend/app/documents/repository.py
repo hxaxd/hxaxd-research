@@ -398,6 +398,81 @@ class DocumentRepository:
             )
         return len(output.translations)
 
+    def get_translation_checkpoint(
+        self, job_id: str, batch_ordinal: int, input_sha256: str
+    ) -> DocumentTranslationOutput | None:
+        with self.database.read() as connection:
+            row = connection.execute(
+                """
+                SELECT input_sha256, output_json FROM translation_batch_checkpoints
+                WHERE job_id = ? AND batch_ordinal = ?
+                """,
+                (job_id, batch_ordinal),
+            ).fetchone()
+        if row is None:
+            return None
+        if row["input_sha256"] != input_sha256:
+            raise DocumentConflictError("翻译批次检查点与当前任务输入不一致")
+        return DocumentTranslationOutput.model_validate(json.loads(row["output_json"]))
+
+    def save_translation_checkpoint(
+        self,
+        *,
+        job_id: str,
+        batch_ordinal: int,
+        input_sha256: str,
+        output: DocumentTranslationOutput,
+        provider_request_id: str | None,
+        usage: dict[str, object],
+    ) -> None:
+        now = _now()
+        encoded_output = _json(output.model_dump(mode="json"))
+        with self.database.transaction() as connection:
+            existing = connection.execute(
+                """
+                SELECT input_sha256, output_json FROM translation_batch_checkpoints
+                WHERE job_id = ? AND batch_ordinal = ?
+                """,
+                (job_id, batch_ordinal),
+            ).fetchone()
+            if existing is not None:
+                if existing["input_sha256"] != input_sha256:
+                    raise DocumentConflictError("翻译批次检查点与当前任务输入不一致")
+                if existing["output_json"] != encoded_output:
+                    raise DocumentConflictError("已验证翻译批次不能被不同结果覆盖")
+                return
+            connection.execute(
+                """
+                INSERT INTO translation_batch_checkpoints(
+                    job_id, batch_ordinal, input_sha256, output_json,
+                    provider_request_id, usage_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    batch_ordinal,
+                    input_sha256,
+                    encoded_output,
+                    provider_request_id,
+                    _json(usage),
+                    now,
+                ),
+            )
+            self._audit(
+                connection,
+                now=now,
+                action="document.translation_batch_verified",
+                entity_type="translation_batch",
+                entity_id=f"{job_id}:{batch_ordinal}",
+                correlation_id=job_id,
+                metadata={
+                    "batch_ordinal": batch_ordinal,
+                    "input_sha256": input_sha256,
+                    "provider_request_id": provider_request_id,
+                    "usage": usage,
+                },
+            )
+
     def translation_count_for_job(self, job_id: str) -> int:
         with self.database.read() as connection:
             return int(

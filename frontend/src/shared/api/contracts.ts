@@ -291,6 +291,205 @@ export interface DocumentBlocksPage {
   items: DocumentBlock[];
 }
 
+export type AnnotationKind =
+  | "highlight"
+  | "excerpt"
+  | "question"
+  | "claim"
+  | "method"
+  | "result"
+  | "limitation"
+  | "bibliographic_note";
+
+export interface AnnotationCreate {
+  attachment_id: string | null;
+  block_id: string | null;
+  kind: AnnotationKind;
+  body: string;
+  quoted_text: string | null;
+  page_number: number | null;
+  anchor: Record<string, JsonValue>;
+  tags: string[];
+}
+
+export interface AnnotationUpdate {
+  expected_updated_at: string;
+  kind: AnnotationKind;
+  body: string;
+  tags: string[];
+}
+
+export interface Annotation {
+  id: string;
+  project_id: string | null;
+  item_id: string;
+  attachment_id: string | null;
+  block_id: string | null;
+  kind: AnnotationKind;
+  body: string;
+  quoted_text: string | null;
+  source_sha256: string | null;
+  page_number: number | null;
+  anchor: Record<string, JsonValue>;
+  anchor_status: "valid" | "stale" | "unresolved";
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReadingBookmarkCreate {
+  block_id: string | null;
+  page_number: number | null;
+  label: string;
+}
+
+export interface ReadingBookmark {
+  id: string;
+  block_id: string | null;
+  page_number: number | null;
+  label: string;
+  created_at: string;
+}
+
+export interface ReadingStateUpdate {
+  attachment_id: string | null;
+  block_id: string | null;
+  page_number: number | null;
+  progress: number;
+}
+
+export interface ReadingState {
+  attachment_id: string | null;
+  block_id: string | null;
+  page_number: number | null;
+  progress: number;
+  project_id: string;
+  item_id: string;
+  bookmarks: ReadingBookmark[];
+  updated_at: string | null;
+}
+
+export interface ReaderPreferences {
+  target_language: string;
+  default_mode: "source" | "bilingual" | "translation";
+  default_panel: "structured" | "pdf" | "split";
+  font_family: "serif" | "sans" | "system";
+  font_size: "small" | "medium" | "large";
+  line_height: "compact" | "standard" | "relaxed";
+  measure: "focused" | "balanced" | "wide";
+  density: "compact" | "comfortable";
+  flow: "continuous" | "paged";
+  columns: "auto" | "single" | "double";
+  theme: "dark" | "light" | "sepia";
+  show_outline: boolean;
+  restore_position: boolean;
+  large_touch_targets: boolean;
+  reduce_motion: boolean;
+}
+
+export interface BilingualPreferences {
+  layout: "side_by_side" | "stacked";
+  highlight_terms: boolean;
+  synchronize_blocks: boolean;
+}
+
+export interface PdfPreferences {
+  color_mode: "original" | "dark" | "sepia";
+  default_zoom: "auto" | "page_width" | "page_fit";
+  toolbar_density: "compact" | "comfortable";
+  restore_position: boolean;
+}
+
+export interface GlossaryPreference {
+  source_term: string;
+  translated_term: string;
+}
+
+export interface TranslationPreferences {
+  provider: string;
+  model: string;
+  style: "faithful_academic" | "natural_academic" | "concise";
+  batching: "whole_with_fallback" | "whole_only" | "chapter";
+  glossary: GlossaryPreference[];
+  retranslate_scope: "changed" | "document";
+}
+
+export interface AgentPreferences {
+  model: string | null;
+  reasoning_effort: "low" | "medium" | "high" | "xhigh";
+  enabled_capabilities: Array<"catalog_read" | "candidate_propose" | "metadata_propose" | "resource_propose" | "zotero_conflict_propose" | "web_search">;
+  context_summary: "compact" | "balanced" | "detailed";
+}
+
+export interface TaskPreferences {
+  notify_on_success: boolean;
+  notify_on_failure: boolean;
+  auto_open_result: boolean;
+  max_concurrent_jobs: number;
+}
+
+export interface UserPreferences {
+  revision: number;
+  reader: ReaderPreferences;
+  bilingual: BilingualPreferences;
+  pdf: PdfPreferences;
+  translation: TranslationPreferences;
+  agent: AgentPreferences;
+  tasks: TaskPreferences;
+  updated_at: string | null;
+}
+
+export interface UserPreferencesUpdate {
+  expected_revision: number;
+  reader: ReaderPreferences;
+  bilingual: BilingualPreferences;
+  pdf: PdfPreferences;
+  translation: TranslationPreferences;
+  agent: AgentPreferences;
+  tasks: TaskPreferences;
+}
+
+export interface DeviceAccessStatus {
+  lan_enabled: boolean;
+  local_request: boolean;
+  authenticated: boolean;
+  pairing_required: boolean;
+  session_id: string | null;
+  cookie_secure: boolean;
+}
+
+export interface PairingCreate {
+  label: string | null;
+  ttl_seconds: number;
+}
+
+export interface PairingTicket {
+  id: string;
+  code: string;
+  expires_at: string;
+}
+
+export interface PairDeviceRequest {
+  code: string;
+  label: string;
+}
+
+export interface DeviceSession {
+  id: string;
+  label: string;
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  current: boolean;
+}
+
+export interface PairedDevice {
+  status: DeviceAccessStatus;
+  session: DeviceSession;
+}
+
 export type JobStatus =
   | "queued"
   | "running"
@@ -348,6 +547,7 @@ export interface AgentRun {
   runtime: string;
   runtime_version: string | null;
   model: string | null;
+  reasoning_effort: string | null;
   final_message: string | null;
   error_code: string | null;
   error_message: string | null;
