@@ -6,7 +6,7 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.identity import new_id
 
 from .models import (
@@ -29,7 +29,7 @@ class DocumentConflictError(RuntimeError):
 
 
 class DocumentRepository:
-    def __init__(self, database: V3Database) -> None:
+    def __init__(self, database: WorkspaceDatabase) -> None:
         self.database = database
 
     def get(self, document_id: str) -> Document:
@@ -152,9 +152,7 @@ class DocumentRepository:
             ).fetchall()
         return [self._block(row) for row in rows]
 
-    def latest_translation_job_id(
-        self, document_id: str, target_language: str
-    ) -> str | None:
+    def latest_translation_job_id(self, document_id: str, target_language: str) -> str | None:
         """Return the last atomically committed translation generation."""
         with self.database.read() as connection:
             row = connection.execute(

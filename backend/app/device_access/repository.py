@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.identity import new_id
 
 from .models import DeviceSession
@@ -20,7 +20,7 @@ class DeviceSessionNotFoundError(LookupError):
 
 
 class DeviceAccessRepository:
-    def __init__(self, database: V3Database) -> None:
+    def __init__(self, database: WorkspaceDatabase) -> None:
         self.database = database
 
     def create_pairing(
@@ -148,9 +148,7 @@ class DeviceAccessRepository:
                 "SELECT * FROM device_sessions ORDER BY revoked_at IS NULL DESC, last_seen_at DESC"
             ).fetchall()
         return [
-            self._session(row).model_copy(
-                update={"current": str(row["id"]) == current_session_id}
-            )
+            self._session(row).model_copy(update={"current": str(row["id"]) == current_session_id})
             for row in rows
         ]
 

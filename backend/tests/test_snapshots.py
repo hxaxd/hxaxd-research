@@ -19,7 +19,7 @@ from app.platform.activation import (
     activate_snapshot_directory,
     recover_pending_activation,
 )
-from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
 from app.platform.processes import CancellationToken
 from app.snapshots.models import SnapshotRestoreRequest
 from app.snapshots.router import create_snapshot_router
@@ -173,9 +173,9 @@ def test_snapshot_activation_is_replayed_after_process_crash_in_rename_window(tm
 
     assert recovered == "snapshot_restore:committed"
     assert not journal_path.exists()
-    with V3Database(target_dir / "research.sqlite3").read() as connection:
+    with WorkspaceDatabase(target_dir / "research.sqlite3").read() as connection:
         assert connection.execute("SELECT COUNT(*) FROM bibliographic_items").fetchone()[0] == 1
-    with V3Database(recovery / "research.sqlite3").read() as connection:
+    with WorkspaceDatabase(recovery / "research.sqlite3").read() as connection:
         assert connection.execute("SELECT COUNT(*) FROM bibliographic_items").fetchone()[0] == 2
 
 
@@ -232,8 +232,8 @@ def test_snapshot_jobs_are_durable_and_restore_job_survives_database_swap(tmp_pa
     assert restored_job.result["source_format"] == "hxaxd-research-v4"
     recovery = Path(restored_job.result["recovery_directory"])
     assert recovery.is_dir()
-    V3Database(settings.database_path).verify()
-    with V3Database(settings.database_path).read() as connection:
+    WorkspaceDatabase(settings.database_path).verify()
+    with WorkspaceDatabase(settings.database_path).read() as connection:
         assert connection.execute("SELECT COUNT(*) FROM bibliographic_items").fetchone()[0] == 1
         assert (
             connection.execute(
@@ -334,10 +334,10 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
-def _create_v3_workspace(root: Path) -> tuple[Path, V3Database, str]:
+def _create_v3_workspace(root: Path) -> tuple[Path, WorkspaceDatabase, str]:
     data_dir = root.resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
-    database = V3Database(data_dir / "research.sqlite3")
+    database = WorkspaceDatabase(data_dir / "research.sqlite3")
     database.initialize()
     storage_key = "artifacts/item-1/fulltext/source.pdf"
     artifact = data_dir / storage_key
@@ -384,7 +384,7 @@ def _create_v3_workspace(root: Path) -> tuple[Path, V3Database, str]:
     return data_dir, database, storage_key
 
 
-def _seed_second_item(database: V3Database) -> None:
+def _seed_second_item(database: WorkspaceDatabase) -> None:
     with database.transaction() as connection:
         connection.execute("INSERT INTO works VALUES('work-2', ?, ?)", (NOW, NOW))
         connection.execute(

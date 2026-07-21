@@ -19,14 +19,14 @@ from app.integrations.zotero.models import (
 )
 from app.integrations.zotero.planner import ZoteroDiffPlanner
 from app.integrations.zotero.repository import SqliteZoteroTransferRepository
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 NOW = datetime(2026, 7, 21, 8, 0, tzinfo=UTC)
 LIBRARY = ZoteroLibraryRef(kind=ZoteroLibraryKind.USER, id="123")
 
 
 def test_repository_can_be_wired_before_application_database_startup(tmp_path):
-    database = V3Database(tmp_path / "research.sqlite3")
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
     repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
     assert database.path.exists() is False
 
@@ -35,7 +35,7 @@ def test_repository_can_be_wired_before_application_database_startup(tmp_path):
 
 
 def test_sqlite_repository_persists_preview_resolution_receipt_and_claim(tmp_path):
-    database = V3Database(tmp_path / "research.sqlite3")
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
     database.initialize()
     repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
     preview = ZoteroDiffPlanner(clock=lambda: NOW).plan(
@@ -56,9 +56,7 @@ def test_sqlite_repository_persists_preview_resolution_receipt_and_claim(tmp_pat
     repository.save_preview(repeated)
     repository.save_resolution(
         preview.id,
-        ConflictResolution(
-            conflict_id="conflict-1", choice=ConflictChoice.SKIP, resolved_at=NOW
-        ),
+        ConflictResolution(conflict_id="conflict-1", choice=ConflictChoice.SKIP, resolved_at=NOW),
     )
 
     assert repository.claim_execution(preview.id, NOW) is True
@@ -88,7 +86,7 @@ def test_sqlite_repository_persists_preview_resolution_receipt_and_claim(tmp_pat
 
 
 def test_sqlite_binding_can_follow_an_immutable_local_item_version(tmp_path):
-    database = V3Database(tmp_path / "research.sqlite3")
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
     database.initialize()
     repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
     first = ZoteroBinding(
@@ -115,12 +113,8 @@ def test_sqlite_binding_can_follow_an_immutable_local_item_version(tmp_path):
         )
     )
 
-    assert repository.get_binding_by_entity(
-        LIBRARY, "bibliographic_item", "local-v1"
-    ) is None
-    moved = repository.get_binding_by_external(
-        LIBRARY, "bibliographic_item", "REMOTE1"
-    )
+    assert repository.get_binding_by_entity(LIBRARY, "bibliographic_item", "local-v1") is None
+    moved = repository.get_binding_by_external(LIBRARY, "bibliographic_item", "REMOTE1")
     assert moved is not None
     assert moved.entity_id == "local-v2"
     assert moved.external_version == 4

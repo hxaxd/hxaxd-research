@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.time import utc_now
 
 from .models import (
@@ -23,7 +23,7 @@ CapabilityProvider = Callable[[], RuntimeCapability]
 class WorkspaceProjectionService:
     def __init__(
         self,
-        database: V3Database,
+        database: WorkspaceDatabase,
         data_dir: Path,
         capability_providers: dict[str, CapabilityProvider] | None = None,
     ) -> None:
@@ -84,9 +84,7 @@ class WorkspaceProjectionService:
             schema_version=self.database.schema_version(),
             counts=counts,
             projects=[
-                ProjectProjection(
-                    **dict(row), status_counts=statuses.get(row["id"], {})
-                )
+                ProjectProjection(**dict(row), status_counts=statuses.get(row["id"], {}))
                 for row in project_rows
             ],
             capabilities=capabilities,
@@ -171,9 +169,7 @@ class WorkspaceProjectionService:
             "works": "SELECT COUNT(*) FROM works",
             "items": "SELECT COUNT(*) FROM bibliographic_items",
             "project_works": "SELECT COUNT(*) FROM project_works",
-            "candidates": (
-                "SELECT COUNT(*) FROM candidates WHERE state IN ('staged', 'matched')"
-            ),
+            "candidates": ("SELECT COUNT(*) FROM candidates WHERE state IN ('staged', 'matched')"),
             "attachments": "SELECT COUNT(*) FROM attachments",
             "active_jobs": (
                 "SELECT COUNT(*) FROM jobs WHERE status IN "

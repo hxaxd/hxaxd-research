@@ -38,8 +38,10 @@ from .repository import DocumentConflictError, DocumentRepository
 from .tex import TexStructureError, TexStructureExtractor
 from .translation import (
     DocumentTranslationError,
+    TranslationCapacity,
     TranslationProvider,
     TranslationProviderResponse,
+    estimate_translation_output_tokens,
 )
 
 _PLACEHOLDER_PATTERN = re.compile(
@@ -48,6 +50,7 @@ _PLACEHOLDER_PATTERN = re.compile(
 )
 _FALLBACK_ERROR_CODES = {
     "document_too_large",
+    "document_output_too_large",
     "translation_truncated",
     "translation_incomplete",
     "invalid_provider_response",
@@ -104,9 +107,7 @@ class DocumentService:
             target_language=target_language,
         )
 
-    def extract_attachment(
-        self, attachment_id: str, request: DocumentExtractionRequest
-    ) -> Job:
+    def extract_attachment(self, attachment_id: str, request: DocumentExtractionRequest) -> Job:
         attachment, _ = self.attachments.locate(attachment_id)
         if (
             attachment.attachment_type is not AttachmentType.FULLTEXT
@@ -119,8 +120,7 @@ class DocumentService:
         if tex_attachment is not None:
             extractor_name = f"{extractor_name}+{self.tex_extractor.name}"
             extractor_version = (
-                f"{extractor_version}+tex.{self.tex_extractor.version}."
-                f"{tex_attachment.sha256[:12]}"
+                f"{extractor_version}+tex.{self.tex_extractor.version}.{tex_attachment.sha256[:12]}"
             )
         payload = DocumentExtractionJobInput(
             attachment_id=attachment.id,
@@ -173,9 +173,7 @@ class DocumentService:
             ),
         )
 
-    def translate_document(
-        self, document_id: str, request: DocumentTranslationRequest
-    ) -> Job:
+    def translate_document(self, document_id: str, request: DocumentTranslationRequest) -> Job:
         document = self.repository.get(document_id)
         if document.status is not DocumentStatus.READY or document.structure_hash is None:
             raise ValueError("只有就绪的结构化文档可以翻译")
@@ -183,9 +181,7 @@ class DocumentService:
         if settings.provider.casefold() != self.translation_provider.name.casefold():
             raise ValueError("当前运行环境没有配置所选翻译提供者")
         previous_translation_job_id = (
-            self.repository.latest_translation_job_id(
-                document.id, request.target_language
-            )
+            self.repository.latest_translation_job_id(document.id, request.target_language)
             if settings.retranslate_scope == "document"
             else None
         )
@@ -232,9 +228,7 @@ class DocumentService:
         reconciled = 0
         active = [
             *self.job_repository.list_jobs(status=JobStatus.RUNNING, limit=1000),
-            *self.job_repository.list_jobs(
-                status=JobStatus.CANCELLATION_REQUESTED, limit=1000
-            ),
+            *self.job_repository.list_jobs(status=JobStatus.CANCELLATION_REQUESTED, limit=1000),
         ]
         for job in active:
             if job.kind == "document.extract":
@@ -274,9 +268,7 @@ class DocumentService:
             extractor_version=request.extractor_version,
         )
         if existing is not None:
-            context.emit(
-                "document.extraction_reused", {"document_id": existing.id}, "info"
-            )
+            context.emit("document.extraction_reused", {"document_id": existing.id}, "info")
             return _document_result(existing)
         attachment, path = self.attachments.locate(request.attachment_id)
         if attachment.item_id != request.item_id or attachment.sha256 != request.source_sha256:
@@ -387,9 +379,7 @@ class DocumentService:
         ]
         protected_blocks, placeholders = _protect_blocks(input_blocks)
         outline = [
-            block.source_text
-            for block in input_blocks
-            if block.kind.value in {"title", "heading"}
+            block.source_text for block in input_blocks if block.kind.value in {"title", "heading"}
         ]
         context.emit(
             "document.translation_started",
@@ -456,9 +446,16 @@ class DocumentService:
         placeholders: dict[str, dict[str, str]],
     ) -> DocumentTranslationOutput:
         source_characters = sum(len(block.source_text) for block in blocks)
-        capacity = self.translation_provider.capacity.max_input_characters
+        capacity = self.translation_provider.capacity
+        estimated_output_tokens = estimate_translation_output_tokens(blocks)
+        safe_input_characters = max(1, int(capacity.max_input_characters * 0.82))
+        safe_output_tokens = max(1, int(capacity.max_output_tokens * 0.82))
         use_chapters = request.batching == "chapter" or (
-            request.batching == "whole_with_fallback" and source_characters > capacity
+            request.batching == "whole_with_fallback"
+            and (
+                source_characters > safe_input_characters
+                or estimated_output_tokens > safe_output_tokens
+            )
         )
         if use_chapters:
             context.emit(
@@ -466,9 +463,15 @@ class DocumentService:
                 {
                     "reason": "configured_chapters"
                     if request.batching == "chapter"
-                    else "input_budget",
+                    else (
+                        "input_budget"
+                        if source_characters > safe_input_characters
+                        else "output_budget"
+                    ),
                     "source_characters": source_characters,
-                    "provider_budget": capacity,
+                    "estimated_output_tokens": estimated_output_tokens,
+                    "provider_input_budget": capacity.max_input_characters,
+                    "provider_output_budget": capacity.max_output_tokens,
                 },
                 "warning",
             )
@@ -490,10 +493,7 @@ class DocumentService:
                 ordinal_offset=0,
             )
         except DocumentTranslationError as error:
-            if (
-                request.batching != "whole_with_fallback"
-                or error.code not in _FALLBACK_ERROR_CODES
-            ):
+            if request.batching != "whole_with_fallback" or error.code not in _FALLBACK_ERROR_CODES:
                 raise
             context.emit(
                 "document.translation_fallback",
@@ -522,9 +522,7 @@ class DocumentService:
         outputs: list[DocumentTranslationOutput] = []
         for index, batch in enumerate(batches):
             if context.cancellation.is_cancelled:
-                raise DocumentTranslationError(
-                    "canceled", "整篇翻译已取消", retryable=True
-                )
+                raise DocumentTranslationError("canceled", "整篇翻译已取消", retryable=True)
             ordinal = index + ordinal_offset
             input_hash = _batch_hash(request, batch, outline)
             cached = self.repository.get_translation_checkpoint(
@@ -651,29 +649,35 @@ def _validate_translation_output(
 
 
 def _chapter_batches(
-    blocks: list[TranslationInputBlock], capacity: int
+    blocks: list[TranslationInputBlock], capacity: TranslationCapacity
 ) -> list[list[TranslationInputBlock]]:
-    budget = max(1, int(capacity * 0.72))
+    input_budget = max(1, int(capacity.max_input_characters * 0.72))
+    output_budget = max(1, int(capacity.max_output_tokens * 0.72))
     batches: list[list[TranslationInputBlock]] = []
     current: list[TranslationInputBlock] = []
-    current_size = 0
+    current_input_size = 0
     current_section: str | None = None
     for block in blocks:
-        size = len(block.source_text)
-        if size > capacity:
+        input_size = len(block.source_text)
+        output_size = estimate_translation_output_tokens([block])
+        if input_size > capacity.max_input_characters or output_size > capacity.max_output_tokens:
             raise DocumentTranslationError(
                 "document_block_too_large",
-                f"阅读块 {block.id} 单独超过翻译提供者的安全输入预算",
+                f"阅读块 {block.id} 单独超过翻译提供者的输入或输出预算",
             )
         section = block.section_path[0] if block.section_path else None
         section_changed = bool(current) and section != current_section
-        over_budget = bool(current) and current_size + size > budget
+        prospective = [*current, block]
+        over_budget = bool(current) and (
+            current_input_size + input_size > input_budget
+            or estimate_translation_output_tokens(prospective) > output_budget
+        )
         if section_changed or over_budget:
             batches.append(current)
             current = []
-            current_size = 0
+            current_input_size = 0
         current.append(block)
-        current_size += size
+        current_input_size += input_size
         current_section = section
     if current:
         batches.append(current)
@@ -727,9 +731,7 @@ def _merge_translation_outputs(
                 )
             terms.setdefault(normalized, item)
     languages = {
-        output.detected_source_language
-        for output in outputs
-        if output.detected_source_language
+        output.detected_source_language for output in outputs if output.detected_source_language
     }
     if len(languages) > 1:
         raise DocumentTranslationError(
@@ -765,7 +767,7 @@ def _digest(value: str) -> str:
 
 
 def _structure_hash(value: dict) -> str:
-    encoded = json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
     return hashlib.sha256(encoded).hexdigest()

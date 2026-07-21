@@ -58,8 +58,8 @@ from app.platform import (
     ensure_no_activation_residue,
     recover_pending_activation,
 )
-from app.platform.db import DatabaseKind, V3Database, inspect_database
-from app.platform.db.v4_migration import V3MigrationReport, migrate_v3_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
+from app.platform.db.v4_migration import V3MigrationReport, migrate_workspace_database
 from app.platform.processes import ExecutableRegistry, ProcessRunner
 from app.platform.processes.runner import DEFAULT_ENVIRONMENT_ALLOWLIST
 from app.preferences import PreferencesRepository, PreferencesService
@@ -95,7 +95,7 @@ class _UnavailableAgentRuntime:
 @dataclass
 class AppContext:
     settings: Settings
-    database: V3Database
+    database: WorkspaceDatabase
     attachments: AttachmentService
     catalog: CatalogQueries
     catalog_commands: CatalogCommands
@@ -152,7 +152,7 @@ class AppContext:
                     activation_journal=self.settings.activation_journal_path,
                 )
             elif state.kind is DatabaseKind.LEGACY_V3:
-                self.migration_report = migrate_v3_database(
+                self.migration_report = migrate_workspace_database(
                     self.settings.database_path,
                     activation_journal=self.settings.activation_journal_path,
                 )
@@ -185,7 +185,7 @@ class AppContext:
 def build_app_context(settings: Settings) -> AppContext:
     mutation_gate = WorkspaceMutationGate()
     process_lock = WorkspaceProcessLock(settings.runtime_dir / "workspace.lock")
-    database = V3Database(settings.database_path)
+    database = WorkspaceDatabase(settings.database_path)
     storage = AttachmentStorage(settings)
     attachment_repository = AttachmentRepository(database)
     attachments = AttachmentService(attachment_repository, storage)
@@ -239,9 +239,9 @@ def build_app_context(settings: Settings) -> AppContext:
         process_runner,
         pdf_capability_probe,
     )
-    OperationHandlers(
-        settings, attachments, process_runner, pdf_capability_probe
-    ).register(job_registry)
+    OperationHandlers(settings, attachments, process_runner, pdf_capability_probe).register(
+        job_registry
+    )
     document_repository = DocumentRepository(database)
     ocr_extractor = RapidOcrExtractor(settings, process_runner)
     document_extractor = BabelDocExtractor(
@@ -315,11 +315,7 @@ def build_app_context(settings: Settings) -> AppContext:
         return RuntimeCapability(
             supported=True,
             ready=ready,
-            message=(
-                "整篇翻译与章节自动降级已就绪"
-                if ready
-                else "尚未配置所选整篇翻译服务或密钥"
-            ),
+            message=("整篇翻译与章节自动降级已就绪" if ready else "尚未配置所选整篇翻译服务或密钥"),
             details={
                 "provider": configured.provider,
                 "model": configured.model,
@@ -355,9 +351,7 @@ def build_app_context(settings: Settings) -> AppContext:
                     "reading_order": pdf_capability_probe.get().reading_order,
                     "paragraph_boundaries": pdf_capability_probe.get().paragraph_boundaries,
                     "block_classification": pdf_capability_probe.get().block_classification,
-                    "specialized_block_types": (
-                        pdf_capability_probe.get().specialized_block_types
-                    ),
+                    "specialized_block_types": (pdf_capability_probe.get().specialized_block_types),
                     "ocr_confidence": pdf_capability_probe.get().ocr_confidence,
                     "external_translation_injection": (
                         pdf_capability_probe.get().external_block_translation_injection

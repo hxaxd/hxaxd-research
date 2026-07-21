@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 from .domain import CatalogNotFoundError
 from .models import (
@@ -17,7 +17,7 @@ from .models import (
 
 
 class CatalogQueries:
-    def __init__(self, database: V3Database):
+    def __init__(self, database: WorkspaceDatabase):
         self.database = database
 
     def get_work(self, work_id: str) -> WorkView:
@@ -180,9 +180,7 @@ class CatalogQueries:
             """,
             item_ids,
         ):
-            tags[str(row["item_id"])].append(
-                TagView(name=str(row["tag"]), kind=str(row["kind"]))
-            )
+            tags[str(row["item_id"])].append(TagView(name=str(row["tag"]), kind=str(row["kind"])))
         result = []
         for row in rows:
             item_id = str(row["id"])

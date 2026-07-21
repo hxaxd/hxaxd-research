@@ -18,12 +18,12 @@ from app.jobs import (
 )
 from app.jobs.router import create_job_router
 from app.jobs.streaming import stream_job_events
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 
 def _repository(tmp_path) -> SqliteJobRepository:
     database_path = tmp_path / "jobs.sqlite3"
-    V3Database(database_path).initialize()
+    WorkspaceDatabase(database_path).initialize()
     repository = SqliteJobRepository(database_path)
     repository.initialize_schema()
     return repository

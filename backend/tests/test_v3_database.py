@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from app.jobs import JobCreate, JobStatus, SqliteJobRepository
-from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
 
 REQUIRED_TABLES = {
     "works",
@@ -55,7 +55,7 @@ REQUIRED_TABLES = {
 
 def test_fresh_database_uses_only_the_v4_baseline(tmp_path):
     path = tmp_path / "research.sqlite3"
-    database = V3Database(path)
+    database = WorkspaceDatabase(path)
     database.initialize()
 
     assert database.schema_version() == 4
@@ -63,9 +63,7 @@ def test_fresh_database_uses_only_the_v4_baseline(tmp_path):
     with database.read() as connection:
         tables = {
             row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         migration = connection.execute("SELECT * FROM schema_migrations").fetchone()
     assert tables >= REQUIRED_TABLES
@@ -78,7 +76,7 @@ def test_fresh_database_uses_only_the_v4_baseline(tmp_path):
 
 def test_applied_baseline_is_immutable(tmp_path):
     path = tmp_path / "research.sqlite3"
-    database = V3Database(path)
+    database = WorkspaceDatabase(path)
     database.initialize()
     with sqlite3.connect(path) as connection:
         connection.execute("UPDATE schema_migrations SET checksum='changed' WHERE version=4")
@@ -89,7 +87,7 @@ def test_applied_baseline_is_immutable(tmp_path):
 
 def test_durable_job_repository_uses_the_current_baseline_tables(tmp_path):
     path = tmp_path / "research.sqlite3"
-    V3Database(path).initialize()
+    WorkspaceDatabase(path).initialize()
     repository = SqliteJobRepository(path)
 
     # This validates the schema contract but must not create a second jobs shape.

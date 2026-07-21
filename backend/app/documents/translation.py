@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -66,6 +67,13 @@ class TranslationProvider(Protocol):
     ) -> TranslationProviderResponse: ...
 
 
+def estimate_translation_output_tokens(blocks: list[TranslationInputBlock]) -> int:
+    """Conservatively budget translated JSON, not only the provider input window."""
+
+    source_characters = sum(len(block.source_text) for block in blocks)
+    return max(256, math.ceil(source_characters * 0.75) + len(blocks) * 24)
+
+
 class OpenAICompatibleTranslationProvider:
     def __init__(
         self,
@@ -111,9 +119,7 @@ class OpenAICompatibleTranslationProvider:
         cancellation: Callable[[], bool],
     ) -> TranslationProviderResponse:
         if not self.api_key:
-            raise DocumentTranslationError(
-                "credential_missing", "没有配置整篇翻译服务的 API 密钥"
-            )
+            raise DocumentTranslationError("credential_missing", "没有配置整篇翻译服务的 API 密钥")
         if cancellation():
             raise DocumentTranslationError("canceled", "整篇翻译已取消", retryable=True)
         source_characters = sum(len(block.source_text) for block in blocks)
@@ -121,6 +127,11 @@ class OpenAICompatibleTranslationProvider:
             raise DocumentTranslationError(
                 "document_too_large",
                 "文档超过整篇单次翻译的安全输入上限；不会静默退回碎片翻译",
+            )
+        if estimate_translation_output_tokens(blocks) > self.capacity.max_output_tokens:
+            raise DocumentTranslationError(
+                "document_output_too_large",
+                "预计译文超过单次结构化输出上限；需要按章节调度",
             )
         prompt = assemble_document_translation_prompt(
             blocks,
@@ -150,9 +161,7 @@ class OpenAICompatibleTranslationProvider:
                 "Accept": "application/json",
                 "User-Agent": "hxaxd-literature-workspace/4",
             },
-            data=json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode(
-                "utf-8"
-            ),
+            data=json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
         try:
             with urllib.request.urlopen(  # noqa: S310 - configured provider is trusted
@@ -176,15 +185,11 @@ class OpenAICompatibleTranslationProvider:
             raise DocumentTranslationError("canceled", "整篇翻译已取消", retryable=True)
         if finish_reason != "stop":
             raise DocumentTranslationError(
-                "translation_truncated"
-                if finish_reason == "length"
-                else "translation_incomplete",
+                "translation_truncated" if finish_reason == "length" else "translation_incomplete",
                 f"整篇翻译没有完整结束：{finish_reason}",
             )
         if not isinstance(content, str) or not content.strip():
-            raise DocumentTranslationError(
-                "invalid_provider_response", "整篇翻译服务返回了空内容"
-            )
+            raise DocumentTranslationError("invalid_provider_response", "整篇翻译服务返回了空内容")
         try:
             decoded = json.loads(content)
             output = DocumentTranslationOutput.model_validate(decoded)
@@ -210,9 +215,7 @@ def _consume_streaming_response(
     try:
         for raw_line in response:
             if cancellation():
-                raise DocumentTranslationError(
-                    "canceled", "整篇翻译已取消", retryable=True
-                )
+                raise DocumentTranslationError("canceled", "整篇翻译已取消", retryable=True)
             line = raw_line.decode("utf-8").strip()
             if not line or line.startswith(":"):
                 continue

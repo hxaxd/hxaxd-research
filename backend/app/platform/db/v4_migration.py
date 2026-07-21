@@ -8,11 +8,11 @@ from pathlib import Path
 
 from app.platform.activation import (
     FaultInjector,
-    activate_v3_database,
+    activate_workspace_database,
     default_activation_journal,
 )
 
-from .database import V4_MIGRATION_PATH, DatabaseKind, V3Database, inspect_database
+from .database import V4_MIGRATION_PATH, DatabaseKind, WorkspaceDatabase, inspect_database
 
 _V3_BASELINE_CHECKSUMS = frozenset(
     {
@@ -123,7 +123,7 @@ def build_v4_shadow(source_database: Path, target_database: Path) -> V3Migration
                 INSERT INTO schema_migrations(version, name, checksum, applied_at)
                 VALUES(4, 'v4_from_v3', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 """,
-                (V3Database.v4_migration_checksum(),),
+                (WorkspaceDatabase.v4_migration_checksum(),),
             )
             target.commit()
         except Exception:
@@ -132,7 +132,7 @@ def build_v4_shadow(source_database: Path, target_database: Path) -> V3Migration
         finally:
             target.close()
 
-        database = V3Database(target_database)
+        database = WorkspaceDatabase(target_database)
         database.verify()
         with database.read() as migrated:
             actual_counts = _counts(migrated)
@@ -163,7 +163,7 @@ def build_v4_shadow(source_database: Path, target_database: Path) -> V3Migration
     )
 
 
-def migrate_v3_database(
+def migrate_workspace_database(
     database_path: Path,
     *,
     activation_journal: Path | None = None,
@@ -182,7 +182,7 @@ def migrate_v3_database(
         shadow.unlink(missing_ok=True)
         raise V3MigrationError(f"backup database already exists: {backup}")
 
-    activate_v3_database(
+    activate_workspace_database(
         database_path,
         shadow,
         backup,

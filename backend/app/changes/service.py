@@ -20,6 +20,7 @@ from .models import (
     ChangeItemView,
     ChangeSetApplyRequest,
     ChangeSetCreate,
+    ChangeSetKind,
     ChangeSetList,
     ChangeSetReviewRequest,
     ChangeSetStatus,
@@ -132,11 +133,19 @@ class ChangeSetService:
             raise ChangeSetConflictError("change set content hash changed")
         if change_set.status is ChangeSetStatus.APPLIED:
             return change_set
-        approved = [
-            item for item in change_set.items if item.status is ChangeItemStatus.APPROVED
-        ]
+        if change_set.status is ChangeSetStatus.STALE:
+            raise ChangeSetConflictError("stale change set can no longer be applied")
+        approved = [item for item in change_set.items if item.status is ChangeItemStatus.APPROVED]
         if not approved:
             raise ChangeSetConflictError("change set has no approved changes to apply")
+
+        self.repository.reject_unselected(change_set_id, reviewed_by=actor_id)
+        if change_set.kind is not ChangeSetKind.RESOURCE_ACQUISITION:
+            return self._apply_atomic_database_changes(
+                change_set,
+                approved,
+                actor_id=actor_id,
+            )
 
         for item in approved:
             try:
@@ -179,6 +188,67 @@ class ChangeSetService:
             final_status = ChangeSetStatus.FAILED
         return self.repository.finish_apply(change_set_id, final_status)
 
+    def _apply_atomic_database_changes(
+        self,
+        change_set: ChangeSetView,
+        approved: list[ChangeItemView],
+        *,
+        actor_id: str,
+    ) -> ChangeSetView:
+        """Apply a user's selected database changes in one shared transaction."""
+
+        try:
+            with self.repository.database.transaction():
+                for item in approved:
+                    result = self._apply_item(change_set, item, actor_id=actor_id)
+                    self.repository.mark_item(
+                        item.id,
+                        ChangeItemStatus.APPLIED,
+                        result=result,
+                    )
+                return self.repository.finish_apply(
+                    change_set.id,
+                    ChangeSetStatus.APPLIED,
+                )
+        except _STALE_ERRORS as error:
+            return self._finish_atomic_failure(
+                change_set.id,
+                approved,
+                item_status=ChangeItemStatus.STALE,
+                set_status=ChangeSetStatus.STALE,
+                error_code="stale_target",
+                error_message=(f"所选变更已全部回滚；至少一个目标版本已变化：{error}"),
+            )
+        except Exception as error:
+            return self._finish_atomic_failure(
+                change_set.id,
+                approved,
+                item_status=ChangeItemStatus.FAILED,
+                set_status=ChangeSetStatus.FAILED,
+                error_code="atomic_apply_aborted",
+                error_message=f"所选变更已全部回滚：{error}",
+            )
+
+    def _finish_atomic_failure(
+        self,
+        change_set_id: str,
+        approved: list[ChangeItemView],
+        *,
+        item_status: ChangeItemStatus,
+        set_status: ChangeSetStatus,
+        error_code: str,
+        error_message: str,
+    ) -> ChangeSetView:
+        with self.repository.database.transaction():
+            for item in approved:
+                self.repository.mark_item(
+                    item.id,
+                    item_status,
+                    error_code=error_code,
+                    error_message=error_message,
+                )
+            return self.repository.finish_apply(change_set_id, set_status)
+
     def _validate_targets(self, payload: ChangeSetCreate) -> None:
         if payload.project_id is not None:
             self.screening.get_project(payload.project_id)
@@ -209,9 +279,7 @@ class ChangeSetService:
                         "Zotero preview changed before the proposal was submitted"
                     )
                 conflict_ids = {
-                    conflict.id
-                    for plan_item in preview.items
-                    for conflict in plan_item.conflicts
+                    conflict.id for plan_item in preview.items for conflict in plan_item.conflicts
                 }
                 if item.target_id not in conflict_ids:
                     raise ChangeSetConflictError("Zotero conflict is not in the preview")

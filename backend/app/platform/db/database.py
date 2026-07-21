@@ -4,8 +4,10 @@ import hashlib
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import StrEnum
+from itertools import count
 from pathlib import Path
 
 BASELINE_PATH = Path(__file__).with_name("baseline.sql")
@@ -76,15 +78,16 @@ def inspect_database(path: Path) -> DatabaseState:
         return DatabaseState(DatabaseKind.UNKNOWN, None)
 
 
-class V3Database:
-    """The current workspace database.
-
-    The historical class name remains internal while call sites are moved to the
-    domain-oriented database abstraction. It always represents the current schema.
-    """
+class WorkspaceDatabase:
+    """Domain-oriented access to the single current workspace schema."""
 
     def __init__(self, path: Path):
         self.path = path.resolve()
+        self._active_transaction: ContextVar[sqlite3.Connection | None] = ContextVar(
+            f"research_transaction_{id(self)}",
+            default=None,
+        )
+        self._savepoints = count(1)
 
     @staticmethod
     def baseline_checksum() -> str:
@@ -100,9 +103,7 @@ class V3Database:
             self._create_fresh()
             return
         if state.kind is not DatabaseKind.V4:
-            raise RuntimeError(
-                f"database is {state.kind.value}; use the explicit legacy importer"
-            )
+            raise RuntimeError(f"database is {state.kind.value}; use the explicit legacy importer")
         self.verify()
 
     def _create_fresh(self) -> None:
@@ -131,6 +132,10 @@ class V3Database:
 
     @contextmanager
     def read(self) -> Iterator[sqlite3.Connection]:
+        active = self._active_transaction.get()
+        if active is not None:
+            yield active
+            return
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
@@ -141,9 +146,22 @@ class V3Database:
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        active = self._active_transaction.get()
+        if active is not None:
+            savepoint = f"nested_{next(self._savepoints)}"
+            active.execute(f"SAVEPOINT {savepoint}")
+            try:
+                yield active
+                active.execute(f"RELEASE SAVEPOINT {savepoint}")
+            except Exception:
+                active.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                active.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
+            return
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
+        token = self._active_transaction.set(connection)
         try:
             connection.execute("BEGIN IMMEDIATE")
             yield connection
@@ -152,6 +170,7 @@ class V3Database:
             connection.rollback()
             raise
         finally:
+            self._active_transaction.reset(token)
             connection.close()
 
     def verify(self) -> None:

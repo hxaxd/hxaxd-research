@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from app.catalog.queries import CatalogQueries
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.platform.public_projection import (
     sanitize_public_payload,
     sanitize_public_text,
@@ -15,7 +15,7 @@ from .models import CandidateView, ProjectView, ProjectWorkView
 
 
 class ScreeningQueries:
-    def __init__(self, database: V3Database):
+    def __init__(self, database: WorkspaceDatabase):
         self.database = database
 
     def list_projects(self) -> list[ProjectView]:
@@ -169,9 +169,7 @@ class ScreeningQueries:
                         ),
                         "captured_at": source["retrieved_at"],
                         "summary": sanitize_public_text(row["rationale"]),
-                        "fields": sanitize_public_payload(
-                            json.loads(source["payload_json"])
-                        ),
+                        "fields": sanitize_public_payload(json.loads(source["payload_json"])),
                     }
                 )
         return CandidateView.model_validate(

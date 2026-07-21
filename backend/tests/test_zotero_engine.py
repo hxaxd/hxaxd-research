@@ -26,7 +26,7 @@ from app.integrations.zotero.service import ZoteroTransferService
 from app.library.repository import AttachmentRepository
 from app.library.service import AttachmentService
 from app.library.storage import AttachmentStorage
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.screening.commands import ScreeningCommands
 from app.screening.models import CandidateCreate, CandidatePromotionRequest, ProjectCreate
 from app.screening.queries import ScreeningQueries
@@ -37,7 +37,7 @@ LIBRARY = ZoteroLibraryRef(kind=ZoteroLibraryKind.USER, id="123")
 
 
 def _services(app_settings):
-    database = V3Database(app_settings.database_path)
+    database = WorkspaceDatabase(app_settings.database_path)
     database.initialize()
     storage = AttachmentStorage(app_settings)
     storage.initialize()
@@ -150,9 +150,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
     status = service.status()
     assert status.import_available is True
     assert status.export_available is False
-    request = TransferPreviewRequest(
-        direction="import", library=LIBRARY, project_id=project.id
-    )
+    request = TransferPreviewRequest(direction="import", library=LIBRARY, project_id=project.id)
     preview = service.create_preview(request)
     assert preview.summary.new == 1
     assert preview.items[0].source.title == "Imported deterministically"
@@ -160,9 +158,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
 
     receipt = service.execute(
         preview.id,
-        TransferExecuteRequest(
-            confirmed=True, expected_preview_hash=preview.preview_hash
-        ),
+        TransferExecuteRequest(confirmed=True, expected_preview_hash=preview.preview_hash),
     )
 
     assert receipt.status == "succeeded"
@@ -170,9 +166,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
     attachments = attachment_service.list_for_item(membership.preferred_item_id)
     assert attachments[0].origin == "zotero"
     assert attachments[0].sha256 == hashlib.sha256(PDF).hexdigest()
-    binding = repository.get_binding_by_external(
-        LIBRARY, "bibliographic_item", "REMOTE1"
-    )
+    binding = repository.get_binding_by_external(LIBRARY, "bibliographic_item", "REMOTE1")
     assert binding is not None
     assert binding.entity_id == membership.preferred_item_id
     assert binding.raw["remote_draft"]["collections"] == ["COLL0001"]
@@ -185,9 +179,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
     assert update_preview.summary.update == 1
     update_receipt = service.execute(
         update_preview.id,
-        TransferExecuteRequest(
-            confirmed=True, expected_preview_hash=update_preview.preview_hash
-        ),
+        TransferExecuteRequest(confirmed=True, expected_preview_hash=update_preview.preview_hash),
     )
     assert update_receipt.items[0].outcome == "updated"
     updated_membership = screening_queries.list_project_works(project.id)[0]
@@ -198,9 +190,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
         "Imported deterministically",
     ]
     assert len(attachment_service.list_for_item(updated_membership.preferred_item_id)) == 1
-    moved = repository.get_binding_by_external(
-        LIBRARY, "bibliographic_item", "REMOTE1"
-    )
+    moved = repository.get_binding_by_external(LIBRARY, "bibliographic_item", "REMOTE1")
     assert moved is not None
     assert moved.entity_id == updated_membership.preferred_item_id
     unchanged_preview = service.create_preview(request)
@@ -209,9 +199,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
 
     with pytest.raises(ZoteroCapabilityUnavailableError):
         service.create_preview(
-            TransferPreviewRequest(
-                direction="export", library=LIBRARY, project_id=project.id
-            )
+            TransferPreviewRequest(direction="export", library=LIBRARY, project_id=project.id)
         )
 
 
@@ -273,9 +261,7 @@ class FakeWebClient:
         return self.item
 
 
-def test_export_writes_metadata_and_pdf_then_establishes_unchanged_baseline(
-    app_settings, tmp_path
-):
+def test_export_writes_metadata_and_pdf_then_establishes_unchanged_baseline(app_settings, tmp_path):
     (
         _,
         gateway,
@@ -320,17 +306,13 @@ def test_export_writes_metadata_and_pdf_then_establishes_unchanged_baseline(
         planner=ZoteroDiffPlanner(clock=lambda: NOW),
         clock=lambda: NOW,
     )
-    request = TransferPreviewRequest(
-        direction="export", library=LIBRARY, project_id=project.id
-    )
+    request = TransferPreviewRequest(direction="export", library=LIBRARY, project_id=project.id)
     preview = service.create_preview(request)
     assert preview.summary.new == 1
 
     receipt = service.execute(
         preview.id,
-        TransferExecuteRequest(
-            confirmed=True, expected_preview_hash=preview.preview_hash
-        ),
+        TransferExecuteRequest(confirmed=True, expected_preview_hash=preview.preview_hash),
     )
 
     assert receipt.status == "succeeded"

@@ -17,8 +17,8 @@ from app.platform.activation import (
     activate_snapshot_directory,
     default_activation_journal,
 )
-from app.platform.db import DatabaseKind, V3Database, inspect_database
-from app.platform.db.v4_migration import V3MigrationError, migrate_v3_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
+from app.platform.db.v4_migration import V3MigrationError, migrate_workspace_database
 
 from .contract import (
     DATABASE_ARCHIVE_PATH,
@@ -40,7 +40,7 @@ _MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 @dataclass(frozen=True)
 class SnapshotRestoreResult:
     data_dir: Path
-    database: V3Database
+    database: WorkspaceDatabase
     recovery_dir: Path | None
     file_count: int
     source_format: str
@@ -57,7 +57,7 @@ class SnapshotRestorer:
         replace: bool = False,
         should_cancel: Callable[[], bool] | None = None,
         source_idle_check: Callable[[], None] | None = None,
-        before_activate: Callable[[V3Database], None] | None = None,
+        before_activate: Callable[[WorkspaceDatabase], None] | None = None,
         activation_journal: Path | None = None,
         fault_injector: FaultInjector | None = None,
     ) -> SnapshotRestoreResult:
@@ -103,7 +103,7 @@ class SnapshotRestorer:
                 fault_injector=fault_injector,
             )
 
-        active_database = V3Database(data_dir / "research.sqlite3")
+        active_database = WorkspaceDatabase(data_dir / "research.sqlite3")
         return SnapshotRestoreResult(
             data_dir=data_dir,
             database=active_database,
@@ -168,7 +168,7 @@ class SnapshotRestorer:
         database_path: Path,
         stage: Path,
         manifest: SnapshotManifest,
-    ) -> V3Database:
+    ) -> WorkspaceDatabase:
         state = inspect_database(database_path)
         if manifest.format == V2_SNAPSHOT_FORMAT:
             if state.kind is not DatabaseKind.LEGACY_V2:
@@ -190,7 +190,7 @@ class SnapshotRestorer:
             if state.kind is not DatabaseKind.LEGACY_V3:
                 raise SnapshotError("v3 快照清单与数据库结构不一致")
             try:
-                migration = migrate_v3_database(database_path)
+                migration = migrate_workspace_database(database_path)
             except (V3MigrationError, OSError, sqlite3.DatabaseError) as error:
                 raise SnapshotError(f"v3 快照迁移失败: {error}") from error
             if migration.backup_database is not None:
@@ -198,7 +198,7 @@ class SnapshotRestorer:
         else:  # SnapshotManifest rejects unsupported formats; keep the boundary explicit.
             raise SnapshotError("快照容器格式不受支持")
 
-        database = V3Database(database_path)
+        database = WorkspaceDatabase(database_path)
         try:
             database.verify()
         except (RuntimeError, sqlite3.DatabaseError) as error:
@@ -214,7 +214,7 @@ class SnapshotRestorer:
     @staticmethod
     def _validate_payload(
         stage: Path,
-        database: V3Database,
+        database: WorkspaceDatabase,
         manifest: SnapshotManifest,
     ) -> None:
         file_records = {item.path.removeprefix("payload/"): item for item in manifest.files}
@@ -264,7 +264,7 @@ class SnapshotRestorer:
             raise SnapshotError("快照包含数据库未引用的文件")
 
     @staticmethod
-    def _ensure_restored_jobs_are_terminal(database: V3Database) -> None:
+    def _ensure_restored_jobs_are_terminal(database: WorkspaceDatabase) -> None:
         placeholders = ", ".join("?" for _ in _ACTIVE_JOB_STATUSES)
         try:
             with database.read() as connection:

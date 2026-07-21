@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 
 from .domain import CatalogNotFoundError
 from .models import BibliographicItemView, WorkList, WorkView
@@ -13,14 +13,16 @@ from .queries import CatalogQueries
 router = APIRouter(tags=["catalog"])
 
 
-def get_v3_database(request: Request) -> V3Database:
-    database = getattr(request.app.state, "v3_database", None)
-    if not isinstance(database, V3Database):
-        raise RuntimeError("v3 database is not configured")
+def get_workspace_database(request: Request) -> WorkspaceDatabase:
+    database = getattr(request.app.state, "workspace_database", None)
+    if not isinstance(database, WorkspaceDatabase):
+        raise RuntimeError("workspace database is not configured")
     return database
 
 
-def get_queries(database: Annotated[V3Database, Depends(get_v3_database)]) -> CatalogQueries:
+def get_queries(
+    database: Annotated[WorkspaceDatabase, Depends(get_workspace_database)],
+) -> CatalogQueries:
     return CatalogQueries(database)
 
 
@@ -35,9 +37,7 @@ def list_works(
 
 
 @router.get("/works/{work_id}", response_model=WorkView)
-def get_work(
-    work_id: str, queries: Annotated[CatalogQueries, Depends(get_queries)]
-) -> WorkView:
+def get_work(work_id: str, queries: Annotated[CatalogQueries, Depends(get_queries)]) -> WorkView:
     try:
         return queries.get_work(work_id)
     except CatalogNotFoundError as error:

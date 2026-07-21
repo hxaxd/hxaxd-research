@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from app.platform.db import V3Database
+from app.platform.db import WorkspaceDatabase
 from app.utils.time import utc_now
 
 from .contract import (
@@ -44,7 +44,7 @@ class _ResourceRecord:
 class SnapshotWriter:
     """Create a verified current snapshot without exposing a half-written archive."""
 
-    def __init__(self, data_dir: Path, database: V3Database):
+    def __init__(self, data_dir: Path, database: WorkspaceDatabase):
         self.data_dir = data_dir.resolve()
         self.database = database
         self.database_path = database.path
@@ -101,9 +101,7 @@ class SnapshotWriter:
                         self._check_cancelled(should_cancel)
                         source = resolve_data_path(self.data_dir, resource.storage_key)
                         if not source.is_file():
-                            raise SnapshotError(
-                                f"数据库引用的文件不存在: {resource.storage_key}"
-                            )
+                            raise SnapshotError(f"数据库引用的文件不存在: {resource.storage_key}")
                         item = self._write_file(
                             archive,
                             source,
@@ -112,14 +110,13 @@ class SnapshotWriter:
                         )
                         if item.sha256 != resource.sha256 or item.size != resource.size:
                             raise SnapshotError(
-                                "文件与数据库记录不一致，快照已取消: "
-                                f"{resource.storage_key}"
+                                f"文件与数据库记录不一致，快照已取消: {resource.storage_key}"
                             )
                         files.append(item)
                     manifest = SnapshotManifest(
                         format=SNAPSHOT_FORMAT,
                         created_at=utc_now().isoformat(),
-                        schema_version=V3Database(database_copy).schema_version(),
+                        schema_version=WorkspaceDatabase(database_copy).schema_version(),
                         contract_version="4.0",
                         files=tuple(sorted(files, key=lambda item: item.path)),
                     )
@@ -193,7 +190,7 @@ class SnapshotWriter:
                 raise
             finally:
                 connection.close()
-            V3Database(database_copy).verify()
+            WorkspaceDatabase(database_copy).verify()
         except sqlite3.DatabaseError as error:
             raise SnapshotError("数据库副本不符合当前结构") from error
 
@@ -217,9 +214,7 @@ class SnapshotWriter:
                     """
                 ).fetchone()
                 if unavailable is not None:
-                    raise SnapshotError(
-                        f"附件没有可备份的本地对象: {unavailable['id']}"
-                    )
+                    raise SnapshotError(f"附件没有可备份的本地对象: {unavailable['id']}")
                 rows = connection.execute(
                     """
                     SELECT bo.storage_key, b.sha256, b.size

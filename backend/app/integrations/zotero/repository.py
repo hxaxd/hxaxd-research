@@ -8,7 +8,7 @@ from threading import RLock
 from typing import Protocol
 from uuid import uuid4
 
-from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
 
 from .models import (
     ConflictResolution,
@@ -191,11 +191,11 @@ class InMemoryZoteroTransferRepository:
 
 
 class SqliteZoteroTransferRepository:
-    """Durable Zotero transfer state backed by the single v3 baseline."""
+    """Durable Zotero transfer state backed by the workspace database."""
 
     def __init__(
         self,
-        database: V3Database,
+        database: WorkspaceDatabase,
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -211,7 +211,7 @@ class SqliteZoteroTransferRepository:
             if self._initialized:
                 return
             if inspect_database(self.database.path).kind is not DatabaseKind.V4:
-                raise RuntimeError("v3 database must be initialized before Zotero state")
+                raise RuntimeError("workspace database must be initialized before Zotero state")
             self._validate_schema()
             self._initialized = True
 
@@ -224,14 +224,12 @@ class SqliteZoteroTransferRepository:
         with self.database.read() as connection:
             present = {
                 str(row[0])
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table'"
-                )
+                for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
             }
         missing = required - present
         if missing:
             names = ", ".join(sorted(missing))
-            raise RuntimeError(f"v3 baseline is missing Zotero tables: {names}")
+            raise RuntimeError(f"workspace database is missing Zotero tables: {names}")
 
     def save_preview(self, preview: TransferPreview) -> None:
         self.initialize()
@@ -315,9 +313,7 @@ class SqliteZoteroTransferRepository:
             ).fetchone()
             if existing is not None:
                 if TransferReceipt.model_validate_json(existing[0]) != receipt:
-                    raise ZoteroBindingConflictError(
-                        "transfer already has a different receipt"
-                    )
+                    raise ZoteroBindingConflictError("transfer already has a different receipt")
                 return
             connection.execute(
                 """

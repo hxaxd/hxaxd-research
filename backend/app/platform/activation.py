@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
 
-from app.platform.db import DatabaseKind, V3Database, inspect_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
 
 ACTIVATION_JOURNAL_NAME = "workspace-activation.json"
 
@@ -136,7 +136,7 @@ def activate_v2_database(
     )
 
 
-def activate_v3_database(
+def activate_workspace_database(
     active: Path,
     staged: Path,
     recovery: Path,
@@ -197,7 +197,7 @@ def _activate_database_migration(
         _replace_path(staged, active)
         record = journal.set_phase(record, ActivationPhase.ACTIVATED)
         _inject(fault_injector, f"{label}.after_activated")
-        V3Database(active).verify()
+        WorkspaceDatabase(active).verify()
     except Exception:
         try:
             _rollback_database_migration(record, _migration_source_kind(operation), label)
@@ -246,7 +246,7 @@ def activate_snapshot_directory(
         _replace_path(staged, active)
         record = journal.set_phase(record, ActivationPhase.ACTIVATED)
         _inject(fault_injector, "snapshot.after_activated")
-        V3Database(active / "research.sqlite3").verify()
+        WorkspaceDatabase(active / "research.sqlite3").verify()
     except Exception:
         try:
             _rollback_snapshot(record)
@@ -272,8 +272,7 @@ def recover_pending_activation(
     operation = _operation(record)
     expected_active = (
         database_path.resolve()
-        if operation
-        in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}
+        if operation in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}
         else data_dir.resolve()
     )
     _validate_record(record, expected_active=expected_active)
@@ -340,7 +339,7 @@ def _recover_database_migration(
         record = journal.set_phase(record, ActivationPhase.SOURCE_MOVED)
         _replace_path(staged, active)
         journal.set_phase(record, ActivationPhase.ACTIVATED)
-        V3Database(active).verify()
+        WorkspaceDatabase(active).verify()
         journal.clear()
         return "committed"
     _rollback_database_migration(record, source_kind, label)
@@ -372,7 +371,7 @@ def _recover_snapshot(record: ActivationRecord, journal: ActivationJournal) -> s
         record = journal.set_phase(record, ActivationPhase.SOURCE_MOVED)
         _replace_path(staged, active)
         journal.set_phase(record, ActivationPhase.ACTIVATED)
-        V3Database(active / "research.sqlite3").verify()
+        WorkspaceDatabase(active / "research.sqlite3").verify()
         journal.clear()
         return "committed"
     if active_valid and not recovery.exists():
@@ -520,7 +519,7 @@ def _verified_current(path: Path) -> bool:
     if inspect_database(path).kind is not DatabaseKind.V4:
         return False
     try:
-        V3Database(path).verify()
+        WorkspaceDatabase(path).verify()
     except (OSError, RuntimeError, sqlite3.DatabaseError):
         return False
     return True

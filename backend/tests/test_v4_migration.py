@@ -5,8 +5,8 @@ import sqlite3
 import pytest
 
 from app.platform.activation import recover_pending_activation
-from app.platform.db import DatabaseKind, V3Database, inspect_database
-from app.platform.db.v4_migration import build_v4_shadow, migrate_v3_database
+from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
+from app.platform.db.v4_migration import build_v4_shadow, migrate_workspace_database
 
 NOW = "2026-07-22T00:00:00Z"
 V3_CHECKSUM = "102177290579b2a9ce83d5e12d8d1c5facc2e4c6d049e03bd92043bf0474ccbc"
@@ -33,7 +33,7 @@ class _SimulatedProcessCrash(BaseException):
 
 
 def _create_v3_workspace(path) -> None:
-    database = V3Database(path)
+    database = WorkspaceDatabase(path)
     database.initialize()
     with database.transaction() as connection:
         connection.execute(
@@ -122,7 +122,7 @@ def test_v3_is_upgraded_only_in_a_validated_shadow_copy(tmp_path):
     assert inspect_database(target).kind is DatabaseKind.V4
     assert report.preserved_counts["bibliographic_items"] == 1
     assert report.attachment_records_verified == 1
-    with V3Database(target).read() as connection:
+    with WorkspaceDatabase(target).read() as connection:
         item = connection.execute(
             "SELECT title, revision FROM bibliographic_items WHERE id='i1'"
         ).fetchone()
@@ -146,7 +146,7 @@ def test_v3_activation_is_replayed_after_process_crash(tmp_path):
             raise _SimulatedProcessCrash
 
     with pytest.raises(_SimulatedProcessCrash):
-        migrate_v3_database(
+        migrate_workspace_database(
             database_path,
             activation_journal=journal_path,
             fault_injector=crash,
