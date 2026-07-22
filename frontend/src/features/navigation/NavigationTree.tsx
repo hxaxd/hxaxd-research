@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 
 import { useAppData } from "../../app/AppDataContext";
+import { useWorkspaceTheme, type WorkspaceThemePreference } from "../../shared/theme";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import "./navigation.css";
 
@@ -17,6 +18,21 @@ const primaryLinks: Array<{ label: string; path: string; icon: IconName }> = [
 
 export function NavigationTree({ expanded, onToggle }: NavigationTreeProps) {
   const { projects, connection } = useAppData();
+  const { preference, setPreference } = useWorkspaceTheme();
+  const themeOptions: Array<{
+    value: WorkspaceThemePreference;
+    label: string;
+    icon: IconName;
+  }> = [
+    { value: "system", label: "跟随系统", icon: "monitor" },
+    { value: "light", label: "亮色", icon: "sun" },
+    { value: "dark", label: "暗色", icon: "moon" },
+  ];
+  const currentTheme = themeOptions.find((option) => option.value === preference)!;
+  const cycleTheme = () => {
+    const currentIndex = themeOptions.findIndex((option) => option.value === preference);
+    setPreference(themeOptions[(currentIndex + 1) % themeOptions.length]!.value);
+  };
   return (
     <nav
       className={expanded ? "navigation-tree" : "navigation-tree navigation-tree--collapsed"}
@@ -60,6 +76,34 @@ export function NavigationTree({ expanded, onToggle }: NavigationTreeProps) {
           ))}
         </ul>
       </div>
+
+      {expanded ? (
+        <div className="theme-switcher" role="group" aria-label="工作台外观">
+          {themeOptions.map((option) => (
+            <button
+              aria-pressed={preference === option.value}
+              className={preference === option.value ? "active" : ""}
+              key={option.value}
+              title={option.label}
+              type="button"
+              onClick={() => setPreference(option.value)}
+            >
+              <Icon name={option.icon} size={16} />
+              <span>{option.label.replace("跟随", "")}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button
+          aria-label={`外观：${currentTheme.label}，点击切换`}
+          className="theme-cycle-button"
+          title={`外观：${currentTheme.label}`}
+          type="button"
+          onClick={cycleTheme}
+        >
+          <Icon name={currentTheme.icon} size={17} />
+        </button>
+      )}
 
       <div className={`sidebar-footer sidebar-footer--${connection}`}>
         <span className="service-indicator" /><span>{connection === "connected" ? "服务已连接" : connection === "connecting" ? "正在连接" : "服务已断开"}</span>

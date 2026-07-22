@@ -108,7 +108,7 @@ export function AgentRunPage() {
     "cancellation_requested",
   ].includes(run.status);
   return (
-    <section className="workspace-page">
+    <section className="agent-run-page workspace-page">
       <div className="workspace-content">
         <header className="run-page-header">
           <Link to={returnTo}>

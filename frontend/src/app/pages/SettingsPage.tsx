@@ -8,15 +8,16 @@ import "./pages.css";
 export function SettingsPage() {
   const { workspace, connection, error, refresh } = useAppData();
   return (
-    <section className="workspace-page">
+    <section className="settings-page workspace-page">
       <div className="workspace-content">
         <header className="page-header compact-page-header">
           <div><span className="eyebrow">工作台设置</span><h1>按你的方式阅读与运行</h1><p>先设置日常阅读和任务行为；工具、设备访问与系统诊断放在后面。</p></div>
         </header>
-        <WorkspacePreferencesSettings />
-        <DeviceAccessSettings />
-        <OperationsSettings />
-        <details className="system-diagnostics">
+        <div className="settings-scroll-region">
+          <WorkspacePreferencesSettings />
+          <DeviceAccessSettings />
+          <OperationsSettings />
+          <details className="system-diagnostics">
           <summary><span><Icon name="activity" size={17} />系统诊断</span><small>连接、能力、契约和数据模型</small></summary>
           <div className="system-diagnostics-actions"><p>这些信息用于排查问题，不影响日常操作。</p><button className="toolbar-button" type="button" onClick={() => void refresh()}><Icon name="refresh" size={15} />重新检查</button></div>
           <div className="settings-grid">
@@ -35,7 +36,8 @@ export function SettingsPage() {
               </section>
             ))}
           </div>
-        </details>
+          </details>
+        </div>
       </div>
     </section>
   );

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import {
+  AgentRuntimePicker,
+  resolveAgentRuntimeSelection,
+} from "../agents/AgentRuntimePicker";
 import { api } from "../../shared/api/client";
-import type { Project, ProjectItem } from "../../shared/api/contracts";
+import type { AgentRuntimeId, Project, ProjectItem } from "../../shared/api/contracts";
 import { useApiResource } from "../../shared/api/useApiResource";
 import { Icon } from "../../shared/ui/Icon";
 
@@ -27,9 +31,12 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
   const [items, setItems] = useState<ProjectItem[]>([]);
   const [itemId, setItemId] = useState(fixedItemScope?.itemId ?? "");
   const [zoteroPreviewId, setZoteroPreviewId] = useState("");
+  const [runtimeId, setRuntimeId] = useState<AgentRuntimeId | "">("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const definitions = useApiResource(() => api.agentTaskDefinitions(), []);
+  const runtimes = useApiResource(() => api.agentRuntimes(), []);
+  const preferences = useApiResource(() => api.userPreferences(), []);
   const availableDefinitions = useMemo(
     () => definitions.data?.filter(
       (definition) => !fixedItemScope || definition.scope_requirement === "item",
@@ -40,6 +47,8 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
   const isLiteratureSearch = task?.scope_requirement === "project";
   const isItemTask = task?.scope_requirement === "item";
   const isConflictTask = task?.scope_requirement === "zotero_preview";
+  const runtimeOptions = useMemo(() => runtimes.data ?? [], [runtimes.data]);
+  const selectedRuntime = runtimeOptions.find((runtime) => runtime.id === runtimeId) ?? null;
 
   useEffect(() => {
     if (!availableDefinitions.length || availableDefinitions.some((item) => item.id === taskKind)) return;
@@ -47,6 +56,15 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
       availableDefinitions.find((item) => item.ready)?.id ?? availableDefinitions[0]?.id ?? "",
     );
   }, [availableDefinitions, taskKind]);
+
+  useEffect(() => {
+    if (!runtimeOptions.length) return;
+    setRuntimeId((current) => resolveAgentRuntimeSelection(
+      runtimeOptions,
+      preferences.data?.agent.default_runtime ?? "codex",
+      current,
+    ));
+  }, [preferences.data?.agent.default_runtime, runtimeOptions]);
 
   useEffect(() => {
     if (!fixedItemScope) return;
@@ -96,6 +114,10 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
       setError(task?.missing_reason || "所选智能体任务当前尚未就绪。");
       return;
     }
+    if (!selectedRuntime?.ready) {
+      setError(selectedRuntime?.message || "请先选择一个已经就绪的智能体运行环境。");
+      return;
+    }
     if (isLiteratureSearch && !projectId) {
       setError("文献检索必须先选择一个真实项目，候选结果才能进入正确的收件箱。");
       return;
@@ -117,6 +139,7 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
         project_id: projectId || null,
         item_id: isItemTask ? itemId : null,
         zotero_preview_id: isConflictTask ? zoteroPreviewId.trim() : null,
+        runtime: selectedRuntime.id,
       });
       navigate(`/agent-runs/${launch.run.id}`);
     } catch (reason) {
@@ -137,6 +160,14 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
         placeholder={fixedItemScope ? "例如：核对出版者页面和 DOI，提出元数据修订建议。" : "例如：检索最近两年的智能体长期记忆论文，把候选和来源证据放进当前项目。"}
         onChange={(event) => setGoal(event.target.value)}
       />
+      <AgentRuntimePicker
+        codexModel={preferences.data?.agent.model}
+        error={runtimes.error}
+        loading={runtimes.loading}
+        runtimes={runtimeOptions}
+        value={runtimeId}
+        onChange={setRuntimeId}
+      />
       <div className="launcher-controls">
         <label>
           <span>任务类型</span>
@@ -153,12 +184,16 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
         </label>}
         {isItemTask && !fixedItemScope ? <label><span>目标文献（必选）</span><select value={itemId} onChange={(event) => setItemId(event.target.value)}><option value="">选择项目文献</option>{items.map((item) => <option key={item.id} value={item.preferred_item_id}>{item.translated_title || item.title}</option>)}</select></label> : null}
         {isConflictTask ? <label><span>Zotero 预览 ID（必选）</span><input value={zoteroPreviewId} onChange={(event) => setZoteroPreviewId(event.target.value)} placeholder="传输预览 ID" /></label> : null}
-        <button className="primary-button" disabled={!goal.trim() || submitting || !task?.ready || (isLiteratureSearch && !projectId) || (isItemTask && !itemId) || (isConflictTask && !zoteroPreviewId.trim())} type="submit">
+        <button className="primary-button" disabled={!goal.trim() || submitting || !task?.ready || !selectedRuntime?.ready || (isLiteratureSearch && !projectId) || (isItemTask && !itemId) || (isConflictTask && !zoteroPreviewId.trim())} type="submit">
           <Icon name="arrow-right" size={15} />{submitting ? "正在启动…" : "创建独立运行"}
         </button>
       </div>
       <p className="launcher-capability-note">
-        {definitions.error
+        {runtimes.error
+          ? <>运行环境读取失败：{runtimes.error} <button type="button" onClick={() => void runtimes.retry()}>重新读取环境</button></>
+          : preferences.error
+            ? <>默认运行环境读取失败：{preferences.error} <button type="button" onClick={() => void preferences.retry()}>重新读取设置</button></>
+          : definitions.error
           ? <>{definitions.error} <button type="button" onClick={() => void definitions.retry()}>重新读取能力</button></>
           : !task?.ready
             ? task?.missing_reason || "正在读取后端任务能力…"

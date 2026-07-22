@@ -17,12 +17,14 @@ from .models import (
     ApprovalStatus,
     PublicAgentRun,
     PublicAgentRunPage,
+    PublicAgentRuntimeDefinition,
     PublicAgentTaskDefinition,
     PublicApproval,
 )
 from .prompting import PromptContext
 from .public import project_public_approval, project_public_run
 from .repository import AgentConflictError, AgentNotFoundError, SqliteAgentRunRepository
+from .runtime import RuntimeModelConflictError, RuntimeNotFoundError, RuntimeUnavailableError
 from .streaming import stream_agent_events
 from .supervisor import AgentSupervisor
 
@@ -33,6 +35,7 @@ class CreateAgentRunRequest(BaseModel):
     project_id: str | None = Field(default=None, max_length=200)
     item_id: str | None = Field(default=None, max_length=200)
     zotero_preview_id: str | None = Field(default=None, max_length=200)
+    runtime: str | None = Field(default=None, min_length=1, max_length=80)
 
     @field_validator("task_kind", "goal")
     @classmethod
@@ -54,7 +57,7 @@ def create_agent_router(
     scheduler_dependency: Callable[..., JobScheduler],
     context_resolver: Callable[[CreateAgentRunRequest], PromptContext],
     scope_resolver: Callable[[CreateAgentRunRequest], tuple[str, ...]],
-    run_defaults: Callable[[], tuple[str | None, str | None]] | None = None,
+    run_defaults: Callable[[], tuple[str | None, str | None, str | None]] | None = None,
     task_definitions: Callable[[], list[PublicAgentTaskDefinition]] | None = None,
 ) -> APIRouter:
     """Builds the public control plane around trusted, server-side context resolvers."""
@@ -70,11 +73,18 @@ def create_agent_router(
     offset_query = Query(default=0, ge=0)
     after_query = Query(default=0, ge=0)
 
-    @router.get(
-        "/agent-task-definitions", response_model=list[PublicAgentTaskDefinition]
-    )
+    @router.get("/agent-task-definitions", response_model=list[PublicAgentTaskDefinition])
     def list_task_definitions() -> list[PublicAgentTaskDefinition]:
         return task_definitions() if task_definitions is not None else []
+
+    @router.get("/agent-runtimes", response_model=list[PublicAgentRuntimeDefinition])
+    def list_agent_runtimes(
+        supervisor: AgentSupervisor = supervisor_dep,
+    ) -> list[PublicAgentRuntimeDefinition]:
+        return [
+            PublicAgentRuntimeDefinition.model_validate(definition, from_attributes=True)
+            for definition in supervisor.runtime_definitions()
+        ]
 
     def enqueue(
         scheduler: JobScheduler,
@@ -114,20 +124,27 @@ def create_agent_router(
         if context.objective != payload.goal:
             raise RuntimeError("agent context resolver changed the user-visible goal")
         tool_scopes = scope_resolver(payload)
-        model, reasoning_effort = run_defaults() if run_defaults is not None else (None, None)
-        run = supervisor.create(
-            payload.task_kind,
-            context,
-            project_id=payload.project_id,
-            item_id=payload.item_id,
-            target_type=(
-                "zotero_preview" if payload.zotero_preview_id is not None else None
-            ),
-            target_id=payload.zotero_preview_id,
-            tool_scopes=tool_scopes,
-            model=model,
-            reasoning_effort=reasoning_effort,
+        default_runtime, model, reasoning_effort = (
+            run_defaults() if run_defaults is not None else (None, None, None)
         )
+        selected_runtime = payload.runtime or default_runtime
+        try:
+            run = supervisor.create(
+                payload.task_kind,
+                context,
+                project_id=payload.project_id,
+                item_id=payload.item_id,
+                target_type=("zotero_preview" if payload.zotero_preview_id is not None else None),
+                target_id=payload.zotero_preview_id,
+                tool_scopes=tool_scopes,
+                runtime=selected_runtime,
+                model=model if selected_runtime in {None, "codex"} else None,
+                reasoning_effort=reasoning_effort,
+            )
+        except (RuntimeNotFoundError, RuntimeModelConflictError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except RuntimeUnavailableError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
         try:
             return enqueue(scheduler, repository, run)
         except JobConflictError as error:
@@ -232,9 +249,7 @@ def create_agent_router(
         supervisor: AgentSupervisor,
     ) -> PublicApproval:
         try:
-            return project_public_approval(
-                supervisor.resolve_approval(approval_id, decision)
-            )
+            return project_public_approval(supervisor.resolve_approval(approval_id, decision))
         except AgentNotFoundError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except AgentConflictError as error:

@@ -1,14 +1,14 @@
-.pairing-gate { display: grid; min-height: 100dvh; padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); place-items: center; background: radial-gradient(circle at 50% 0, rgb(139 141 246 / 15%), transparent 42%), #090b10; }
+.pairing-gate { display: grid; min-height: 100dvh; padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); place-items: center; background: var(--workspace-texture), var(--bg); }
 .pairing-gate--loading { align-content: center; gap: 12px; color: var(--text-faint); }
 .pairing-gate > section,
-.pairing-card { display: grid; width: min(510px, 100%); justify-items: start; border: 1px solid var(--border); border-radius: 24px; padding: clamp(26px, 6vw, 46px); background: linear-gradient(145deg, rgb(25 29 41 / 98%), rgb(13 16 23 / 98%)); box-shadow: 0 32px 90px rgb(0 0 0 / 40%); }
+.pairing-card { display: grid; width: min(510px, 100%); justify-items: start; border: 1px solid var(--border); border-radius: 24px; padding: clamp(26px, 6vw, 46px); background: var(--surface); box-shadow: var(--shadow-lg); }
 .pairing-gate__icon { display: grid; width: 58px; height: 58px; margin-bottom: 22px; place-items: center; border-radius: 18px; background: var(--accent-soft); color: var(--accent); }
 .pairing-gate__icon--error { background: var(--danger-soft); color: var(--danger); }
 .pairing-gate h1 { margin: 8px 0 10px; font-size: clamp(25px, 5vw, 38px); letter-spacing: -.045em; line-height: 1.1; }
 .pairing-gate p { margin: 0 0 22px; color: var(--text-muted); font-size: 12px; line-height: 1.75; }
 .pairing-card label { display: grid; width: 100%; gap: 7px; margin-bottom: 13px; color: var(--text-faint); font-size: 11px; }
-.pairing-card input { width: 100%; min-height: 48px; border: 1px solid var(--border); border-radius: 11px; padding: 0 13px; outline: none; background: var(--bg); color: var(--text); font-size: 15px; }
-.pairing-card input:focus { border-color: rgb(166 167 255 / 55%); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pairing-card input { width: 100%; min-height: 48px; border: 1px solid var(--border); border-radius: 11px; padding: 0 13px; outline: none; background: var(--input-bg); color: var(--text); font-size: 15px; }
+.pairing-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .pairing-card label:nth-of-type(2) input { font-family: ui-monospace, monospace; font-size: 20px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .pairing-card .primary-button { min-height: 50px; margin-top: 6px; }
 .pairing-card small { margin-top: 15px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
@@ -17,17 +17,17 @@
 .device-access-state { border-radius: 999px; padding: 5px 9px; background: var(--surface-active); color: var(--text-faint); font-size: 11px; white-space: nowrap; }
 .device-access-state--ready { background: var(--success-soft); color: var(--success); }
 .device-access-body { display: grid; gap: 15px; padding: 14px; }
-.device-access-warning { display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgb(245 158 11 / 28%); border-radius: 12px; padding: 13px; background: rgb(245 158 11 / 8%); color: var(--warning); }
+.device-access-warning { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--warning-border); border-radius: 12px; padding: 13px; background: var(--warning-soft); color: var(--warning); }
 .device-access-warning p { margin: 0; font-size: 12px; line-height: 1.6; }
-.device-access-explainer { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--border-soft); border-radius: 13px; padding: 15px; background: #0d1017; color: var(--accent); }
+.device-access-explainer { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--border-soft); border-radius: 13px; padding: 15px; background: var(--surface-inset); color: var(--accent); }
 .device-access-explainer strong,
 .pairing-ticket-area strong,
 .device-session-section strong { color: var(--text); font-size: 11px; }
 .device-access-explainer p,
 .pairing-ticket-area p,
 .device-session-section p { margin: 4px 0 0; color: var(--text-faint); font-size: 11px; line-height: 1.5; }
-.pairing-ticket-area { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border: 1px solid rgb(166 167 255 / 18%); border-radius: 14px; padding: 15px; background: linear-gradient(145deg, var(--accent-soft), transparent); }
-.pairing-ticket { display: grid; grid-column: 1 / -1; justify-items: center; border: 1px dashed rgb(166 167 255 / 34%); border-radius: 12px; padding: 18px; background: rgb(9 11 16 / 45%); }
+.pairing-ticket-area { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border: 1px solid var(--accent-border); border-radius: 14px; padding: 15px; background: linear-gradient(145deg, var(--accent-soft), transparent); }
+.pairing-ticket { display: grid; grid-column: 1 / -1; justify-items: center; border: 1px dashed var(--accent-border); border-radius: 12px; padding: 18px; background: var(--surface-inset); }
 .pairing-ticket > span { color: var(--text-faint); font-size: 11px; letter-spacing: .08em; }
 .pairing-ticket > strong { margin: 6px 0; color: var(--accent); font-family: ui-monospace, monospace; font-size: clamp(28px, 5vw, 42px); letter-spacing: .12em; }
 .pairing-ticket small { color: var(--text-faint); font-size: 11px; }
@@ -41,7 +41,7 @@
 .device-session-list article strong { display: flex; align-items: center; gap: 7px; }
 .device-session-list article em { border-radius: 999px; padding: 2px 6px; background: var(--success-soft); color: var(--success); font-size: 7px; font-style: normal; }
 .device-session-list article small { overflow: hidden; color: var(--text-faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.danger-quiet-button { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; border: 1px solid rgb(255 140 154 / 20%); border-radius: 9px; padding: 0 10px; background: var(--danger-soft); color: var(--danger); font-size: 11px; }
+.danger-quiet-button { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; border: 1px solid var(--danger-border); border-radius: 9px; padding: 0 10px; background: var(--danger-soft); color: var(--danger); font-size: 11px; }
 @media (max-width: 700px) {
   .pairing-ticket-area { grid-template-columns: 1fr; }
   .pairing-ticket-area > button { min-height: 46px; }

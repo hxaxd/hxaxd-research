@@ -2,8 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AppRouter } from "./app/router";
+import { initializeWorkspaceTheme } from "./shared/theme";
 import "./styles/base.css";
 import "./styles/tokens.css";
+
+initializeWorkspaceTheme();
 
 const chunkReloadMarker = "hxaxd-stale-chunk-reload";
 window.addEventListener("vite:preloadError", (event) => {

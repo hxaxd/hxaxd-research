@@ -13,6 +13,7 @@ from .models import (
     PublicAgentEvent,
     PublicAgentRun,
     PublicAgentRunPage,
+    PublicAgentRuntimeDefinition,
     PublicApproval,
 )
 from .prompting import (
@@ -22,10 +23,19 @@ from .prompting import (
     PromptContext,
     PromptSnapshot,
 )
-from .repository import AgentConflictError, AgentNotFoundError, SqliteAgentRunRepository
+from .repository import (
+    AgentConflictError,
+    AgentIdentityConflictError,
+    AgentNotFoundError,
+    SqliteAgentRunRepository,
+)
 from .runtime import (
+    DEEPSEEK_V4_FLASH,
     WEB_SEARCH_SCOPE,
     AgentRuntime,
+    AgentRuntimeDefinition,
+    AgentRuntimeRegistry,
+    RegisteredAgentRuntime,
     RuntimeApprovalRequest,
     RuntimeEvent,
     RuntimeMcpCredentials,
@@ -37,11 +47,14 @@ from .supervisor import AgentSupervisor
 __all__ = [
     "AgentConflictError",
     "AgentEvent",
+    "AgentIdentityConflictError",
     "AgentNotFoundError",
     "AgentRun",
     "AgentRunCreate",
     "AgentRunStatus",
     "AgentRuntime",
+    "AgentRuntimeDefinition",
+    "AgentRuntimeRegistry",
     "AgentRunJobHandler",
     "AgentPromptContextBuilder",
     "AgentSupervisor",
@@ -56,6 +69,7 @@ __all__ = [
     "PromptSnapshot",
     "PublicAgentRun",
     "PublicAgentRunPage",
+    "PublicAgentRuntimeDefinition",
     "PublicAgentEvent",
     "PublicApproval",
     "RuntimeApprovalRequest",
@@ -63,6 +77,8 @@ __all__ = [
     "RuntimeMcpCredentials",
     "RuntimeOutcome",
     "RuntimeRequest",
+    "RegisteredAgentRuntime",
     "SqliteAgentRunRepository",
     "WEB_SEARCH_SCOPE",
+    "DEEPSEEK_V4_FLASH",
 ]

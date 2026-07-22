@@ -48,9 +48,7 @@ class AgentPromptContextBuilder:
         target_type: str | None = None,
         target_id: str | None = None,
     ) -> tuple[str, ...]:
-        policy = self.policies.resolve(
-            task_kind, project_id, item_id, target_type, target_id
-        )
+        policy = self.policies.resolve(task_kind, project_id, item_id, target_type, target_id)
         configured = (
             self.preferences.get().agent.enabled_capabilities
             if self.preferences is not None
@@ -92,9 +90,7 @@ class AgentPromptContextBuilder:
         target_type: str | None = None,
         target_id: str | None = None,
     ) -> PromptContext:
-        policy = self.policies.resolve(
-            task_kind, project_id, item_id, target_type, target_id
-        )
+        policy = self.policies.resolve(task_kind, project_id, item_id, target_type, target_id)
         project = None
         items: list[dict] = []
         attachments: list[dict] = []
@@ -160,9 +156,7 @@ class AgentPromptContextBuilder:
             task_data["zotero_transfer_preview"] = PublicTransferPreview.from_internal(
                 preview
             ).model_dump(mode="json")
-        scopes = self.scopes_for(
-            task_kind, project_id, item_id, target_type, target_id
-        )
+        scopes = self.scopes_for(task_kind, project_id, item_id, target_type, target_id)
         return PromptContext(
             objective=goal,
             scope={

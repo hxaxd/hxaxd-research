@@ -21,6 +21,9 @@ class Settings:
     public_base_url: str = "http://127.0.0.1:8000"
     agent_base_url: str = "http://127.0.0.1:8000"
     codex_executable: Path | None = None
+    pi_executable: Path | None = None
+    opencode_executable: Path | None = None
+    claude_code_executable: Path | None = None
     zotero_local_url: str = "http://127.0.0.1:23119/api/"
     zotero_api_key: str | None = None
     translation_api_base_url: str = "https://api.deepseek.com"
@@ -62,9 +65,7 @@ class Settings:
     def rapidocr_package_dir(self) -> Path | None:
         virtual_environment = self.pdf2zh_dir / ".venv"
         candidates = [virtual_environment / "Lib" / "site-packages" / "rapidocr"]
-        candidates.extend(
-            virtual_environment.glob("lib/python*/site-packages/rapidocr")
-        )
+        candidates.extend(virtual_environment.glob("lib/python*/site-packages/rapidocr"))
         return next((candidate for candidate in candidates if candidate.is_dir()), None)
 
     @property
@@ -96,9 +97,7 @@ class Settings:
         if agent_runtime_value:
             agent_runtime_dir = Path(agent_runtime_value).resolve()
         else:
-            local_state_root = os.environ.get("LOCALAPPDATA") or os.environ.get(
-                "XDG_STATE_HOME"
-            )
+            local_state_root = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_STATE_HOME")
             if local_state_root:
                 agent_runtime_dir = (
                     Path(local_state_root) / "HxaxdResearch" / "agent-runs"
@@ -108,9 +107,12 @@ class Settings:
                     Path.home() / ".local" / "state" / "HxaxdResearch" / "agent-runs"
                 ).resolve()
         codex_value = os.environ.get("HXAXD_CODEX_EXECUTABLE", "").strip()
-        public_base_url = os.environ.get(
-            "RESEARCH_APP_PUBLIC_URL", "http://127.0.0.1:8000"
-        ).rstrip("/")
+        pi_value = os.environ.get("HXAXD_PI_EXECUTABLE", "").strip()
+        opencode_value = os.environ.get("HXAXD_OPENCODE_EXECUTABLE", "").strip()
+        claude_code_value = os.environ.get("HXAXD_CLAUDE_EXECUTABLE", "").strip()
+        public_base_url = os.environ.get("RESEARCH_APP_PUBLIC_URL", "http://127.0.0.1:8000").rstrip(
+            "/"
+        )
         public_host = urlsplit(public_base_url).hostname or "127.0.0.1"
         configured_hosts = tuple(
             host.strip()
@@ -126,10 +128,15 @@ class Settings:
             frontend_origins=("http://127.0.0.1:5173", "http://localhost:5173"),
             agent_runtime_dir=agent_runtime_dir,
             public_base_url=public_base_url,
-            agent_base_url=os.environ.get(
-                "RESEARCH_APP_AGENT_URL", "http://127.0.0.1:8000"
-            ).rstrip("/"),
+            agent_base_url=os.environ.get("RESEARCH_APP_AGENT_URL", "http://127.0.0.1:8000").rstrip(
+                "/"
+            ),
             codex_executable=Path(codex_value).resolve() if codex_value else None,
+            pi_executable=Path(pi_value).resolve() if pi_value else None,
+            opencode_executable=(Path(opencode_value).resolve() if opencode_value else None),
+            claude_code_executable=(
+                Path(claude_code_value).resolve() if claude_code_value else None
+            ),
             zotero_local_url=os.environ.get(
                 "RESEARCH_ZOTERO_LOCAL_URL", "http://127.0.0.1:23119/api/"
             ),
@@ -151,9 +158,7 @@ class Settings:
             ).strip(),
             lan_access_enabled=os.environ.get("RESEARCH_APP_LAN_ACCESS", "").strip()
             in {"1", "true", "yes", "on"},
-            device_session_days=int(
-                os.environ.get("RESEARCH_APP_DEVICE_SESSION_DAYS", "90")
-            ),
+            device_session_days=int(os.environ.get("RESEARCH_APP_DEVICE_SESSION_DAYS", "90")),
             device_cookie_secure=urlsplit(public_base_url).scheme == "https",
             allowed_hosts=tuple(
                 dict.fromkeys(("127.0.0.1", "localhost", public_host, *configured_hosts))

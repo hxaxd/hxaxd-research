@@ -510,7 +510,10 @@ export interface TranslationPreferences {
   retranslate_scope: "changed" | "document";
 }
 
+export type AgentRuntimeId = "codex" | "pi" | "opencode" | "claude-code";
+
 export interface AgentPreferences {
+  default_runtime: AgentRuntimeId;
   model: string | null;
   reasoning_effort: "low" | "medium" | "high" | "xhigh";
   enabled_capabilities: Array<"catalog_read" | "candidate_propose" | "metadata_propose" | "resource_propose" | "zotero_conflict_propose" | "web_search">;
@@ -651,6 +654,17 @@ export interface AgentTaskDefinition {
   missing_reason: string | null;
 }
 
+export interface AgentRuntimeDefinition {
+  id: AgentRuntimeId;
+  label: string;
+  transport: string;
+  ready: boolean;
+  message: string;
+  version: string | null;
+  model: string | null;
+  supports_resume: boolean;
+}
+
 export interface AgentRun {
   id: string;
   task_kind: string;
@@ -661,7 +675,7 @@ export interface AgentRun {
   target_type: string | null;
   target_id: string | null;
   tool_scopes: string[];
-  runtime: string;
+  runtime: AgentRuntimeId;
   runtime_version: string | null;
   model: string | null;
   reasoning_effort: string | null;
@@ -688,6 +702,7 @@ export interface AgentRunCreate {
   project_id?: string | null;
   item_id?: string | null;
   zotero_preview_id?: string | null;
+  runtime?: AgentRuntimeId;
 }
 
 export interface AgentRunLaunch {

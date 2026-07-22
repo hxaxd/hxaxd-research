@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from threading import Thread
+from threading import Barrier, Thread
 from time import sleep
 
 import pytest
@@ -190,6 +190,69 @@ def test_supervisor_persists_runtime_events_and_approval(tmp_path):
     assert any(event.event_type == "approval.resolved" for event in repository.list_events(run.id))
 
 
+def test_supervisor_persists_provider_identity_immediately_and_rejects_outcome_change(
+    tmp_path,
+):
+    class MismatchedOutcomeRuntime:
+        name = "identity-proof"
+        version = "1"
+
+        def run(self, request, emit, approve, cancellation):
+            emit(
+                RuntimeEvent(
+                    "thread.started",
+                    {"thread_id": "thread-established"},
+                )
+            )
+            assert repository.get(request.run_id).provider_thread_id == "thread-established"
+            return RuntimeOutcome(
+                RuntimeOutcomeStatus.COMPLETED,
+                "thread-replaced",
+                "turn-1",
+            )
+
+        def interrupt(self, run_id):
+            return None
+
+    repository, supervisor = _supervisor(tmp_path, MismatchedOutcomeRuntime())
+    run = supervisor.create("literature.search", PromptContext(objective="核验身份"))
+
+    failed = supervisor.execute(run.id)
+
+    assert failed.status is AgentRunStatus.FAILED
+    assert failed.provider_thread_id == "thread-established"
+    assert failed.error_code == "provider_thread_mismatch"
+    events = repository.list_events(run.id)
+    identity = next(event for event in events if event.event_type == "thread.started")
+    assert identity.visibility == "internal"
+    assert any(
+        event.event_type == "security.provider_thread_mismatch" for event in events
+    )
+
+
+def test_supervisor_rejects_second_provider_thread_event(tmp_path):
+    class DuplicateIdentityRuntime:
+        name = "identity-events"
+        version = "1"
+
+        def run(self, request, emit, approve, cancellation):
+            emit(RuntimeEvent("thread.started", {"thread_id": "thread-one"}))
+            emit(RuntimeEvent("thread.started", {"thread_id": "thread-two"}))
+            raise AssertionError("second identity event must fail before this line")
+
+        def interrupt(self, run_id):
+            return None
+
+    repository, supervisor = _supervisor(tmp_path, DuplicateIdentityRuntime())
+    run = supervisor.create("literature.search", PromptContext(objective="核验身份"))
+
+    failed = supervisor.execute(run.id)
+
+    assert failed.status is AgentRunStatus.FAILED
+    assert failed.provider_thread_id == "thread-one"
+    assert failed.error_code == "provider_thread_mismatch"
+
+
 def test_supervisor_revokes_run_capability_after_execution(tmp_path):
     database_path = tmp_path / "agents.sqlite3"
     WorkspaceDatabase(database_path).initialize()
@@ -246,6 +309,49 @@ def test_cancel_resolves_pending_approval_and_finishes_run(tmp_path):
     assert approval.status is ApprovalStatus.DENIED
     assert approval.decision is ApprovalDecision.CANCEL
     assert results[0].status is AgentRunStatus.CANCELED
+
+
+def test_cancel_before_atomic_execution_claim_never_starts_runtime(
+    tmp_path,
+    monkeypatch,
+):
+    class MustNotRunRuntime:
+        name = "cancel-race"
+        version = "1"
+        called = False
+
+        def run(self, request, emit, approve, cancellation):
+            self.called = True
+            raise AssertionError("canceled run reached the runtime")
+
+        def interrupt(self, run_id):
+            return None
+
+    runtime = MustNotRunRuntime()
+    repository, supervisor = _supervisor(tmp_path, runtime)
+    run = supervisor.create("literature.search", PromptContext(objective="立即停止"))
+    original_claim = repository.claim_execution
+    claim_entered = Barrier(2)
+    release_claim = Barrier(2)
+
+    def blocked_claim(run_id):
+        claim_entered.wait(timeout=3)
+        release_claim.wait(timeout=3)
+        return original_claim(run_id)
+
+    monkeypatch.setattr(repository, "claim_execution", blocked_claim)
+    results = []
+    thread = Thread(target=lambda: results.append(supervisor.execute(run.id)))
+    thread.start()
+    claim_entered.wait(timeout=3)
+
+    canceled_at_boundary = supervisor.cancel(run.id)
+    release_claim.wait(timeout=3)
+    thread.join(timeout=3)
+
+    assert canceled_at_boundary.status is AgentRunStatus.CANCELED
+    assert results[0].status is AgentRunStatus.CANCELED
+    assert runtime.called is False
 
 
 def test_restart_reconciles_agent_and_recovered_job_then_allows_new_thread(tmp_path):

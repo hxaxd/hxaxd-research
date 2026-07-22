@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.changes.models import ChangeSetStatus
 from app.changes.repository import ChangeSetRepository
 from tests.test_api_v3 import _candidate
 
@@ -49,6 +50,47 @@ def _apply(client, change_set):
         f"/api/change-sets/{change_set['id']}/apply",
         json={"expected_content_hash": change_set["content_hash"]},
     )
+
+
+def test_unreviewed_resource_proposal_stays_submitted_when_reconciled(client):
+    project, _, item = _indexed_item(client)
+    response = client.post(
+        "/api/change-sets",
+        json={
+            "kind": "resource_acquisition",
+            "summary": "Keep the resource proposal pending review.",
+            "project_id": project["id"],
+            "item_id": item["id"],
+            "items": [
+                {
+                    "operation": "resource.acquire",
+                    "target_id": item["id"],
+                    "base_revision": item["revision"],
+                    "payload": {
+                        "request": {
+                            "url": "https://example.invalid/unreviewed.pdf",
+                            "filename": "unreviewed.pdf",
+                        }
+                    },
+                }
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    proposed = response.json()
+    context = client.app.state.context
+    original_jobs = context.job_repository.list_jobs(limit=1000)
+
+    reconciled = context.changes.get(proposed["id"])
+    listed = context.changes.list(status=ChangeSetStatus.SUBMITTED)
+
+    assert reconciled.status is ChangeSetStatus.SUBMITTED
+    assert reconciled.items[0].status.value == "proposed"
+    assert [change_set.id for change_set in listed.items] == [proposed["id"]]
+    assert ChangeSetRepository(context.database).get(proposed["id"]).status is (
+        ChangeSetStatus.SUBMITTED
+    )
+    assert context.job_repository.list_jobs(limit=1000) == original_jobs
 
 
 def test_metadata_change_requires_review_and_records_revision(client):

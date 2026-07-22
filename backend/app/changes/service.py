@@ -265,8 +265,12 @@ class ChangeSetService:
             in {ChangeItemStatus.APPLIED, ChangeItemStatus.STALE, ChangeItemStatus.FAILED}
         ]
         applied = [item for item in attempted if item.status is ChangeItemStatus.APPLIED]
-        waiting = [item for item in current.items if item.status is ChangeItemStatus.APPROVED]
-        if waiting:
+        pending = [
+            item
+            for item in current.items
+            if item.status in {ChangeItemStatus.PROPOSED, ChangeItemStatus.APPROVED}
+        ]
+        if pending:
             final_status = ChangeSetStatus.SUBMITTED
         elif attempted and len(applied) == len(attempted):
             final_status = ChangeSetStatus.APPLIED
@@ -274,8 +278,10 @@ class ChangeSetService:
             final_status = ChangeSetStatus.PARTIALLY_APPLIED
         elif attempted and all(item.status is ChangeItemStatus.STALE for item in attempted):
             final_status = ChangeSetStatus.STALE
-        else:
+        elif attempted:
             final_status = ChangeSetStatus.FAILED
+        else:
+            final_status = current.status
         if current.status is final_status:
             return current
         return self.repository.finish_apply(change_set_id, final_status)

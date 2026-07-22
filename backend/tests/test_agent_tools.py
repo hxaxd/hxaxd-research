@@ -100,6 +100,7 @@ def test_mcp_tool_allowlist_is_derived_from_run_scopes() -> None:
         "list_candidates",
     )
     assert context.tools_for_scopes(discovery_scopes)[-1] == "stage_candidate"
+    assert "web_search" in context.tools_for_scopes(discovery_scopes)
 
 
 def test_non_search_task_context_uses_central_task_constraints() -> None:
@@ -112,6 +113,7 @@ def test_non_search_task_context_uses_central_task_constraints() -> None:
         "list_project_works",
         "get_bibliographic_item",
         "list_candidates",
+        "web_search",
         "propose_metadata_patch",
         "propose_project_insights",
     )
@@ -238,6 +240,12 @@ def test_streamable_http_mcp_authenticates_and_calls_domain_tool(client) -> None
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": False,
+    }
+    assert tools["web_search"]["annotations"] == {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
     }
 
     called = client.post(

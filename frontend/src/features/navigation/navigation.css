@@ -4,7 +4,7 @@
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--border-soft);
-  background: #0d1017;
+  background: var(--sidebar-bg);
 }
 
 .sidebar-brand {
@@ -30,7 +30,7 @@
   height: 44px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgb(166 167 255 / 18%);
+  border: 1px solid var(--accent-border);
   border-radius: 13px;
   background: var(--accent-soft);
   color: var(--accent);
@@ -118,6 +118,38 @@
   color: var(--text-faint);
   font-size: 11px;
 }
+
+.theme-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0 12px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 11px;
+  padding: 3px;
+  background: var(--surface-inset);
+}
+
+.theme-switcher button,
+.theme-cycle-button {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.theme-switcher button:hover,
+.theme-cycle-button:hover { background: var(--surface-hover); color: var(--text); }
+.theme-switcher button.active { background: var(--surface); box-shadow: 0 1px 4px rgb(16 15 15 / 10%); color: var(--accent); }
+.theme-switcher span { font-size: 11px; }
+.theme-cycle-button { margin: 0 auto 10px; }
 .service-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
 .sidebar-footer--connected .service-indicator { background: var(--success); box-shadow: 0 0 10px var(--success); }
 .sidebar-footer--disconnected .service-indicator { background: var(--danger); }

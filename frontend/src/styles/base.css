@@ -50,7 +50,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid rgb(255 140 154 / 24%);
+  border: 1px solid var(--danger-border);
   border-radius: 9px;
   padding: 10px 12px;
   background: var(--danger-soft);
@@ -85,12 +85,12 @@ input:focus-visible {
 ::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: #343b4b;
+  background: var(--scrollbar);
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #434b5e;
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 
@@ -124,7 +124,7 @@ input:focus-visible {
 .tree-add:hover,
 .toolbar-button:hover,
 .segmented:hover:not(:disabled) {
-  border-color: #40485a;
+  border-color: var(--text-faint);
   background: var(--surface-hover);
 }
 
@@ -152,14 +152,15 @@ input:focus-visible {
 .primary-toolbar-button {
   border-color: transparent;
   background: var(--accent-strong);
-  box-shadow: 0 5px 18px rgb(139 141 246 / 20%);
-  color: #0b0c17;
+  box-shadow: 0 5px 18px var(--accent-glow);
+  color: var(--accent-contrast);
   font-weight: 700;
 }
 
 .primary-button:hover:not(:disabled),
 .primary-toolbar-button:hover:not(:disabled) {
-  background: #a3a5ff;
+  background: var(--accent);
+  filter: brightness(1.06);
 }
 
 button:disabled {

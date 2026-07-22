@@ -12,9 +12,9 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 10px 13px;
-  background: rgb(15 19 28 / 96%);
+  background: var(--overlay-bg);
   color: var(--text);
-  box-shadow: 0 20px 60px rgb(0 0 0 / 48%);
+  box-shadow: var(--shadow-lg);
   text-align: left;
 }
 .task-effect-toast span { display: grid; gap: 3px; min-width: 0; }
