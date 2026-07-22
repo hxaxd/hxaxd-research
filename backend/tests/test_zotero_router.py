@@ -82,6 +82,9 @@ def test_router_requires_application_wiring_and_accepts_an_abstract_service():
     assert created.json()["summary"]["new"] == 1
     assert len(created.json()["preview_hash"]) == 64
     assert "source" not in created.json()["items"][0]
+    assert created.json()["items"][0]["display_title"] == "Paper"
+    assert created.json()["project_id"] == "project-1"
+    assert created.json()["library"] == {"kind": "users", "id": "0"}
 
     status = client.get("/api/zotero/status")
     assert status.json()["import_available"] is True

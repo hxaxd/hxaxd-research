@@ -155,6 +155,18 @@ class ChangeSetRepository:
             items = [self._get_in(connection, str(row["id"])) for row in rows]
         return ChangeSetList(items=items, total=total, limit=limit, offset=offset)
 
+    def pending_resource_ids(self) -> list[str]:
+        with self.database.read() as connection:
+            rows = connection.execute(
+                """
+                SELECT id FROM change_sets
+                WHERE kind = 'resource_acquisition'
+                  AND status IN ('submitted', 'partially_applied', 'failed')
+                ORDER BY created_at, id
+                """
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
+
     def review(
         self,
         change_set_id: str,
@@ -247,7 +259,7 @@ class ChangeSetRepository:
                 """
                 UPDATE change_items
                 SET status = ?, result_json = ?, error_code = ?, error_message = ?,
-                    applied_at = CASE WHEN ? = 'applied' THEN ? ELSE applied_at END
+                    applied_at = CASE WHEN ? = 'applied' THEN ? ELSE NULL END
                 WHERE id = ?
                 """,
                 (
@@ -295,9 +307,16 @@ class ChangeSetRepository:
         with self.database.transaction() as connection:
             connection.execute(
                 """
-                UPDATE change_sets SET status = ?, applied_at = ? WHERE id = ?
+                UPDATE change_sets
+                SET status = ?,
+                    applied_at = CASE
+                        WHEN ? IN ('applied', 'partially_applied')
+                        THEN COALESCE(applied_at, ?)
+                        ELSE NULL
+                    END
+                WHERE id = ?
                 """,
-                (status.value, now, change_set_id),
+                (status.value, status.value, now, change_set_id),
             )
             self._audit(
                 connection,

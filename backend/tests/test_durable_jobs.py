@@ -4,10 +4,12 @@ import asyncio
 from threading import Event, Lock
 from time import sleep
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.jobs import (
+    JobConflictError,
     JobCreate,
     JobExecutionResult,
     JobRegistry,
@@ -386,12 +388,76 @@ def test_job_router_controls_existing_jobs_without_accepting_untyped_commands(tm
     )
     client = TestClient(app)
 
+    agent_job_id = scheduler.create(
+        JobCreate(kind="agent.run", subject_type="agent_run", subject_id="run-1")
+    ).id
     job_id = scheduler.create(JobCreate(kind="test.noop")).id
-    assert [job["id"] for job in client.get("/api/jobs").json()] == [job_id]
+    page = client.get("/api/jobs?limit=1&offset=0").json()
+    assert [job["id"] for job in page["items"]] == [job_id]
+    assert (page["total"], page["limit"], page["offset"]) == (1, 1, 0)
+    assert client.get(f"/api/jobs/{agent_job_id}").status_code == 404
+    assert client.post(f"/api/jobs/{agent_job_id}/cancel").status_code == 404
     assert client.post("/api/jobs", json={"kind": "snapshot.restore"}).status_code == 405
-    assert client.post(f"/api/jobs/{job_id}/resume").status_code == 404
+    assert client.post(f"/api/jobs/{job_id}/resume").status_code == 409
     assert client.post(f"/api/jobs/{job_id}/cancel").status_code == 202
     streamed = client.get(f"/api/jobs/{job_id}/events")
     assert streamed.status_code == 200
     assert "event: job.queued" in streamed.text
     assert "event: job.canceled" in streamed.text
+    resumed = client.post(f"/api/jobs/{job_id}/resume")
+    assert resumed.status_code == 202
+    assert resumed.json()["status"] == "queued"
+
+
+def test_public_job_result_survives_completion_and_restart(tmp_path):
+    repository = _repository(tmp_path)
+    registry = JobRegistry()
+    registry.register(
+        "test.result",
+        lambda _: JobExecutionResult(
+            result={
+                "document_id": "document-1",
+                "path": r"C:\private\result.json",
+                "download_url": "/api/result?token=private&view=full",
+            }
+        ),
+    )
+    job = repository.enqueue(JobCreate(kind="test.result"))
+    assert JobWorker(repository, registry, worker_id="result-worker").run_once()
+
+    restarted = SqliteJobRepository(repository.database_path)
+    restarted.initialize_schema()
+    app = FastAPI()
+    app.include_router(
+        create_job_router(lambda: JobScheduler(restarted), lambda: restarted),
+        prefix="/api",
+    )
+    result = TestClient(app).get(f"/api/jobs/{job.id}").json()["result"]
+    assert result == {
+        "document_id": "document-1",
+        "download_url": "/api/result?view=full",
+    }
+
+
+def test_resume_enforces_concurrency_and_attempt_safety_limits(tmp_path):
+    repository = _repository(tmp_path)
+    conflicted = repository.enqueue(
+        JobCreate(kind="test.retry", concurrency_key="exclusive", max_attempts=2)
+    )
+    claimed = repository.claim_next("failed-worker")
+    assert claimed is not None
+    repository.fail(claimed, code="failed", message="failed", retryable=False)
+    replacement = repository.enqueue(JobCreate(kind="test.other", concurrency_key="exclusive"))
+    with pytest.raises(JobConflictError, match="another active job"):
+        repository.resume(conflicted.id)
+    repository.request_cancel(replacement.id)
+
+    limited = repository.enqueue(JobCreate(kind="test.limited", max_attempts=20))
+    for attempt in range(20):
+        claimed = repository.claim_next(f"limited-worker-{attempt}")
+        assert claimed is not None and claimed.job.id == limited.id
+        repository.fail(claimed, code="failed", message="failed", retryable=False)
+        if attempt < 19:
+            repository.resume(limited.id)
+    with pytest.raises(JobConflictError, match="20-attempt"):
+        repository.resume(limited.id)

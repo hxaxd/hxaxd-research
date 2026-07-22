@@ -18,9 +18,6 @@ CURRENT_SCHEMA_VERSION = 4
 class DatabaseKind(StrEnum):
     MISSING = "missing"
     EMPTY = "empty"
-    LEGACY_V1 = "legacy_v1"
-    LEGACY_V2 = "legacy_v2"
-    LEGACY_V3 = "legacy_v3"
     V4 = "v4"
     UNKNOWN = "unknown"
 
@@ -60,17 +57,6 @@ def inspect_database(path: Path) -> DatabaseState:
                 version = int(row[0])
             if version == CURRENT_SCHEMA_VERSION and "bibliographic_items" in tables:
                 return DatabaseState(DatabaseKind.V4, version)
-            if version == 3 and "bibliographic_items" in tables:
-                return DatabaseState(DatabaseKind.LEGACY_V3, version)
-            if "papers" in tables:
-                columns = {
-                    str(row[1])
-                    for row in connection.execute("PRAGMA table_info(papers)").fetchall()
-                }
-                if "identity_key" in columns and "project_papers" in tables:
-                    return DatabaseState(DatabaseKind.LEGACY_V2, version or 2)
-                if "project_id" in columns:
-                    return DatabaseState(DatabaseKind.LEGACY_V1, version or 1)
             return DatabaseState(DatabaseKind.UNKNOWN, version)
         finally:
             connection.close()
@@ -103,7 +89,7 @@ class WorkspaceDatabase:
             self._create_fresh()
             return
         if state.kind is not DatabaseKind.V4:
-            raise RuntimeError(f"database is {state.kind.value}; use the explicit legacy importer")
+            raise RuntimeError("database is not an empty or current v4 workspace")
         self.verify()
 
     def _create_fresh(self) -> None:

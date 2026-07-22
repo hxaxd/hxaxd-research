@@ -125,6 +125,7 @@ class SqliteAgentRunRepository:
         project_id: str | None = None,
         status: AgentRunStatus | None = None,
         limit: int = 200,
+        offset: int = 0,
     ) -> list[AgentRun]:
         clauses: list[str] = []
         values: list[Any] = []
@@ -135,13 +136,40 @@ class SqliteAgentRunRepository:
             clauses.append("status = ?")
             values.append(status.value)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        values.append(min(max(limit, 1), 1000))
+        page_limit = min(max(limit, 1), 1000)
+        page_offset = max(offset, 0)
         with self._connection() as connection:
             rows = connection.execute(
-                f"SELECT * FROM agent_runs {where} ORDER BY created_at DESC LIMIT ?",  # noqa: S608
-                values,
+                f"""
+                SELECT * FROM agent_runs {where}
+                ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+                """,  # noqa: S608
+                (*values, page_limit, page_offset),
             ).fetchall()
         return [self._run(row) for row in rows]
+
+    def count_runs(
+        self,
+        *,
+        project_id: str | None = None,
+        status: AgentRunStatus | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        values: list[Any] = []
+        if project_id is not None:
+            clauses.append("project_id = ?")
+            values.append(project_id)
+        if status is not None:
+            clauses.append("status = ?")
+            values.append(status.value)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM agent_runs {where}",  # noqa: S608
+                    values,
+                ).fetchone()[0]
+            )
 
     def transition(
         self,
@@ -420,14 +448,27 @@ class SqliteAgentRunRepository:
         return self._approval(row)
 
     def pending_approvals(self, run_id: str) -> list[Approval]:
+        return self.list_approvals(run_id, status=ApprovalStatus.PENDING)
+
+    def list_approvals(
+        self,
+        run_id: str,
+        *,
+        status: ApprovalStatus | None = None,
+    ) -> list[Approval]:
         self.get(run_id)
+        condition = "run_id = ?"
+        parameters: list[Any] = [run_id]
+        if status is not None:
+            condition += " AND status = ?"
+            parameters.append(status.value)
         with self._connection() as connection:
             rows = connection.execute(
-                """
+                f"""
                 SELECT * FROM approvals
-                WHERE run_id = ? AND status = 'pending' ORDER BY created_at
-                """,
-                (run_id,),
+                WHERE {condition} ORDER BY created_at, id
+                """,  # noqa: S608
+                parameters,
             ).fetchall()
         return [self._approval(row) for row in rows]
 

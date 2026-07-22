@@ -13,7 +13,6 @@ from .models import (
     CompileJobRequest,
     ManagedToolName,
     PublicManagedTool,
-    TranslationJobRequest,
 )
 from .service import OperationService
 
@@ -60,7 +59,6 @@ def download_attachment(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-
 @router.post(
     "/attachments/{attachment_id}/compile", response_model=PublicJob, status_code=202
 )
@@ -73,25 +71,6 @@ def compile_attachment(
     try:
         return project_public_job(
             service.compile_attachment(attachment_id, payload, project_id=project_id)
-        )
-    except JobConflictError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@router.post(
-    "/attachments/{attachment_id}/translate", response_model=PublicJob, status_code=202
-)
-def translate_attachment(
-    attachment_id: str,
-    payload: TranslationJobRequest,
-    service: Annotated[OperationService, Depends(get_service)],
-    project_id: Annotated[str, Query(min_length=1)],
-) -> PublicJob:
-    try:
-        return project_public_job(
-            service.translate_attachment(attachment_id, payload, project_id=project_id)
         )
     except JobConflictError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

@@ -12,7 +12,7 @@ from app.documents.capabilities import PdfPipelineCapabilityProbe
 from app.jobs.models import Job, JobAttachment, JobCreate, JobStatus
 from app.jobs.repository import SqliteJobRepository
 from app.jobs.scheduler import JobScheduler
-from app.library.models import AttachmentFormat, AttachmentType, LanguageMode
+from app.library.models import AttachmentFormat, AttachmentType
 from app.library.service import AttachmentService
 from app.platform.processes import ExecutableIdentity, ProcessRunner, ProcessSpec
 
@@ -24,8 +24,6 @@ from .models import (
     ManagedTool,
     ManagedToolName,
     ManagedToolStatus,
-    TranslationJobInput,
-    TranslationJobRequest,
 )
 
 
@@ -66,7 +64,6 @@ class OperationService:
         output_roles = {
             "attachment.download": ["output"],
             "attachment.compile": ["output"],
-            "attachment.translate": ["translated", "bilingual"],
         }
         for job in active:
             roles = output_roles.get(job.kind)
@@ -236,34 +233,6 @@ class OperationService:
                 subject_type="attachment",
                 subject_id=attachment_id,
                 concurrency_key=f"attachment-compile:{attachment_id}",
-                input=payload.model_dump(mode="json"),
-                max_attempts=2,
-            )
-        )
-
-    def translate_attachment(
-        self, attachment_id: str, request: TranslationJobRequest, *, project_id: str
-    ) -> Job:
-        attachment, _ = self.attachments.locate(attachment_id)
-        self._require_project_item(project_id, attachment.item_id)
-        if (
-            attachment.attachment_type is not AttachmentType.FULLTEXT
-            or attachment.format is not AttachmentFormat.PDF
-            or attachment.language_mode is not LanguageMode.ORIGINAL
-        ):
-            raise ValueError("只有原文 PDF 全文附件可以翻译")
-        payload = TranslationJobInput(
-            attachment_id=attachment_id,
-            item_id=attachment.item_id,
-            project_id=project_id,
-            **request.model_dump(mode="json"),
-        )
-        return self.jobs.create(
-            JobCreate(
-                kind="attachment.translate",
-                subject_type="attachment",
-                subject_id=attachment_id,
-                concurrency_key=f"attachment-translate:{attachment_id}",
                 input=payload.model_dump(mode="json"),
                 max_attempts=2,
             )

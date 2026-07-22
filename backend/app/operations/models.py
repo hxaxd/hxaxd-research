@@ -100,17 +100,6 @@ class AttachmentDownloadJobInput(AttachmentDownloadRequest):
     project_id: str = Field(min_length=1, max_length=200)
 
 
-class TranslationJobRequest(_OperationModel):
-    qps: int = Field(default=4, ge=1, le=100)
-    workers: int = Field(default=4, ge=1, le=32)
-
-
-class TranslationJobInput(TranslationJobRequest):
-    attachment_id: str = Field(min_length=1, max_length=200)
-    item_id: str = Field(min_length=1, max_length=200)
-    project_id: str = Field(min_length=1, max_length=200)
-
-
 class CompileJobRequest(_OperationModel):
     main_tex: str | None = Field(default=None, max_length=300)
 

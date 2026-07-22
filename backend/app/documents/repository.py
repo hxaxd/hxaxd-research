@@ -17,6 +17,8 @@ from .models import (
     DocumentBlockView,
     DocumentTranslationOutput,
     ExtractedDocument,
+    SemanticRole,
+    TranslationOutputItem,
 )
 
 
@@ -168,6 +170,73 @@ class DocumentRepository:
                 (document_id, target_language),
             ).fetchone()
         return str(row["created_by_job_id"]) if row is not None else None
+
+    def reusable_translation_items(
+        self,
+        *,
+        document_id: str,
+        target_language: str,
+        provider: str,
+        model: str,
+        prompt_version: str,
+    ) -> dict[str, TranslationOutputItem]:
+        """Reuse verified translations for unchanged blocks across document versions.
+
+        Block identifiers are regenerated when a document is extracted again, so reuse
+        is keyed by the source hash inside the same bibliographic item.  Provider,
+        model and prompt are part of the identity: changing any of them deliberately
+        forces the block through the translator again.
+        """
+
+        with self.database.read() as connection:
+            rows = connection.execute(
+                """
+                WITH ranked AS (
+                    SELECT target.id AS target_id,
+                           translation.translated_text AS translated_text,
+                           source.semantic_role AS semantic_role,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY target.id
+                               ORDER BY
+                                   CASE WHEN source.document_id = target.document_id
+                                       THEN 0 ELSE 1 END,
+                                   translation.created_at DESC,
+                                   translation.id DESC
+                           ) AS candidate_rank
+                    FROM document_blocks target
+                    JOIN documents target_document
+                      ON target_document.id = target.document_id
+                    JOIN document_blocks source
+                      ON source.source_sha256 = target.source_sha256
+                     AND source.kind = target.kind
+                     AND source.section_path_json = target.section_path_json
+                    JOIN documents source_document
+                      ON source_document.id = source.document_id
+                     AND source_document.item_id = target_document.item_id
+                    JOIN block_translations translation
+                      ON translation.block_id = source.id
+                     AND translation.target_language = ?
+                     AND translation.provider = ?
+                     AND translation.model = ?
+                     AND translation.prompt_version = ?
+                     AND translation.validation_status = 'verified'
+                    WHERE target.document_id = ?
+                      AND target.source_text != ''
+                      AND target.kind != 'formula'
+                )
+                SELECT target_id, translated_text, semantic_role
+                FROM ranked WHERE candidate_rank = 1
+                """,
+                (target_language, provider, model, prompt_version, document_id),
+            ).fetchall()
+        return {
+            str(row["target_id"]): TranslationOutputItem(
+                id=str(row["target_id"]),
+                translated_text=str(row["translated_text"]),
+                semantic_role=SemanticRole(row["semantic_role"] or SemanticRole.OTHER.value),
+            )
+            for row in rows
+        }
 
     def commit_extraction(
         self,

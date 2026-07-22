@@ -34,7 +34,7 @@ from .models import (
     ZoteroIntegrationStatus,
     ZoteroLibraryRef,
 )
-from .planner import candidate_fingerprint
+from .planner import candidate_fingerprint, fingerprint
 from .repository import ZoteroTransferRepository
 
 _IDENTITY_SCHEMES = {"arxiv", "doi", "isbn", "openreview", "pmid", "pubmed"}
@@ -137,6 +137,22 @@ class ZoteroSyncEngine:
         if preview.direction == "export":
             return self._apply_export(preview, item, source)
         return self._apply_import(preview, item, source)
+
+    def recover(
+        self,
+        preview: TransferPreview,
+        item: TransferPlanItem,
+        resolutions: Sequence[ConflictResolution],
+    ) -> TransferItemReceipt | None:
+        """Finish an item whose execution intent survived a process interruption."""
+
+        source = _resolved_source(item.source, resolutions)
+        if preview.direction == "export":
+            return self._recover_export(preview, item, source)
+        target = self._recover_import_target(preview, item, source)
+        if target is None:
+            return None
+        return self._apply_import(preview, item, source, recovered_target=target)
 
     def _build_export(self, request: TransferPreviewRequest) -> list[TransferCandidate]:
         if self.web_client is None:
@@ -255,12 +271,22 @@ class ZoteroSyncEngine:
             )
         target = item.target
         if item.action == TransferAction.NEW:
+            external_key = _stable_zotero_key(preview.id, item.item_id, "item")
+            existing = self._try_web_draft(preview.library, external_key)
+            if existing is not None:
+                raise ZoteroHttpError(
+                    "The deterministic Zotero key is already occupied before execution"
+                )
+            payload = draft_to_zotero_data(source, for_create=True)
+            payload["key"] = external_key
             created = self.web_client.create_items(
-                preview.library, [draft_to_zotero_data(source, for_create=True)]
+                preview.library,
+                [payload],
+                write_token=_stable_write_token(preview.id, item.item_id, "item"),
             )
             success = created.get("success")
-            external_key = success.get("0") if isinstance(success, dict) else None
-            if not isinstance(external_key, str):
+            returned_key = success.get("0") if isinstance(success, dict) else None
+            if returned_key != external_key:
                 raise ZoteroHttpError("Zotero did not return the created item key")
             outcome = "created"
         else:
@@ -301,23 +327,77 @@ class ZoteroSyncEngine:
             external_version=remote.external_version,
         )
 
+    def _recover_export(
+        self,
+        preview: TransferPreview,
+        item: TransferPlanItem,
+        source: BibliographicDraft,
+    ) -> TransferItemReceipt | None:
+        if self.web_client is None:
+            raise ZoteroCapabilityUnavailableError(
+                "Zotero export requires a configured Web API key"
+            )
+        binding = self.repository.get_binding_by_entity(
+            preview.library, "bibliographic_item", item.item_id
+        )
+        external_key = (
+            binding.external_key
+            if binding is not None
+            else item.target.external_key
+            if item.target is not None
+            else _stable_zotero_key(preview.id, item.item_id, "item")
+        )
+        if external_key is None:
+            return None
+        remote = self._try_web_draft(preview.library, external_key)
+        if remote is None:
+            return None
+        desired = _with_provider_envelope(source, remote)
+        if fingerprint(remote).content_hash != fingerprint(desired).content_hash:
+            return None
+        self._export_attachments(preview.library, external_key, item)
+        remote = _remote_draft(
+            self.web_client.get_item(preview.library, external_key), "web"
+        )
+        local_item = self.domain.get_item(item.item_id)
+        self._save_item_binding(preview, local_item, remote, endpoint="web")
+        return TransferItemReceipt(
+            item_id=item.item_id,
+            planned_action=item.action,
+            outcome=(
+                "created"
+                if item.action == TransferAction.NEW
+                else "unchanged"
+                if item.action == TransferAction.UNCHANGED
+                else "updated"
+            ),
+            external_key=external_key,
+            external_version=remote.external_version,
+            message="Recovered from a persisted Zotero item checkpoint.",
+        )
+
     def _apply_import(
         self,
         preview: TransferPreview,
         item: TransferPlanItem,
         source: BibliographicDraft,
+        *,
+        recovered_target: BibliographicItemView | None = None,
     ) -> TransferItemReceipt:
         if source.external_key is None:
             raise ZoteroHttpError("Zotero source item has no key")
         endpoint = _draft_endpoint(source)
-        metadata_changed = any(
-            difference.field != "attachments" for difference in item.differences
+        current_target = recovered_target or self._planned_import_target(preview, item)
+        metadata_changed = (
+            current_target is not None
+            and fingerprint(_local_draft(current_target, provider=source)).content_hash
+            != fingerprint(source).content_hash
         )
         with ExitStack() as stack:
             materialized = self._materialize_import_attachments(
                 stack, preview.library, item, endpoint=endpoint
             )
-            if item.target is None:
+            if current_target is None:
                 local_item = self.domain.import_item(
                     preview.project_id,
                     source,
@@ -326,7 +406,7 @@ class ZoteroSyncEngine:
                 )
                 outcome = "created"
             elif metadata_changed:
-                local_id = item.target.external_key or item.item_id
+                local_id = current_target.id
                 local_item = self.domain.replace_item(
                     preview.project_id,
                     local_id,
@@ -336,8 +416,7 @@ class ZoteroSyncEngine:
                 )
                 outcome = "updated"
             else:
-                local_id = item.target.external_key or item.item_id
-                local_item = self.domain.get_item(local_id)
+                local_item = current_target
                 outcome = (
                     "unchanged" if item.action == TransferAction.UNCHANGED else "updated"
                 )
@@ -354,8 +433,57 @@ class ZoteroSyncEngine:
             external_version=remote.external_version,
         )
 
+    def _planned_import_target(
+        self, preview: TransferPreview, item: TransferPlanItem
+    ) -> BibliographicItemView | None:
+        source_key = item.source.external_key
+        binding = (
+            self.repository.get_binding_by_external(
+                preview.library, "bibliographic_item", source_key
+            )
+            if source_key is not None
+            else None
+        )
+        local_id = (
+            binding.entity_id
+            if binding is not None
+            else item.target.external_key
+            if item.target is not None
+            else None
+        )
+        if local_id is None:
+            return None
+        return self.domain.get_item(local_id)
+
+    def _recover_import_target(
+        self,
+        preview: TransferPreview,
+        item: TransferPlanItem,
+        source: BibliographicDraft,
+    ) -> BibliographicItemView | None:
+        planned = self._planned_import_target(preview, item)
+        if planned is not None:
+            return planned
+        catalog_items = self.domain.list_catalog_items()
+        identity_matches = _identity_matches(
+            source,
+            _identity_index([_local_draft(candidate) for candidate in catalog_items]),
+        )
+        if len(identity_matches) == 1 and identity_matches[0].external_key is not None:
+            return self.domain.get_item(identity_matches[0].external_key)
+        exact = [
+            candidate
+            for candidate in catalog_items
+            if fingerprint(_local_draft(candidate, provider=source)).content_hash
+            == fingerprint(source).content_hash
+        ]
+        return exact[0] if len(exact) == 1 else None
+
     def _export_attachments(
-        self, library: ZoteroLibraryRef, parent_key: str, item: TransferPlanItem
+        self,
+        library: ZoteroLibraryRef,
+        parent_key: str,
+        item: TransferPlanItem,
     ) -> None:
         assert self.web_client is not None
         for plan in item.attachments:
@@ -365,13 +493,22 @@ class ZoteroSyncEngine:
             if attachment_id is None:
                 raise ZoteroHttpError("Local PDF attachment identity is missing")
             attachment, path = self.domain.locate_attachment(attachment_id)
-            uploaded = self.web_client.create_and_upload_attachment(
-                library,
-                parent_item=parent_key,
-                file_path=path,
-                content_type=attachment.media_type,
-                title=attachment.filename,
-            )
+            object_key = _stable_zotero_key(parent_key, item.item_id, plan.ref)
+            existing_remote = self._try_web_item(library, object_key)
+            if existing_remote is None:
+                uploaded = self.web_client.create_and_upload_attachment(
+                    library,
+                    parent_item=parent_key,
+                    file_path=path,
+                    content_type=attachment.media_type,
+                    title=attachment.filename,
+                    object_key=object_key,
+                    write_token=_stable_write_token(parent_key, item.item_id, plan.ref),
+                )
+            else:
+                uploaded = self.web_client.upload_attachment_file(
+                    library, object_key, path
+                )
             self._save_attachment_binding(
                 library,
                 attachment,
@@ -430,12 +567,22 @@ class ZoteroSyncEngine:
             external_key = source.external_key
             if external_key is None:
                 raise ZoteroHttpError("Zotero PDF attachment key is missing")
-            attachment = self.domain.import_pdf(
-                local_item_id,
-                path,
-                filename=source.filename,
-                source_url=source_url,
+            checksum = _file_sha256(path)
+            attachment = next(
+                (
+                    candidate
+                    for candidate in self.domain.list_attachments(local_item_id)
+                    if candidate.sha256 == checksum
+                ),
+                None,
             )
+            if attachment is None:
+                attachment = self.domain.import_pdf(
+                    local_item_id,
+                    path,
+                    filename=source.filename,
+                    source_url=source_url,
+                )
             self._save_attachment_binding(
                 library,
                 attachment,
@@ -448,6 +595,23 @@ class ZoteroSyncEngine:
                     else None
                 ),
             )
+
+    def _try_web_item(
+        self, library: ZoteroLibraryRef, item_key: str
+    ) -> dict[str, Any] | None:
+        assert self.web_client is not None
+        try:
+            return self.web_client.get_item(library, item_key)
+        except ZoteroHttpError as error:
+            if error.status == 404:
+                return None
+            raise
+
+    def _try_web_draft(
+        self, library: ZoteroLibraryRef, item_key: str
+    ) -> BibliographicDraft | None:
+        raw = self._try_web_item(library, item_key)
+        return _remote_draft(raw, "web") if raw is not None else None
 
     def _save_item_binding(
         self,
@@ -775,6 +939,24 @@ def _file_md5(path: Path) -> str:
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _stable_zotero_key(*parts: str) -> str:
+    alphabet = "23456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
+    digest = hashlib.sha256("\0".join(parts).encode("utf-8")).digest()
+    return "".join(alphabet[value & 31] for value in digest[:8])
+
+
+def _stable_write_token(*parts: str) -> str:
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()[:32]
 
 
 def _verify_attachment(path: Path, expected: TransferAttachmentSnapshot) -> None:

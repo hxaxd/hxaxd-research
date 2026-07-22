@@ -7,11 +7,6 @@ from typing import Any
 from .errors import SnapshotError
 
 SNAPSHOT_FORMAT = "hxaxd-research-v4"
-V3_SNAPSHOT_FORMAT = "hxaxd-research-v3"
-V2_SNAPSHOT_FORMAT = "hxaxd-learning-v2"
-SUPPORTED_SNAPSHOT_FORMATS = frozenset(
-    {SNAPSHOT_FORMAT, V3_SNAPSHOT_FORMAT, V2_SNAPSHOT_FORMAT}
-)
 MANIFEST_PATH = "manifest.json"
 DATABASE_ARCHIVE_PATH = "payload/research.sqlite3"
 
@@ -77,7 +72,7 @@ class SnapshotManifest:
         created_at = payload["created_at"]
         schema_version = payload["schema_version"]
         contract_version = payload["contract_version"]
-        if format_ not in SUPPORTED_SNAPSHOT_FORMATS:
+        if format_ != SNAPSHOT_FORMAT:
             raise SnapshotError("快照容器格式不受支持")
         if (
             not isinstance(created_at, str)
@@ -86,14 +81,8 @@ class SnapshotManifest:
             or not isinstance(contract_version, str)
         ):
             raise SnapshotError("快照版本字段类型错误")
-        if format_ == SNAPSHOT_FORMAT and (schema_version != 4 or contract_version != "4.0"):
+        if schema_version != 4 or contract_version != "4.0":
             raise SnapshotError("v4 快照契约版本不受支持")
-        if format_ == V3_SNAPSHOT_FORMAT and (
-            schema_version != 3 or contract_version != "3.0"
-        ):
-            raise SnapshotError("v3 快照契约版本不受支持")
-        if format_ == V2_SNAPSHOT_FORMAT and schema_version != 2:
-            raise SnapshotError("v2 快照结构版本不受支持")
         raw_files = payload["files"]
         if not isinstance(raw_files, list):
             raise SnapshotError("快照文件列表类型错误")

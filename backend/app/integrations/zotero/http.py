@@ -346,6 +346,7 @@ class ZoteroWebClient:
         title: str | None = None,
         library_version: int | None = None,
         write_token: str | None = None,
+        object_key: str | None = None,
     ) -> str:
         attachment: dict[str, Any] = {
             "itemType": "attachment",
@@ -358,6 +359,8 @@ class ZoteroWebClient:
         }
         if parent_item:
             attachment["parentItem"] = parent_item
+        if object_key is not None:
+            attachment["key"] = object_key
         result = self.create_items(
             library,
             [attachment],
@@ -442,6 +445,7 @@ class ZoteroWebClient:
         title: str | None = None,
         library_version: int | None = None,
         write_token: str | None = None,
+        object_key: str | None = None,
     ) -> ZoteroAttachmentUploadResult:
         item_key = self.create_attachment_item(
             library,
@@ -451,6 +455,7 @@ class ZoteroWebClient:
             title=title,
             library_version=library_version,
             write_token=write_token,
+            object_key=object_key,
         )
         return self.upload_attachment_file(library, item_key, file_path)
 

@@ -86,11 +86,11 @@ class V3ZoteroDomainGateway:
             )
             result.extend(
                 self.catalog_queries.get_item(membership.preferred_item_id)
-                for membership in memberships
+                for membership in memberships.items
             )
-            if len(memberships) < 500:
+            if len(memberships.items) < 500:
                 return result
-            offset += len(memberships)
+            offset += len(memberships.items)
 
     def list_catalog_items(self) -> list[BibliographicItemView]:
         result: list[BibliographicItemView] = []

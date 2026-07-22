@@ -110,7 +110,7 @@ class AgentPromptContextBuilder:
             project = self.screening.get_project(project_id).model_dump(mode="json")
             memberships = self.screening.list_project_works(
                 project_id, limit=project_limits[summary]
-            )
+            ).items
             items = [membership.model_dump(mode="json") for membership in memberships]
             prior_decisions = [
                 {

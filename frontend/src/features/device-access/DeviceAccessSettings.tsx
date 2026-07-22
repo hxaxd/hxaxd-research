@@ -47,7 +47,7 @@ export function DeviceAccessSettings() {
 
   const activeSessions = (sessions.data ?? []).filter((session) => !session.revoked_at);
   return <section className="settings-operation-section device-access-settings">
-    <header><div><span className="eyebrow">LOCAL NETWORK</span><h2>局域网与受信任设备</h2><p>局域网监听默认关闭；短期配对码只在本机显示，会话可以单独撤销。</p></div><span className={access.data?.lan_enabled ? "device-access-state device-access-state--ready" : "device-access-state"}>{access.data?.lan_enabled ? "已显式启用" : "仅限本机"}</span></header>
+    <header><div><span className="eyebrow">平板与触屏设备</span><h2>局域网与受信任设备</h2><p>局域网监听默认关闭；短期配对码只在本机显示，会话可以单独撤销。</p></div><span className={access.data?.lan_enabled ? "device-access-state device-access-state--ready" : "device-access-state"}>{access.data?.lan_enabled ? "已显式启用" : "仅限本机"}</span></header>
     <div className="device-access-body">
       {!access.data?.lan_enabled ? <div className="device-access-explainer"><Icon name="shield" size={22} /><div><strong>当前没有向局域网开放</strong><p>需要平板访问时，通过后端启动命令显式开启局域网模式；普通启动始终只监听本机。</p></div></div> : null}
       {access.data?.lan_enabled && !access.data.cookie_secure ? <div className="device-access-warning"><Icon name="shield" size={18} /><p>当前使用未加密调试模式，浏览器不会获得安全 Cookie，也不能可靠安装 PWA。请改用受信任的 HTTPS 证书启动。</p></div> : null}

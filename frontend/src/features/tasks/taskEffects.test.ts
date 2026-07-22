@@ -18,6 +18,7 @@ function job(id: string, status: Job["status"]): Job {
     subject_id: "document-1",
     status,
     priority: 0,
+    result: null,
     error_code: null,
     error_message: null,
     max_attempts: 2,

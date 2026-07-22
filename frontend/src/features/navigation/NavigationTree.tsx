@@ -10,8 +10,8 @@ interface NavigationTreeProps {
 }
 const primaryLinks: Array<{ label: string; path: string; icon: IconName }> = [
   { label: "概览", path: "/", icon: "home" },
-  { label: "任务", path: "/tasks", icon: "activity" },
-  { label: "集成", path: "/integrations", icon: "plug" },
+  { label: "任务与审阅", path: "/tasks", icon: "activity" },
+  { label: "导入与同步", path: "/integrations", icon: "plug" },
   { label: "设置", path: "/settings", icon: "settings" },
 ];
 
@@ -54,7 +54,7 @@ export function NavigationTree({ expanded, onToggle }: NavigationTreeProps) {
               <NavLink className="project-link" to={`/projects/${project.id}`} title={project.name}>
                 <Icon name="folder" size={17} />
                 <span>{project.name}</span>
-                {project.status_counts.discovered ? <em>{project.status_counts.discovered}</em> : null}
+                {project.candidate_count ? <em>{project.candidate_count}</em> : null}
               </NavLink>
             </li>
           ))}

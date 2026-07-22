@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
+from contextlib import closing
 from dataclasses import replace
+from time import sleep
+from urllib.request import Request, urlopen
 
 from fastapi.testclient import TestClient
 
+from app.__main__ import _reserve_loopback_socket, _start_internal_agent_listener
 from app.core.config import Settings
 from app.device_access.models import PairingCreate
 from app.main import create_app
@@ -28,6 +33,70 @@ def test_pairing_codes_can_only_be_created_locally(app_settings) -> None:
         assert created.status_code == 201, created.text
         assert len(created.json()["code"]) == 9
         assert created.json()["code"][4] == "-"
+
+
+def test_secure_lan_keeps_the_embedded_agent_mcp_on_loopback(app_settings) -> None:
+    listener = _reserve_loopback_socket()
+    internal_port = int(listener.getsockname()[1])
+    settings = replace(
+        _lan_settings(app_settings),
+        agent_base_url=f"http://127.0.0.1:{internal_port}",
+    )
+    application = create_app(settings)
+    with TestClient(
+        application,
+        base_url="https://127.0.0.1:8000",
+        client=("127.0.0.1", 51001),
+    ) as local:
+        del local
+        server, thread = _start_internal_agent_listener(application, listener)
+        for _ in range(100):
+            if server.started:
+                break
+            sleep(0.01)
+        registry = application.state.context.agent_capabilities
+        token = registry.issue(
+            "secure-lan-agent",
+            project_id=None,
+            scopes=frozenset({"literature:read"}),
+        )
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "secure-lan-test", "version": "1"},
+                },
+            }
+        ).encode("utf-8")
+        try:
+            request = Request(
+                f"http://127.0.0.1:{internal_port}/mcp/",
+                data=payload,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json, text/event-stream",
+                    "Content-Type": "application/json",
+                },
+            )
+            with closing(urlopen(request, timeout=5)) as initialized:  # noqa: S310
+                assert initialized.status == 200
+                response = json.loads(initialized.read())
+            assert response["result"]["serverInfo"]["name"] == "hxaxd-literature"
+            assert application.state.context.settings.public_base_url == (
+                "https://workspace.test"
+            )
+            assert application.state.context.settings.agent_base_url == (
+                f"http://127.0.0.1:{internal_port}"
+            )
+        finally:
+            server.should_exit = True
+            thread.join(timeout=5)
+            listener.close()
 
 
 def test_remote_device_requires_one_time_pairing_and_revocable_cookie(app_settings) -> None:

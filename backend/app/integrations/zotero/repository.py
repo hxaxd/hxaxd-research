@@ -14,6 +14,7 @@ from .models import (
     ConflictResolution,
     TransferPreview,
     TransferReceipt,
+    TransferStatus,
     ZoteroBinding,
     ZoteroLibraryRef,
 )
@@ -34,9 +35,15 @@ class ZoteroTransferRepository(Protocol):
 
     def claim_execution(self, preview_id: str, started_at: datetime) -> bool: ...
 
+    def save_progress(self, receipt: TransferReceipt) -> None: ...
+
     def save_receipt(self, receipt: TransferReceipt) -> None: ...
 
     def get_receipt(self, preview_id: str) -> TransferReceipt | None: ...
+
+    def get_execution_state(self, preview_id: str) -> TransferStatus | None: ...
+
+    def reconcile_interrupted(self) -> int: ...
 
     def get_binding_by_entity(
         self,
@@ -57,137 +64,6 @@ class ZoteroTransferRepository(Protocol):
     ) -> list[ZoteroBinding]: ...
 
     def save_binding(self, binding: ZoteroBinding) -> None: ...
-
-
-class InMemoryZoteroTransferRepository:
-    """Thread-safe reference implementation with the same semantics as SQLite."""
-
-    def __init__(self) -> None:
-        self._previews: dict[str, TransferPreview] = {}
-        self._resolutions: dict[str, dict[str, ConflictResolution]] = {}
-        self._receipts: dict[str, TransferReceipt] = {}
-        self._applying: set[str] = set()
-        self._bindings: dict[str, ZoteroBinding] = {}
-        self._lock = RLock()
-
-    def save_preview(self, preview: TransferPreview) -> None:
-        with self._lock:
-            self._previews[preview.id] = preview.model_copy(deep=True)
-
-    def get_preview(self, preview_id: str) -> TransferPreview | None:
-        with self._lock:
-            preview = self._previews.get(preview_id)
-            return preview.model_copy(deep=True) if preview else None
-
-    def save_resolution(self, preview_id: str, resolution: ConflictResolution) -> None:
-        with self._lock:
-            self._resolutions.setdefault(preview_id, {})[resolution.conflict_id] = (
-                resolution.model_copy(deep=True)
-            )
-
-    def list_resolutions(self, preview_id: str) -> list[ConflictResolution]:
-        with self._lock:
-            return [
-                resolution.model_copy(deep=True)
-                for resolution in self._resolutions.get(preview_id, {}).values()
-            ]
-
-    def claim_execution(self, preview_id: str, started_at: datetime) -> bool:
-        del started_at
-        with self._lock:
-            if preview_id in self._applying or preview_id in self._receipts:
-                return False
-            self._applying.add(preview_id)
-            return True
-
-    def save_receipt(self, receipt: TransferReceipt) -> None:
-        with self._lock:
-            existing = self._receipts.get(receipt.preview_id)
-            if existing is not None and existing != receipt:
-                raise ZoteroBindingConflictError("transfer already has a different receipt")
-            self._receipts[receipt.preview_id] = receipt.model_copy(deep=True)
-            self._applying.discard(receipt.preview_id)
-
-    def get_receipt(self, preview_id: str) -> TransferReceipt | None:
-        with self._lock:
-            receipt = self._receipts.get(preview_id)
-            return receipt.model_copy(deep=True) if receipt else None
-
-    def get_binding_by_entity(
-        self,
-        library: ZoteroLibraryRef,
-        entity_type: str,
-        entity_id: str,
-    ) -> ZoteroBinding | None:
-        with self._lock:
-            return self._copy_binding(
-                next(
-                    (
-                        binding
-                        for binding in self._bindings.values()
-                        if binding.library == library
-                        and binding.entity_type == entity_type
-                        and binding.entity_id == entity_id
-                    ),
-                    None,
-                )
-            )
-
-    def get_binding_by_external(
-        self,
-        library: ZoteroLibraryRef,
-        entity_type: str,
-        external_key: str,
-    ) -> ZoteroBinding | None:
-        with self._lock:
-            return self._copy_binding(
-                next(
-                    (
-                        binding
-                        for binding in self._bindings.values()
-                        if binding.library == library
-                        and binding.entity_type == entity_type
-                        and binding.external_key == external_key
-                    ),
-                    None,
-                )
-            )
-
-    def list_attachment_bindings(
-        self, library: ZoteroLibraryRef, parent_item_id: str
-    ) -> list[ZoteroBinding]:
-        with self._lock:
-            return [
-                binding.model_copy(deep=True)
-                for binding in self._bindings.values()
-                if binding.library == library
-                and binding.entity_type == "attachment"
-                and binding.parent_item_id == parent_item_id
-            ]
-
-    def save_binding(self, binding: ZoteroBinding) -> None:
-        with self._lock:
-            entity = self.get_binding_by_entity(
-                binding.library, binding.entity_type, binding.entity_id
-            )
-            external = self.get_binding_by_external(
-                binding.library, binding.entity_type, binding.external_key
-            )
-            if entity is not None and entity.id != binding.id:
-                self._bindings.pop(entity.id, None)
-            if (
-                external is not None
-                and external.id != binding.id
-                and external.entity_id != binding.entity_id
-            ):
-                raise ZoteroBindingConflictError(
-                    "Zotero key is already bound to a different local entity"
-                )
-            self._bindings[binding.id] = binding.model_copy(deep=True)
-
-    @staticmethod
-    def _copy_binding(binding: ZoteroBinding | None) -> ZoteroBinding | None:
-        return binding.model_copy(deep=True) if binding is not None else None
 
 
 class SqliteZoteroTransferRepository:
@@ -304,15 +180,78 @@ class SqliteZoteroTransferRepository:
             )
         return cursor.rowcount == 1
 
+    def save_progress(self, receipt: TransferReceipt) -> None:
+        self.initialize()
+        if receipt.status != TransferStatus.APPLYING or receipt.finished_at is not None:
+            raise ValueError("transfer progress must be unfinished and applying")
+        checkpointed_at = _timestamp(self._clock())
+        with self.database.transaction() as connection:
+            preview = connection.execute(
+                "SELECT state FROM zotero_transfer_previews WHERE id = ?",
+                (receipt.preview_id,),
+            ).fetchone()
+            if preview is None or preview["state"] != "applying":
+                raise ZoteroBindingConflictError("transfer is not currently executing")
+            existing = connection.execute(
+                "SELECT receipt_json FROM zotero_transfer_receipts WHERE preview_id = ?",
+                (receipt.preview_id,),
+            ).fetchone()
+            if existing is not None:
+                stored = TransferReceipt.model_validate_json(existing[0])
+                if stored.status != TransferStatus.APPLYING:
+                    raise ZoteroBindingConflictError("transfer already has a final receipt")
+            connection.execute(
+                """
+                INSERT INTO zotero_transfer_receipts(
+                    preview_id, id, preview_hash, receipt_json, finished_at
+                ) VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(preview_id) DO UPDATE SET
+                    id = excluded.id,
+                    preview_hash = excluded.preview_hash,
+                    receipt_json = excluded.receipt_json,
+                    finished_at = excluded.finished_at
+                """,
+                (
+                    receipt.preview_id,
+                    receipt.id,
+                    receipt.preview_hash,
+                    _json(receipt),
+                    checkpointed_at,
+                ),
+            )
+
     def save_receipt(self, receipt: TransferReceipt) -> None:
         self.initialize()
+        if receipt.status == TransferStatus.APPLYING or receipt.finished_at is None:
+            raise ValueError("final transfer receipt must be finished")
         with self.database.transaction() as connection:
             existing = connection.execute(
                 "SELECT receipt_json FROM zotero_transfer_receipts WHERE preview_id = ?",
                 (receipt.preview_id,),
             ).fetchone()
             if existing is not None:
-                if TransferReceipt.model_validate_json(existing[0]) != receipt:
+                stored = TransferReceipt.model_validate_json(existing[0])
+                if stored.status == TransferStatus.APPLYING:
+                    connection.execute(
+                        """
+                        UPDATE zotero_transfer_receipts SET
+                            id = ?, preview_hash = ?, receipt_json = ?, finished_at = ?
+                        WHERE preview_id = ?
+                        """,
+                        (
+                            receipt.id,
+                            receipt.preview_hash,
+                            _json(receipt),
+                            _timestamp(receipt.finished_at),
+                            receipt.preview_id,
+                        ),
+                    )
+                    connection.execute(
+                        "UPDATE zotero_transfer_previews SET state = 'finished' WHERE id = ?",
+                        (receipt.preview_id,),
+                    )
+                    return
+                if stored != receipt:
                     raise ZoteroBindingConflictError("transfer already has a different receipt")
                 return
             connection.execute(
@@ -342,6 +281,45 @@ class SqliteZoteroTransferRepository:
                 (preview_id,),
             ).fetchone()
         return TransferReceipt.model_validate_json(row[0]) if row is not None else None
+
+    def get_execution_state(self, preview_id: str) -> TransferStatus | None:
+        self.initialize()
+        with self.database.read() as connection:
+            row = connection.execute(
+                """
+                SELECT p.state, r.receipt_json
+                FROM zotero_transfer_previews AS p
+                LEFT JOIN zotero_transfer_receipts AS r ON r.preview_id = p.id
+                WHERE p.id = ?
+                """,
+                (preview_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        receipt = (
+            TransferReceipt.model_validate_json(row["receipt_json"])
+            if row["receipt_json"] is not None
+            else None
+        )
+        if receipt is not None and receipt.status != TransferStatus.APPLYING:
+            return receipt.status
+        if row["state"] == "applying":
+            return TransferStatus.APPLYING
+        if receipt is not None:
+            return TransferStatus.RECOVERABLE
+        return TransferStatus.PREVIEW_READY
+
+    def reconcile_interrupted(self) -> int:
+        self.initialize()
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE zotero_transfer_previews
+                SET state = 'preview_ready', execution_started_at = NULL
+                WHERE state = 'applying'
+                """
+            )
+        return cursor.rowcount
 
     def get_binding_by_entity(
         self,

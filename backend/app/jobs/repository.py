@@ -118,7 +118,9 @@ class SqliteJobRepository:
         *,
         status: JobStatus | None = None,
         kind: str | None = None,
+        exclude_kind: str | None = None,
         limit: int = 200,
+        offset: int = 0,
     ) -> list[Job]:
         clauses: list[str] = []
         values: list[Any] = []
@@ -128,14 +130,48 @@ class SqliteJobRepository:
         if kind is not None:
             clauses.append("kind = ?")
             values.append(kind)
+        if exclude_kind is not None:
+            clauses.append("kind != ?")
+            values.append(exclude_kind)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        values.append(min(max(limit, 1), 1000))
+        page_limit = min(max(limit, 1), 1000)
+        page_offset = max(offset, 0)
         with self._connection() as connection:
             rows = connection.execute(
-                f"SELECT * FROM jobs {where} ORDER BY created_at DESC LIMIT ?",  # noqa: S608
-                values,
+                f"""
+                SELECT * FROM jobs {where}
+                ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+                """,  # noqa: S608
+                (*values, page_limit, page_offset),
             ).fetchall()
         return [self._job(row) for row in rows]
+
+    def count_jobs(
+        self,
+        *,
+        status: JobStatus | None = None,
+        kind: str | None = None,
+        exclude_kind: str | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        values: list[Any] = []
+        if status is not None:
+            clauses.append("status = ?")
+            values.append(status.value)
+        if kind is not None:
+            clauses.append("kind = ?")
+            values.append(kind)
+        if exclude_kind is not None:
+            clauses.append("kind != ?")
+            values.append(exclude_kind)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM jobs {where}",  # noqa: S608
+                    values,
+                ).fetchone()[0]
+            )
 
     def find_by_idempotency_key(self, key: str) -> Job | None:
         with self._connection() as connection:
@@ -381,29 +417,34 @@ class SqliteJobRepository:
 
     def resume(self, job_id: str) -> Job:
         now = _now()
-        with self._transaction(immediate=True) as connection:
-            row = self._require_job(connection, job_id)
-            status = JobStatus(row["status"])
-            if status not in {JobStatus.CANCELED, JobStatus.FAILED}:
-                raise JobConflictError(f"job cannot be resumed from {status.value}")
-            attempts = int(
+        try:
+            with self._transaction(immediate=True) as connection:
+                row = self._require_job(connection, job_id)
+                status = JobStatus(row["status"])
+                if status not in {JobStatus.CANCELED, JobStatus.FAILED}:
+                    raise JobConflictError(f"job cannot be resumed from {status.value}")
+                attempts = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM job_attempts WHERE job_id = ?", (job_id,)
+                    ).fetchone()[0]
+                )
+                if attempts >= 20:
+                    raise JobConflictError("job has reached the 20-attempt safety limit")
                 connection.execute(
-                    "SELECT COUNT(*) FROM job_attempts WHERE job_id = ?", (job_id,)
-                ).fetchone()[0]
-            )
-            connection.execute(
-                """
-                UPDATE jobs SET status = 'queued', max_attempts = MAX(max_attempts, ?),
-                    result_json = NULL, error_code = NULL, error_message = NULL,
-                    lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
-                    updated_at = ?, available_at = ?, finished_at = NULL,
-                    cancel_requested_at = NULL
-                WHERE id = ?
-                """,
-                (attempts + 1, _iso(now), _iso(now), job_id),
-            )
-            self._append_event(connection, job_id, None, "job.resumed", {})
-            updated = self._require_job(connection, job_id)
+                    """
+                    UPDATE jobs SET status = 'queued', max_attempts = MAX(max_attempts, ?),
+                        result_json = NULL, error_code = NULL, error_message = NULL,
+                        lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                        updated_at = ?, available_at = ?, finished_at = NULL,
+                        cancel_requested_at = NULL
+                    WHERE id = ?
+                    """,
+                    (attempts + 1, _iso(now), _iso(now), job_id),
+                )
+                self._append_event(connection, job_id, None, "job.resumed", {})
+                updated = self._require_job(connection, job_id)
+        except sqlite3.IntegrityError as error:
+            raise JobConflictError("another active job owns this concurrency key") from error
         return self._job(updated)
 
     def complete(

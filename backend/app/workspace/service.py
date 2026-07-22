@@ -173,7 +173,7 @@ class WorkspaceProjectionService:
             "attachments": "SELECT COUNT(*) FROM attachments",
             "active_jobs": (
                 "SELECT COUNT(*) FROM jobs WHERE status IN "
-                "('queued', 'running', 'waiting_approval', 'cancellation_requested')"
+                "('queued', 'running', 'cancellation_requested') AND kind != 'agent.run'"
             ),
             "pending_approvals": "SELECT COUNT(*) FROM approvals WHERE status = 'pending'",
         }

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import re
 import tarfile
 import zipfile
@@ -477,12 +476,3 @@ def _semantic_role(value: str) -> SemanticRole | None:
     ):
         return SemanticRole.BACKGROUND
     return None
-
-
-def read_tex_bytes(value: bytes, filename: str = "main.tex") -> dict[str, str]:
-    """Test-facing helper that uses the same bounded source decoder."""
-
-    path = PurePosixPath(_safe_name(filename))
-    if path.suffix.casefold() != ".tex":
-        raise TexStructureError("测试源必须是 TeX 文件")
-    return {path.as_posix(): _decode(io.BytesIO(value).read(_MAX_TEX_BYTES + 1))}

@@ -180,10 +180,8 @@ class DocumentService:
         settings = self.preferences.get().translation
         if settings.provider.casefold() != self.translation_provider.name.casefold():
             raise ValueError("当前运行环境没有配置所选翻译提供者")
-        previous_translation_job_id = (
-            self.repository.latest_translation_job_id(document.id, request.target_language)
-            if settings.retranslate_scope == "document"
-            else None
+        previous_translation_job_id = self.repository.latest_translation_job_id(
+            document.id, request.target_language
         )
         payload = DocumentTranslationJobInput(
             document_id=document.id,
@@ -201,6 +199,11 @@ class DocumentService:
                 for item in settings.glossary
             ],
         )
+        identity_payload = payload.model_dump(mode="json")
+        if settings.retranslate_scope == "changed":
+            # A stable changed-scope request reuses its completed job.  The previous
+            # generation is only context for cross-version block reuse, not identity.
+            identity_payload.pop("previous_translation_job_id", None)
         identity = ":".join(
             (
                 document.id,
@@ -209,7 +212,7 @@ class DocumentService:
                 self.translation_provider.name,
                 settings.model,
                 TRANSLATION_PROMPT_VERSION,
-                _digest(json.dumps(payload.model_dump(mode="json"), sort_keys=True)),
+                _digest(json.dumps(identity_payload, sort_keys=True)),
             )
         )
         return self.jobs.create(
@@ -367,6 +370,18 @@ class DocumentService:
                 },
                 commit_point_reached=True,
             )
+        reusable = (
+            self.repository.reusable_translation_items(
+                document_id=document.id,
+                target_language=request.target_language,
+                provider=request.provider,
+                model=request.model,
+                prompt_version=request.prompt_version,
+            )
+            if request.retranslate_scope == "changed"
+            else {}
+        )
+        blocks_to_translate = [block for block in blocks if block.id not in reusable]
         input_blocks = [
             TranslationInputBlock(
                 id=block.id,
@@ -375,17 +390,18 @@ class DocumentService:
                 section_path=block.section_path,
                 page=block.page_start,
             )
-            for block in blocks
+            for block in blocks_to_translate
         ]
         protected_blocks, placeholders = _protect_blocks(input_blocks)
         outline = [
-            block.source_text for block in input_blocks if block.kind.value in {"title", "heading"}
+            block.source_text for block in blocks if block.kind.value in {"title", "heading"}
         ]
         context.emit(
             "document.translation_started",
             {
                 "document_id": document.id,
                 "blocks": len(input_blocks),
+                "reused_blocks": len(reusable),
                 "provider": request.provider,
                 "model": request.model,
                 "mode": request.batching,
@@ -394,16 +410,40 @@ class DocumentService:
             },
             "info",
         )
-        try:
-            output = self._translate_with_fallback(
-                context,
-                request,
-                protected_blocks,
-                outline,
-                placeholders,
+        if protected_blocks:
+            try:
+                translated_output = self._translate_with_fallback(
+                    context,
+                    request,
+                    protected_blocks,
+                    outline,
+                    placeholders,
+                )
+            except DocumentTranslationError as error:
+                raise JobFailure(error.code, str(error), retryable=error.retryable) from error
+        else:
+            translated_output = DocumentTranslationOutput(
+                translations=[], detected_source_language=document.language
             )
-        except DocumentTranslationError as error:
-            raise JobFailure(error.code, str(error), retryable=error.retryable) from error
+        translated_by_id = {
+            item.id: item for item in translated_output.translations
+        }
+        translated_by_id.update(reusable)
+        output = translated_output.model_copy(
+            update={
+                "translations": [translated_by_id[block.id] for block in blocks],
+            }
+        )
+        if reusable:
+            context.emit(
+                "document.translation_blocks_reused",
+                {
+                    "document_id": document.id,
+                    "reused_blocks": len(reusable),
+                    "translated_blocks": len(blocks_to_translate),
+                },
+                "info",
+            )
         if context.cancellation.is_cancelled:
             raise JobFailure("canceled", "整篇翻译已取消", retryable=True)
         try:

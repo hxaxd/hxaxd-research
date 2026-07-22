@@ -67,6 +67,26 @@ def test_web_metadata_update_uses_item_version_precondition():
     assert json.loads(request["body"]) == {"title": "Updated"}
 
 
+def test_attachment_creation_accepts_a_stable_object_key_and_write_token():
+    transport = FakeTransport(_response(200, {"success": {"0": "ABCD2345"}}))
+    client = ZoteroWebClient("secret", transport=transport)
+    library = ZoteroLibraryRef(kind=ZoteroLibraryKind.USER, id="123")
+
+    item_key = client.create_attachment_item(
+        library,
+        parent_item="PARENT23",
+        filename="paper.pdf",
+        content_type="application/pdf",
+        object_key="ABCD2345",
+        write_token="a" * 32,
+    )
+
+    assert item_key == "ABCD2345"
+    request = transport.requests[0]
+    assert request["headers"]["Zotero-Write-Token"] == "a" * 32
+    assert json.loads(request["body"])[0]["key"] == "ABCD2345"
+
+
 def test_attachment_upload_uses_authorize_upload_register_protocol(tmp_path):
     path = tmp_path / "paper.pdf"
     path.write_bytes(b"PDF DATA")

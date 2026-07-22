@@ -10,8 +10,8 @@ from app.platform.public_projection import (
     sanitize_public_url,
 )
 
-from .domain import CandidateState, ScreeningNotFoundError
-from .models import CandidateView, ProjectView, ProjectWorkView
+from .domain import CandidateState, ProjectWorkStatus, ScreeningNotFoundError
+from .models import CandidatePage, CandidateView, ProjectView, ProjectWorkPage, ProjectWorkView
 
 
 class ScreeningQueries:
@@ -22,7 +22,12 @@ class ScreeningQueries:
         with self.database.read() as connection:
             rows = connection.execute(
                 """
-                SELECT p.*, COUNT(pw.id) AS work_count
+                SELECT p.*, COUNT(pw.id) AS work_count,
+                       (
+                           SELECT COUNT(*) FROM candidates candidate
+                           WHERE candidate.project_id = p.id
+                             AND candidate.state IN ('staged', 'matched')
+                       ) AS candidate_count
                 FROM projects p
                 LEFT JOIN project_works pw ON pw.project_id = p.id
                 GROUP BY p.id
@@ -71,24 +76,36 @@ class ScreeningQueries:
         state: CandidateState | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[CandidateView]:
+    ) -> CandidatePage:
         self.get_project(project_id)
         condition = "project_id = ?"
         parameters: list[object] = [project_id]
         if state is not None:
             condition += " AND state = ?"
             parameters.append(state.value)
-        parameters.extend([min(max(limit, 1), 500), max(offset, 0)])
+        page_limit = min(max(limit, 1), 500)
+        page_offset = max(offset, 0)
         with self.database.read() as connection:
+            total = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM candidates WHERE {condition}",  # noqa: S608
+                    parameters,
+                ).fetchone()[0]
+            )
             rows = connection.execute(
                 f"""
                 SELECT * FROM candidates WHERE {condition}
-                ORDER BY rank IS NULL, rank, created_at DESC
+                ORDER BY rank IS NULL, rank, created_at DESC, id DESC
                 LIMIT ? OFFSET ?
                 """,
-                parameters,
+                (*parameters, page_limit, page_offset),
             ).fetchall()
-            return [self._candidate(connection, row) for row in rows]
+            return CandidatePage(
+                items=[self._candidate(connection, row) for row in rows],
+                total=total,
+                limit=page_limit,
+                offset=page_offset,
+            )
 
     def get_project_work(self, project_id: str, work_id: str) -> ProjectWorkView:
         with self.database.read() as connection:
@@ -111,18 +128,27 @@ class ScreeningQueries:
         self,
         project_id: str,
         *,
-        status: str | None = None,
+        status: ProjectWorkStatus | str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[ProjectWorkView]:
+    ) -> ProjectWorkPage:
         self.get_project(project_id)
         condition = "pw.project_id = ?"
         parameters: list[object] = [project_id]
         if status is not None:
             condition += " AND pw.status = ?"
-            parameters.append(status)
-        parameters.extend([min(max(limit, 1), 500), max(offset, 0)])
+            parameters.append(
+                status.value if isinstance(status, ProjectWorkStatus) else status
+            )
+        page_limit = min(max(limit, 1), 500)
+        page_offset = max(offset, 0)
         with self.database.read() as connection:
+            total = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM project_works pw WHERE {condition}",  # noqa: S608
+                    parameters,
+                ).fetchone()[0]
+            )
             rows = connection.execute(
                 f"""
                 SELECT pw.*, item.id AS preferred_item_id, item.title,
@@ -131,12 +157,17 @@ class ScreeningQueries:
                 JOIN bibliographic_items item
                   ON item.work_id = pw.work_id AND item.is_preferred_for_work = 1
                 WHERE {condition}
-                ORDER BY item.issued_year DESC, item.title COLLATE NOCASE
+                ORDER BY item.issued_year DESC, item.title COLLATE NOCASE, pw.id
                 LIMIT ? OFFSET ?
                 """,
-                parameters,
+                (*parameters, page_limit, page_offset),
             ).fetchall()
-            return [self._project_work(connection, row) for row in rows]
+            return ProjectWorkPage(
+                items=[self._project_work(connection, row) for row in rows],
+                total=total,
+                limit=page_limit,
+                offset=page_offset,
+            )
 
     @staticmethod
     def _candidate(connection, row) -> CandidateView:

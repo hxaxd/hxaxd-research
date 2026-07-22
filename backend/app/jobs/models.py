@@ -66,7 +66,7 @@ class Job(BaseModel):
 
 
 class PublicJob(BaseModel):
-    """Browser-safe job state; execution inputs, results, and leases stay internal."""
+    """Browser-safe job state; execution inputs and leases stay internal."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,6 +76,7 @@ class PublicJob(BaseModel):
     subject_id: str | None
     status: JobStatus
     priority: int
+    result: dict[str, Any] | None
     error_code: str | None
     error_message: str | None
     max_attempts: int
@@ -84,6 +85,13 @@ class PublicJob(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     cancel_requested_at: datetime | None
+
+
+class PublicJobPage(BaseModel):
+    items: list[PublicJob]
+    total: int
+    limit: int
+    offset: int
 
 
 class JobAttempt(BaseModel):

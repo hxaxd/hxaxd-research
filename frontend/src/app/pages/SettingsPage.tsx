@@ -11,31 +11,38 @@ export function SettingsPage() {
     <section className="workspace-page">
       <div className="workspace-content">
         <header className="page-header compact-page-header">
-          <div><span className="eyebrow">SYSTEM</span><h1>设置与运行时</h1><p>低频的工具、能力和诊断信息集中在这里，不打扰日常筛选与阅读。</p></div>
-          <button className="toolbar-button" type="button" onClick={() => void refresh()}><Icon name="refresh" size={15} />重新检查</button>
+          <div><span className="eyebrow">工作台设置</span><h1>按你的方式阅读与运行</h1><p>先设置日常阅读和任务行为；工具、设备访问与系统诊断放在后面。</p></div>
         </header>
-        <div className="settings-grid">
-          <section className="settings-card">
-            <header><Icon name="activity" size={18} /><div><h2>后端连接</h2><p>状态来自工作区接口，不使用静态指示。</p></div></header>
-            <dl><dt>状态</dt><dd className={`connection-text connection-text--${connection}`}>{connection}</dd><dt>契约版本</dt><dd>{workspace?.contract_version || "—"}</dd><dt>数据模型</dt><dd>{workspace ? `Schema ${workspace.schema_version}` : "—"}</dd><dt>最近响应</dt><dd>{workspace?.generated_at || error || "—"}</dd></dl>
-          </section>
-          {Object.entries(workspace?.capabilities ?? {}).map(([key, capability]) => (
-            <section className="settings-card" key={key}>
-              <header><Icon name={capabilityIcon(key)} size={18} /><div><h2>{capabilityName(key)}</h2><p>{capability.message}</p></div></header>
-              <dl>
-                <dt>支持</dt><dd>{capability.supported ? "是" : "否"}</dd>
-                <dt>就绪</dt><dd className={capability.ready ? "connection-text--connected" : "connection-text--disconnected"}>{capability.ready ? "可用" : "未就绪"}</dd>
-                {Object.entries(capability.details).map(([detailKey, value]) => <Detail key={detailKey} name={detailKey} value={value} />)}
-              </dl>
-            </section>
-          ))}
-        </div>
         <WorkspacePreferencesSettings />
         <DeviceAccessSettings />
         <OperationsSettings />
+        <details className="system-diagnostics">
+          <summary><span><Icon name="activity" size={17} />系统诊断</span><small>连接、能力、契约和数据模型</small></summary>
+          <div className="system-diagnostics-actions"><p>这些信息用于排查问题，不影响日常操作。</p><button className="toolbar-button" type="button" onClick={() => void refresh()}><Icon name="refresh" size={15} />重新检查</button></div>
+          <div className="settings-grid">
+            <section className="settings-card">
+              <header><Icon name="activity" size={18} /><div><h2>后端连接</h2><p>{error || "状态来自工作区接口。"}</p></div></header>
+              <dl><dt>状态</dt><dd className={`connection-text connection-text--${connection}`}>{connectionLabel(connection)}</dd><dt>契约版本</dt><dd>{workspace?.contract_version || "—"}</dd><dt>数据模型</dt><dd>{workspace ? `Schema ${workspace.schema_version}` : "—"}</dd><dt>最近响应</dt><dd>{workspace?.generated_at || "—"}</dd></dl>
+            </section>
+            {Object.entries(workspace?.capabilities ?? {}).map(([key, capability]) => (
+              <section className="settings-card" key={key}>
+                <header><Icon name={capabilityIcon(key)} size={18} /><div><h2>{capabilityName(key)}</h2><p>{capability.message}</p></div></header>
+                <dl>
+                  <dt>支持</dt><dd>{capability.supported ? "是" : "否"}</dd>
+                  <dt>就绪</dt><dd className={capability.ready ? "connection-text--connected" : "connection-text--disconnected"}>{capability.ready ? "可用" : "未就绪"}</dd>
+                  {Object.entries(capability.details).map(([detailKey, value]) => <Detail key={detailKey} name={detailKey} value={value} />)}
+                </dl>
+              </section>
+            ))}
+          </div>
+        </details>
       </div>
     </section>
   );
+}
+
+function connectionLabel(value: "connecting" | "connected" | "disconnected") {
+  return ({ connecting: "正在连接", connected: "已连接", disconnected: "已断开" } as const)[value];
 }
 
 function capabilityName(key: string) {

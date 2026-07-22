@@ -12,6 +12,7 @@ from .models import (
     ApprovalStatus,
     PublicAgentEvent,
     PublicAgentRun,
+    PublicAgentRunPage,
     PublicApproval,
 )
 from .prompting import (
@@ -54,6 +55,7 @@ __all__ = [
     "PromptContext",
     "PromptSnapshot",
     "PublicAgentRun",
+    "PublicAgentRunPage",
     "PublicAgentEvent",
     "PublicApproval",
     "RuntimeApprovalRequest",

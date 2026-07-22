@@ -13,6 +13,7 @@ from app.integrations.zotero.engine import (
     ZoteroCapabilityUnavailableError,
     ZoteroSyncEngine,
 )
+from app.integrations.zotero.http import ZoteroHttpError
 from app.integrations.zotero.models import (
     TransferExecuteRequest,
     TransferPreviewRequest,
@@ -162,7 +163,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
     )
 
     assert receipt.status == "succeeded"
-    membership = screening_queries.list_project_works(project.id)[0]
+    membership = screening_queries.list_project_works(project.id).items[0]
     attachments = attachment_service.list_for_item(membership.preferred_item_id)
     assert attachments[0].origin == "zotero"
     assert attachments[0].sha256 == hashlib.sha256(PDF).hexdigest()
@@ -182,7 +183,7 @@ def test_local_read_only_import_builds_server_preview_and_writes_through_v3_serv
         TransferExecuteRequest(confirmed=True, expected_preview_hash=update_preview.preview_hash),
     )
     assert update_receipt.items[0].outcome == "updated"
-    updated_membership = screening_queries.list_project_works(project.id)[0]
+    updated_membership = screening_queries.list_project_works(project.id).items[0]
     assert updated_membership.preferred_item_id != membership.preferred_item_id
     work = gateway.catalog_queries.get_work(updated_membership.work_id)
     assert [item.title for item in work.items] == [
@@ -208,6 +209,9 @@ class FakeWebClient:
         self.item = None
         self.children = []
         self.uploaded_paths = []
+        self.create_calls = 0
+        self.attachment_create_calls = 0
+        self.attachment_upload_calls = 0
 
     def list_items(self, library, **kwargs):
         del library, kwargs
@@ -219,23 +223,27 @@ class FakeWebClient:
 
     def create_items(self, library, items, **kwargs):
         del library, kwargs
-        data = {**items[0], "key": "ZKEY0001", "version": 1}
-        self.item = {"key": "ZKEY0001", "version": 1, "data": data}
-        return {"success": {"0": "ZKEY0001"}}
+        self.create_calls += 1
+        item_key = items[0].get("key", "ZKEY0001")
+        data = {**items[0], "key": item_key, "version": 1}
+        self.item = {"key": item_key, "version": 1, "data": data}
+        return {"success": {"0": item_key}}
 
     def create_and_upload_attachment(
         self, library, *, parent_item, file_path, content_type, title, **kwargs
     ):
-        del library, content_type, kwargs
+        del library, content_type
+        self.attachment_create_calls += 1
+        item_key = kwargs.get("object_key") or "ZPDF0001"
         content = file_path.read_bytes()
         self.uploaded_paths.append(file_path)
         md5 = hashlib.md5(content, usedforsecurity=False).hexdigest()
         self.children.append(
             {
-                "key": "ZPDF0001",
+                "key": item_key,
                 "version": 2,
                 "data": {
-                    "key": "ZPDF0001",
+                    "key": item_key,
                     "version": 2,
                     "itemType": "attachment",
                     "parentItem": parent_item,
@@ -247,7 +255,7 @@ class FakeWebClient:
             }
         )
         return ZoteroAttachmentUploadResult(
-            item_key="ZPDF0001",
+            item_key=item_key,
             filename=title,
             md5=md5,
             size=len(content),
@@ -257,8 +265,28 @@ class FakeWebClient:
 
     def get_item(self, library, item_key):
         del library
-        assert item_key == "ZKEY0001"
-        return self.item
+        if self.item is not None and item_key == self.item["key"]:
+            return self.item
+        child = next((value for value in self.children if value["key"] == item_key), None)
+        if child is None:
+            raise ZoteroHttpError("missing", status=404)
+        return child
+
+    def upload_attachment_file(self, library, item_key, file_path):
+        del library
+        self.attachment_upload_calls += 1
+        child = self.get_item(LIBRARY, item_key)
+        content = file_path.read_bytes()
+        md5 = hashlib.md5(content, usedforsecurity=False).hexdigest()
+        child["data"]["md5"] = md5
+        return ZoteroAttachmentUploadResult(
+            item_key=item_key,
+            filename=file_path.name,
+            md5=md5,
+            size=len(content),
+            existed=True,
+            library_version=child["version"],
+        )
 
 
 def test_export_writes_metadata_and_pdf_then_establishes_unchanged_baseline(app_settings, tmp_path):
@@ -321,3 +349,107 @@ def test_export_writes_metadata_and_pdf_then_establishes_unchanged_baseline(app_
     assert web.uploaded_paths[0].name == "paper.pdf"
     next_preview = service.create_preview(request)
     assert next_preview.summary.unchanged == 1
+
+
+class SimulatedReceiptCommitCrash(BaseException):
+    pass
+
+
+class CrashAfterRemoteWriteRepository(SqliteZoteroTransferRepository):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.crash_once = True
+
+    def save_progress(self, receipt):
+        if (
+            self.crash_once
+            and receipt.items
+            and receipt.items[-1].outcome != "applying"
+        ):
+            self.crash_once = False
+            raise SimulatedReceiptCommitCrash()
+        super().save_progress(receipt)
+
+
+def test_export_recovers_a_remote_write_without_creating_duplicates(app_settings, tmp_path):
+    (
+        database,
+        gateway,
+        _,
+        _,
+        screening_commands,
+        _,
+    ) = _services(app_settings)
+    project = screening_commands.create_project(ProjectCreate(name="Recover export"))
+    candidate = screening_commands.stage_candidate(
+        project.id,
+        CandidateCreate(
+            item=BibliographicItemDraft(
+                item_type="journal_article",
+                title="Exactly once export",
+                identifiers=[IdentifierInput(scheme="doi", value="10.1000/recover")],
+            ),
+            source_provider="test",
+        ),
+    )
+    membership = screening_commands.promote_candidate(
+        project.id, candidate.id, CandidatePromotionRequest()
+    )
+    pdf = tmp_path / "recover.pdf"
+    pdf.write_bytes(PDF)
+    gateway.import_pdf(
+        membership.preferred_item_id,
+        pdf,
+        filename="recover.pdf",
+        source_url=None,
+    )
+    web = FakeWebClient()
+    crashing_repository = CrashAfterRemoteWriteRepository(database, clock=lambda: NOW)
+    engine = ZoteroSyncEngine(
+        domain=gateway,
+        repository=crashing_repository,
+        local_client=None,
+        web_client=web,
+    )
+    service = ZoteroTransferService(
+        crashing_repository,
+        engine,
+        planner=ZoteroDiffPlanner(clock=lambda: NOW),
+        clock=lambda: NOW,
+    )
+    preview = service.create_preview(
+        TransferPreviewRequest(
+            direction="export", library=LIBRARY, project_id=project.id
+        )
+    )
+    execute = TransferExecuteRequest(
+        confirmed=True, expected_preview_hash=preview.preview_hash
+    )
+
+    with pytest.raises(SimulatedReceiptCommitCrash):
+        service.execute(preview.id, execute)
+
+    assert web.create_calls == 1
+    assert web.attachment_create_calls == 1
+    assert len(web.children) == 1
+
+    repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+    restarted = ZoteroTransferService(
+        repository,
+        ZoteroSyncEngine(
+            domain=gateway,
+            repository=repository,
+            local_client=None,
+            web_client=web,
+        ),
+        planner=ZoteroDiffPlanner(clock=lambda: NOW),
+        clock=lambda: NOW,
+    )
+    assert restarted.reconcile_interrupted() == 1
+    receipt = restarted.execute(preview.id, execute)
+
+    assert receipt.status == "succeeded"
+    assert web.create_calls == 1
+    assert web.attachment_create_calls == 1
+    assert web.attachment_upload_calls == 1
+    assert len(web.children) == 1

@@ -103,11 +103,12 @@ class AgentToolFacade:
     ) -> list[dict[str, Any]]:
         self._require(caller, READ_SCOPE)
         resolved = self._project(caller, project_id)
+        page = self.screening_queries.list_project_works(
+            resolved, status=status, limit=limit, offset=offset
+        )
         return [
             item.model_dump(mode="json")
-            for item in self.screening_queries.list_project_works(
-                resolved, status=status, limit=limit, offset=offset
-            )
+            for item in page.items
         ]
 
     def item(self, caller: _Caller, item_id: str) -> dict[str, Any]:
@@ -130,11 +131,12 @@ class AgentToolFacade:
     ) -> list[dict[str, Any]]:
         self._require(caller, READ_SCOPE)
         resolved = self._project(caller, project_id)
+        page = self.screening_queries.list_candidates(
+            resolved, state=state, limit=limit, offset=offset
+        )
         return [
             candidate.model_dump(mode="json")
-            for candidate in self.screening_queries.list_candidates(
-                resolved, state=state, limit=limit, offset=offset
-            )
+            for candidate in page.items
         ]
 
     def stage_candidate(
@@ -148,7 +150,7 @@ class AgentToolFacade:
         source_url: str | None = None,
         source_schema_version: str | None = None,
         raw_payload: dict[str, Any] | None = None,
-        rank: float | None = None,
+        rank: int | None = None,
         rationale: str | None = None,
     ) -> dict[str, Any]:
         self._require(caller, STAGE_SCOPE)
@@ -501,7 +503,7 @@ def create_agent_mcp_server(
         source_url: str | None = None,
         source_schema_version: str | None = None,
         raw_payload: dict[str, Any] | None = None,
-        rank: float | None = None,
+        rank: int | None = None,
         rationale: str | None = None,
     ) -> dict[str, Any]:
         return facade.stage_candidate(

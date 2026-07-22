@@ -10,6 +10,8 @@ from app.integrations.zotero.service import (
     TransferNotFoundError,
     ZoteroTransferService,
 )
+from app.jobs import JobNotFoundError, JobStatus
+from app.jobs.public import project_public_job
 from app.operations import OperationService
 from app.screening import ScreeningCommands, ScreeningQueries
 from app.screening.domain import ScreeningConflictError, ScreeningNotFoundError
@@ -88,7 +90,7 @@ class ChangeSetService:
         )
 
     def get(self, change_set_id: str) -> ChangeSetView:
-        return self.repository.get(change_set_id)
+        return self._reconcile_resource_change_set(change_set_id)
 
     def list(
         self,
@@ -99,6 +101,7 @@ class ChangeSetService:
         limit: int = 100,
         offset: int = 0,
     ) -> ChangeSetList:
+        self.reconcile_pending()
         return self.repository.list(
             status=status,
             project_id=project_id,
@@ -106,6 +109,12 @@ class ChangeSetService:
             limit=limit,
             offset=offset,
         )
+
+    def reconcile_pending(self) -> int:
+        change_set_ids = self.repository.pending_resource_ids()
+        for change_set_id in change_set_ids:
+            self._reconcile_resource_change_set(change_set_id)
+        return len(change_set_ids)
 
     def review(
         self,
@@ -128,7 +137,7 @@ class ChangeSetService:
         *,
         actor_id: str = "local-user",
     ) -> ChangeSetView:
-        change_set = self.repository.get(change_set_id)
+        change_set = self._reconcile_resource_change_set(change_set_id)
         if change_set.content_hash != request.expected_content_hash:
             raise ChangeSetConflictError("change set content hash changed")
         if change_set.status is ChangeSetStatus.APPLIED:
@@ -152,7 +161,7 @@ class ChangeSetService:
                 result = self._apply_item(change_set, item, actor_id=actor_id)
                 self.repository.mark_item(
                     item.id,
-                    ChangeItemStatus.APPLIED,
+                    ChangeItemStatus.APPROVED,
                     result=result,
                 )
             except _STALE_ERRORS as error:
@@ -170,6 +179,84 @@ class ChangeSetService:
                     error_message=str(error),
                 )
 
+        return self._reconcile_resource_change_set(change_set_id)
+
+    def _reconcile_resource_change_set(self, change_set_id: str) -> ChangeSetView:
+        current = self.repository.get(change_set_id)
+        if current.kind is not ChangeSetKind.RESOURCE_ACQUISITION:
+            return current
+
+        for item in current.items:
+            if item.status in {
+                ChangeItemStatus.APPLIED,
+                ChangeItemStatus.REJECTED,
+                ChangeItemStatus.STALE,
+            }:
+                continue
+            result = item.result or {}
+            job_id = result.get("job_id")
+            if not isinstance(job_id, str) or not job_id:
+                continue
+            try:
+                job = self.operations.job_repository.get(job_id)
+            except JobNotFoundError:
+                self.repository.mark_item(
+                    item.id,
+                    ChangeItemStatus.FAILED,
+                    result={**result, "job_status": "missing"},
+                    error_code="resource_job_missing",
+                    error_message="资源获取任务不存在",
+                )
+                continue
+
+            public = project_public_job(job)
+            if (
+                item.status is ChangeItemStatus.FAILED
+                and result.get("job_status") == job.status.value
+            ):
+                continue
+            if (
+                item.status is ChangeItemStatus.APPROVED
+                and result.get("job_status") == job.status.value
+            ):
+                continue
+            job_result = {
+                **result,
+                "job_status": job.status.value,
+                "job_result": public.result,
+            }
+            if job.status is JobStatus.SUCCEEDED:
+                self.repository.mark_item(
+                    item.id,
+                    ChangeItemStatus.APPLIED,
+                    result=job_result,
+                )
+            elif job.status in {JobStatus.FAILED, JobStatus.CANCELED}:
+                self.repository.mark_item(
+                    item.id,
+                    ChangeItemStatus.FAILED,
+                    result=job_result,
+                    error_code=(
+                        job.error_code
+                        if job.status is JobStatus.FAILED and job.error_code
+                        else f"resource_job_{job.status.value}"
+                    ),
+                    error_message=(
+                        public.error_message
+                        or (
+                            "资源获取任务已取消"
+                            if job.status is JobStatus.CANCELED
+                            else "资源获取任务失败"
+                        )
+                    ),
+                )
+            else:
+                self.repository.mark_item(
+                    item.id,
+                    ChangeItemStatus.APPROVED,
+                    result=job_result,
+                )
+
         current = self.repository.get(change_set_id)
         attempted = [
             item
@@ -178,7 +265,10 @@ class ChangeSetService:
             in {ChangeItemStatus.APPLIED, ChangeItemStatus.STALE, ChangeItemStatus.FAILED}
         ]
         applied = [item for item in attempted if item.status is ChangeItemStatus.APPLIED]
-        if attempted and len(applied) == len(attempted):
+        waiting = [item for item in current.items if item.status is ChangeItemStatus.APPROVED]
+        if waiting:
+            final_status = ChangeSetStatus.SUBMITTED
+        elif attempted and len(applied) == len(attempted):
             final_status = ChangeSetStatus.APPLIED
         elif applied:
             final_status = ChangeSetStatus.PARTIALLY_APPLIED
@@ -186,6 +276,8 @@ class ChangeSetService:
             final_status = ChangeSetStatus.STALE
         else:
             final_status = ChangeSetStatus.FAILED
+        if current.status is final_status:
+            return current
         return self.repository.finish_apply(change_set_id, final_status)
 
     def _apply_atomic_database_changes(

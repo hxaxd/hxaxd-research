@@ -10,7 +10,6 @@ from pathlib import Path
 from uuid import uuid4
 from zipfile import BadZipFile, LargeZipFile, ZipFile
 
-from app.legacy.v2_importer import V2ImportError, migrate_v2_database
 from app.platform.activation import (
     ActivationError,
     FaultInjector,
@@ -18,14 +17,11 @@ from app.platform.activation import (
     default_activation_journal,
 )
 from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
-from app.platform.db.v4_migration import V3MigrationError, migrate_workspace_database
 
 from .contract import (
     DATABASE_ARCHIVE_PATH,
     MANIFEST_PATH,
     SNAPSHOT_FORMAT,
-    V2_SNAPSHOT_FORMAT,
-    V3_SNAPSHOT_FORMAT,
     SnapshotManifest,
 )
 from .errors import SnapshotCancelled, SnapshotError
@@ -81,7 +77,7 @@ class SnapshotRestorer:
                 should_cancel=should_cancel,
             )
             database_path = stage / Path(DATABASE_ARCHIVE_PATH).relative_to("payload")
-            database = self._upgrade_and_verify_database(database_path, stage, manifest)
+            database = self._verify_database(database_path, manifest)
             self._validate_payload(stage, database, manifest)
             self._ensure_restored_jobs_are_terminal(database)
             self._check_cancelled(should_cancel)
@@ -164,39 +160,15 @@ class SnapshotRestorer:
             raise SnapshotError("快照压缩包损坏或无法读取") from error
 
     @staticmethod
-    def _upgrade_and_verify_database(
+    def _verify_database(
         database_path: Path,
-        stage: Path,
         manifest: SnapshotManifest,
     ) -> WorkspaceDatabase:
         state = inspect_database(database_path)
-        if manifest.format == V2_SNAPSHOT_FORMAT:
-            if state.kind is not DatabaseKind.LEGACY_V2:
-                raise SnapshotError("v2 快照清单与数据库结构不一致")
-            try:
-                migration = migrate_v2_database(
-                    database_path,
-                    data_dir=stage,
-                    verify_files=True,
-                )
-            except (V2ImportError, OSError, sqlite3.DatabaseError) as error:
-                raise SnapshotError(f"v2 快照迁移失败: {error}") from error
-            if migration.backup_database is not None:
-                SnapshotRestorer._remove_staged_migration_backup(migration.backup_database)
-        elif manifest.format == SNAPSHOT_FORMAT:
-            if state.kind is not DatabaseKind.V4:
-                raise SnapshotError("v4 快照清单与数据库结构不一致")
-        elif manifest.format == V3_SNAPSHOT_FORMAT:
-            if state.kind is not DatabaseKind.LEGACY_V3:
-                raise SnapshotError("v3 快照清单与数据库结构不一致")
-            try:
-                migration = migrate_workspace_database(database_path)
-            except (V3MigrationError, OSError, sqlite3.DatabaseError) as error:
-                raise SnapshotError(f"v3 快照迁移失败: {error}") from error
-            if migration.backup_database is not None:
-                SnapshotRestorer._remove_staged_migration_backup(migration.backup_database)
-        else:  # SnapshotManifest rejects unsupported formats; keep the boundary explicit.
+        if manifest.format != SNAPSHOT_FORMAT:
             raise SnapshotError("快照容器格式不受支持")
+        if state.kind is not DatabaseKind.V4:
+            raise SnapshotError("v4 快照清单与数据库结构不一致")
 
         database = WorkspaceDatabase(database_path)
         try:
@@ -204,12 +176,6 @@ class SnapshotRestorer:
         except (RuntimeError, sqlite3.DatabaseError) as error:
             raise SnapshotError("快照数据库未通过当前结构校验") from error
         return database
-
-    @staticmethod
-    def _remove_staged_migration_backup(path: Path) -> None:
-        path.unlink(missing_ok=True)
-        path.with_name(f"{path.name}-wal").unlink(missing_ok=True)
-        path.with_name(f"{path.name}-shm").unlink(missing_ok=True)
 
     @staticmethod
     def _validate_payload(

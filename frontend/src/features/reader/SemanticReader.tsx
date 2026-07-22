@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../../shared/api/client";
 import type {
@@ -7,6 +7,8 @@ import type {
   Attachment,
   DocumentBlock,
   DocumentBlocksPage,
+  DocumentGlossaryEntry,
+  GlossaryPreference,
   Job,
   ReaderPreferences,
   ReadingBookmark,
@@ -84,7 +86,15 @@ interface Props {
   onOpenPdf: (page: number | null) => void;
 }
 
-export function SemanticReader({ projectId, itemId, attachment, annotationRefreshToken = 0, initialBlockId = null, onReadingLocation, onOpenPdf }: Props) {
+export function SemanticReader({
+  projectId,
+  itemId,
+  attachment,
+  annotationRefreshToken = 0,
+  initialBlockId = null,
+  onReadingLocation,
+  onOpenPdf,
+}: Props) {
   const scrollRef = useRef<HTMLElement>(null);
   const saveTimer = useRef<number | null>(null);
   const restoredDocument = useRef<string | null>(null);
@@ -92,7 +102,9 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   const preferencesApplied = useRef(false);
   const lastSavedPosition = useRef({ blockId: "", progress: -1 });
   const [readerSettings, setReaderSettings] = useState(defaultPreferences);
-  const [mode, setMode] = useState<ReadingMode>(defaultPreferences.default_mode);
+  const [mode, setMode] = useState<ReadingMode>(
+    defaultPreferences.default_mode,
+  );
   const [role, setRole] = useState<SemanticRole | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -103,7 +115,9 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   const [notice, setNotice] = useState<string | null>(null);
   const [busyBlockId, setBusyBlockId] = useState<string | null>(null);
   const [composerBlockId, setComposerBlockId] = useState<string | null>(null);
-  const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
+  const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(
+    null,
+  );
   const [noteKind, setNoteKind] = useState<AnnotationKind>("highlight");
   const [noteBody, setNoteBody] = useState("");
   const [noteTags, setNoteTags] = useState("");
@@ -123,7 +137,8 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     () =>
       documents.data?.find(
         (candidate) =>
-          candidate.source_attachment_id === attachment.id && candidate.status === "ready",
+          candidate.source_attachment_id === attachment.id &&
+          candidate.status === "ready",
       ) ?? null,
     [attachment.id, documents.data],
   );
@@ -131,13 +146,40 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     () =>
       document
         ? api.documentBlocks(document.id, readerSettings.target_language)
-        : Promise.resolve({ document_id: "", offset: 0, limit: 1000, total: 0, items: [] }),
+        : Promise.resolve({
+            document_id: "",
+            offset: 0,
+            limit: 1000,
+            total: 0,
+            items: [],
+          }),
     [document?.id, readerSettings.target_language],
   );
+  const documentGlossary = useApiResource<DocumentGlossaryEntry[]>(
+    () =>
+      document
+        ? api.documentGlossary(document.id, readerSettings.target_language)
+        : Promise.resolve([]),
+    [document?.id, readerSettings.target_language],
+  );
+  const glossary = useMemo<GlossaryPreference[]>(() => {
+    const merged = new Map<string, GlossaryPreference>();
+    for (const entry of preferences.data?.translation.glossary ?? []) {
+      merged.set(entry.source_term.toLocaleLowerCase(), entry);
+    }
+    for (const entry of documentGlossary.data ?? []) {
+      merged.set(entry.source_term.toLocaleLowerCase(), {
+        source_term: entry.source_term,
+        translated_term: entry.translated_term,
+      });
+    }
+    return [...merged.values()];
+  }, [documentGlossary.data, preferences.data?.translation.glossary]);
   const activeJobId = activeJob?.id;
   const activeJobStatus = activeJob?.status;
   const reloadBlocks = blocks.reload;
   const reloadDocuments = documents.reload;
+  const reloadGlossary = documentGlossary.reload;
 
   useEffect(() => {
     if (!preferences.data || preferencesApplied.current) return;
@@ -155,7 +197,12 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   }, [readingState.data]);
 
   useEffect(() => {
-    if (!activeJobId || !activeJobStatus || terminalStatuses.has(activeJobStatus)) return;
+    if (
+      !activeJobId ||
+      !activeJobStatus ||
+      terminalStatuses.has(activeJobStatus)
+    )
+      return;
     let disposed = false;
     const timer = window.setInterval(() => {
       void api
@@ -166,11 +213,14 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
           if (next.status === "succeeded") {
             void reloadDocuments();
             void reloadBlocks();
+            void reloadGlossary();
           }
         })
         .catch((reason: unknown) => {
           if (!disposed) {
-            setActionError(reason instanceof Error ? reason.message : "任务状态读取失败");
+            setActionError(
+              reason instanceof Error ? reason.message : "任务状态读取失败",
+            );
           }
         });
     }, 700);
@@ -178,14 +228,16 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [activeJobId, activeJobStatus, reloadBlocks, reloadDocuments]);
+  }, [
+    activeJobId,
+    activeJobStatus,
+    reloadBlocks,
+    reloadDocuments,
+    reloadGlossary,
+  ]);
 
   useEffect(() => {
-    if (
-      !document ||
-      blocks.loading ||
-      !blocks.data?.items.length
-    ) {
+    if (!document || blocks.loading || !blocks.data?.items.length) {
       return;
     }
     const deepLink = initialBlockId
@@ -206,7 +258,8 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
       !readingState.data ||
       !readerSettings.restore_position ||
       restoredDocument.current === document.id
-    ) return;
+    )
+      return;
     restoredDocument.current = document.id;
     const frame = window.requestAnimationFrame(() => {
       const savedBlock = readingState.data?.block_id;
@@ -216,12 +269,20 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
       if (target) {
         target.scrollIntoView({ block: "center" });
       } else if (scrollRef.current && readingState.data) {
-        const maximum = scrollRef.current.scrollHeight - scrollRef.current.clientHeight;
+        const maximum =
+          scrollRef.current.scrollHeight - scrollRef.current.clientHeight;
         scrollRef.current.scrollTop = maximum * readingState.data.progress;
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [blocks.data, blocks.loading, document, initialBlockId, readerSettings.restore_position, readingState.data]);
+  }, [
+    blocks.data,
+    blocks.loading,
+    document,
+    initialBlockId,
+    readerSettings.restore_position,
+    readingState.data,
+  ]);
 
   useEffect(
     () => () => {
@@ -231,10 +292,11 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   );
 
   const visibleBlocks = useMemo(
-    () => searchSemanticBlocks(
-      filterSemanticBlocks(blocks.data?.items ?? [], role),
-      searchQuery,
-    ),
+    () =>
+      searchSemanticBlocks(
+        filterSemanticBlocks(blocks.data?.items ?? [], role),
+        searchQuery,
+      ),
     [blocks.data, role, searchQuery],
   );
   const translatedCount = (blocks.data?.items ?? []).filter(
@@ -258,16 +320,22 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   const bookmarks = readingState.data?.bookmarks ?? [];
   const layoutClass = [
     "semantic-layout",
-    readerSettings.show_outline ? "semantic-layout--outline" : "semantic-layout--plain",
+    readerSettings.show_outline
+      ? "semantic-layout--outline"
+      : "semantic-layout--plain",
     workspaceOpen ? "semantic-layout--panel" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   function patchSettings(patch: Partial<ReaderPreferences>) {
     setReaderSettings((current) => ({ ...current, ...patch }));
   }
 
   function jumpToBlock(blockId: string) {
-    const block = blocks.data?.items.find((candidate) => candidate.id === blockId);
+    const block = blocks.data?.items.find(
+      (candidate) => candidate.id === blockId,
+    );
     onReadingLocation?.(blockId, block?.page_start ?? null);
     globalThis.document
       .getElementById(`block-${blockId}`)
@@ -283,21 +351,25 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
         scroller.querySelectorAll<HTMLElement>("[data-reading-block]"),
       );
       if (!candidates.length) return;
-      const marker = scroller.getBoundingClientRect().top + scroller.clientHeight * 0.32;
+      const marker =
+        scroller.getBoundingClientRect().top + scroller.clientHeight * 0.32;
       let active = candidates[0];
       for (const candidate of candidates) {
         if (candidate.getBoundingClientRect().top <= marker) active = candidate;
         else break;
       }
       const blockId = active?.dataset.readingBlock ?? "";
-      const block = blocks.data?.items.find((candidate) => candidate.id === blockId);
+      const block = blocks.data?.items.find(
+        (candidate) => candidate.id === blockId,
+      );
       const progress = calculateScrollProgress(
         scroller.scrollTop,
         scroller.scrollHeight,
         scroller.clientHeight,
       );
       const last = lastSavedPosition.current;
-      if (blockId === last.blockId && Math.abs(progress - last.progress) < 0.02) return;
+      if (blockId === last.blockId && Math.abs(progress - last.progress) < 0.02)
+        return;
       lastSavedPosition.current = { blockId, progress };
       void api
         .updateReadingState(projectId, itemId, {
@@ -308,7 +380,9 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
         })
         .then(readingState.setData)
         .catch((reason: unknown) => {
-          setActionError(reason instanceof Error ? reason.message : "阅读进度保存失败");
+          setActionError(
+            reason instanceof Error ? reason.message : "阅读进度保存失败",
+          );
         });
     }, 900);
   }
@@ -318,7 +392,9 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     try {
       setActiveJob(await api.extractDocument(attachment.id, ocrMode));
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "无法开始结构化提取");
+      setActionError(
+        reason instanceof Error ? reason.message : "无法开始结构化提取",
+      );
     }
   }
 
@@ -327,16 +403,23 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     setActionError(null);
     setNotice(null);
     try {
-      const nextJob = await api.translateDocument(document.id, readerSettings.target_language);
+      const nextJob = await api.translateDocument(
+        document.id,
+        readerSettings.target_language,
+      );
       setActiveJob(nextJob);
       if (
-        nextJob.status === "succeeded"
-        && preferences.data?.translation.retranslate_scope === "changed"
+        nextJob.status === "succeeded" &&
+        preferences.data?.translation.retranslate_scope === "changed"
       ) {
-        setNotice("当前文档结构和翻译设置没有变化，已复用现有译文；可在设置中选择“整篇”强制重译。");
+        setNotice(
+          "当前文档结构和翻译设置没有变化，已复用现有译文；可在设置中选择“整篇”强制重译。",
+        );
       }
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "无法开始整篇翻译");
+      setActionError(
+        reason instanceof Error ? reason.message : "无法开始整篇翻译",
+      );
     }
   }
 
@@ -352,34 +435,59 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
         expected_revision: preferences.data.revision,
         reader: { ...readerSettings, default_mode: mode },
         bilingual: preferences.data?.bilingual ?? {
-          layout: "side_by_side", highlight_terms: true, synchronize_blocks: true,
+          layout: "side_by_side",
+          highlight_terms: true,
+          synchronize_blocks: true,
         },
         pdf: preferences.data?.pdf ?? {
-          color_mode: "original", default_zoom: "page_width", toolbar_density: "comfortable", restore_position: true,
+          color_mode: "original",
+          default_zoom: "page_width",
+          toolbar_density: "comfortable",
+          restore_position: true,
         },
         translation: preferences.data?.translation ?? {
-          provider: "deepseek", model: "deepseek-v4-flash", style: "faithful_academic",
-          batching: "whole_with_fallback", glossary: [], retranslate_scope: "changed",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          style: "faithful_academic",
+          batching: "whole_with_fallback",
+          glossary: [],
+          retranslate_scope: "changed",
         },
         agent: preferences.data?.agent ?? {
-          model: null, reasoning_effort: "high", context_summary: "balanced",
-          enabled_capabilities: ["catalog_read", "candidate_propose", "metadata_propose", "resource_propose", "zotero_conflict_propose", "web_search"],
+          model: null,
+          reasoning_effort: "high",
+          context_summary: "balanced",
+          enabled_capabilities: [
+            "catalog_read",
+            "candidate_propose",
+            "metadata_propose",
+            "resource_propose",
+            "zotero_conflict_propose",
+            "web_search",
+          ],
         },
         tasks: preferences.data?.tasks ?? {
-          notify_on_success: true, notify_on_failure: true, auto_open_result: false, max_concurrent_jobs: 2,
+          notify_on_success: true,
+          notify_on_failure: true,
+          auto_open_result: false,
+          max_concurrent_jobs: 2,
         },
       });
       preferences.setData(saved);
       setNotice("已保存为所有设备的阅读默认设置");
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "阅读设置保存失败");
+      setActionError(
+        reason instanceof Error ? reason.message : "阅读设置保存失败",
+      );
       await preferences.reload();
     }
   }
 
   async function toggleBookmark(block: DocumentBlock) {
     const existing = bookmarks.find(
-      (bookmark) => bookmark.block_id === block.id && bookmark.page_number === block.page_start,
+      (bookmark) =>
+        bookmark.block_id === block.id &&
+        bookmark.page_number === block.page_start,
     );
     setBusyBlockId(block.id);
     setActionError(null);
@@ -405,18 +513,22 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
       ?.querySelector("[data-source-content]");
     const selection = window.getSelection();
     const exact = selection?.toString().trim() ?? "";
-    const selectedSourceText = (
-      exact
-      && source
-      && selection?.anchorNode
-      && selection.focusNode
-      && source.contains(selection.anchorNode)
-      && source.contains(selection.focusNode)
-      && block.source_text.includes(exact)
-    ) ? exact : null;
+    const selectedSourceText =
+      exact &&
+      source &&
+      selection?.anchorNode &&
+      selection.focusNode &&
+      source.contains(selection.anchorNode) &&
+      source.contains(selection.focusNode) &&
+      block.source_text.includes(exact)
+        ? exact
+        : null;
     setComposerBlockId(block.id);
     setEditingAnnotationId(annotation?.id ?? null);
-    setNoteKind(annotation?.kind ?? (block.semantic_role === "method" ? "method" : "highlight"));
+    setNoteKind(
+      annotation?.kind ??
+        (block.semantic_role === "method" ? "method" : "highlight"),
+    );
     setNoteBody(annotation?.body ?? "");
     setNoteTags(annotation?.tags.join(", ") ?? "");
     setNoteQuote(annotation?.quoted_text ?? selectedSourceText);
@@ -431,7 +543,10 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   }
 
   async function saveAnnotation(block: DocumentBlock) {
-    const tags = noteTags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean);
+    const tags = noteTags
+      .split(/[,，]/)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
     setBusyBlockId(block.id);
     setActionError(null);
     try {
@@ -479,7 +594,9 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
     try {
       await api.deleteAnnotation(annotation.id, annotation.updated_at);
       annotations.setData(
-        (annotations.data ?? []).filter((candidate) => candidate.id !== annotation.id),
+        (annotations.data ?? []).filter(
+          (candidate) => candidate.id !== annotation.id,
+        ),
       );
       if (editingAnnotationId === annotation.id) closeComposer();
     } catch (reason) {
@@ -490,121 +607,407 @@ export function SemanticReader({ projectId, itemId, attachment, annotationRefres
   }
 
   if (documents.loading) {
-    return <div className="semantic-reader"><AsyncMessage kind="loading">正在读取文档结构…</AsyncMessage></div>;
+    return (
+      <div className="semantic-reader">
+        <AsyncMessage kind="loading">正在读取文档结构…</AsyncMessage>
+      </div>
+    );
   }
   if (documents.error) {
-    return <div className="semantic-reader"><AsyncMessage kind="error" onRetry={() => void documents.retry()}>{documents.error}</AsyncMessage></div>;
+    return (
+      <div className="semantic-reader">
+        <AsyncMessage kind="error" onRetry={() => void documents.retry()}>
+          {documents.error}
+        </AsyncMessage>
+      </div>
+    );
   }
   if (!document) {
-    return <div className="semantic-reader semantic-reader--empty">
-      <section className="semantic-onboarding">
-        <span className="semantic-onboarding__icon"><Icon name="book-open" size={25} /></span>
-        <span className="eyebrow">STRUCTURED READING</span>
-        <h2>把线性 PDF 变成可筛选的阅读结构</h2>
-        <p>存在 TeX 源附件时优先读取其章节、段落、公式和图表关系，再用 BabelDOC 补齐 PDF 页码与坐标；没有源码时直接复用 PDF 版面结构。</p>
-        <label>扫描件策略
-          <select value={ocrMode} onChange={(event) => setOcrMode(event.target.value as OcrMode)}>
-            <option value="auto">自动检测</option>
-            <option value="force">强制离线 OCR</option>
-            <option value="off">跳过扫描检测</option>
-          </select>
-        </label>
-        <button className="primary-button semantic-primary-action" disabled={Boolean(isRunning)} type="button" onClick={() => void startExtraction()}>
-          <Icon name={isRunning ? "activity" : "sparkles"} size={17} />
-          {isRunning ? "正在生成结构…" : "生成结构化内容"}
-        </button>
-        <small>自动模式优先使用 TeX 与原生文本层；没有文本层时回退到真正的离线 OCR，并保留页码、坐标与识别置信度。</small>
-        {actionError || activeJob?.error_message ? <p className="semantic-action-error">{actionError || activeJob?.error_message}</p> : null}
-      </section>
-    </div>;
+    return (
+      <div className="semantic-reader semantic-reader--empty">
+        <section className="semantic-onboarding">
+          <span className="semantic-onboarding__icon">
+            <Icon name="book-open" size={25} />
+          </span>
+          <span className="eyebrow">结构阅读</span>
+          <h2>生成可浏览、筛选和翻译的文章结构</h2>
+          <p>
+            系统会识别章节、段落、列表、图表、公式和参考文献，并保留它们在原文中的页码。生成后可以按研究语义筛选，也可以一次翻译全文。
+          </p>
+          <label>
+            图片型论文
+            <select
+              value={ocrMode}
+              onChange={(event) => setOcrMode(event.target.value as OcrMode)}
+            >
+              <option value="auto">自动识别（推荐）</option>
+              <option value="force">始终识别图片文字</option>
+              <option value="off">不识别图片文字</option>
+            </select>
+          </label>
+          <button
+            className="primary-button semantic-primary-action"
+            disabled={Boolean(isRunning)}
+            type="button"
+            onClick={() => void startExtraction()}
+          >
+            <Icon name={isRunning ? "activity" : "sparkles"} size={17} />
+            {isRunning ? "正在生成结构…" : "生成结构化内容"}
+          </button>
+          <small>
+            这项工作在后台完成；你可以继续阅读 PDF，完成后会自动出现结构视图。
+          </small>
+          {actionError || activeJob?.error_message ? (
+            <p className="semantic-action-error">
+              {actionError || activeJob?.error_message}
+            </p>
+          ) : null}
+        </section>
+      </div>
+    );
   }
 
-  return <div className={[
-    "semantic-reader",
-    `semantic-reader--${readerSettings.font_size}`,
-    `semantic-reader--${readerSettings.measure}`,
-    `semantic-reader--${readerSettings.density}`,
-    `semantic-reader--font-${readerSettings.font_family}`,
-    `semantic-reader--line-${readerSettings.line_height}`,
-    `semantic-reader--flow-${readerSettings.flow}`,
-    `semantic-reader--columns-${readerSettings.columns}`,
-    `semantic-reader--theme-${readerSettings.theme}`,
-    preferences.data?.bilingual.layout === "stacked" ? "semantic-reader--bilingual-stacked" : "",
-    readerSettings.reduce_motion ? "semantic-reader--reduce-motion" : "",
-    readerSettings.large_touch_targets ? "semantic-reader--touch" : "",
-  ].filter(Boolean).join(" ")}>
-    <header className="semantic-toolbar">
-      <div className="semantic-segments" aria-label="阅读语言">
-        {(["source", "bilingual", "translation"] as ReadingMode[]).map((value) => <button aria-pressed={effectiveMode === value} className={effectiveMode === value ? "active" : ""} disabled={!translatedCount && value !== "source"} key={value} type="button" onClick={() => setMode(value)}>{value === "source" ? "原文" : value === "bilingual" ? "双语" : "译文"}</button>)}
-      </div>
-      <label className="semantic-role-filter"><span>语义</span><select value={role} onChange={(event) => setRole(event.target.value as SemanticRole | "all")}><option value="all">全部节奏</option>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label className="semantic-search"><Icon name="search" size={14} /><input aria-label="全文搜索" placeholder="搜索原文或译文" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />{searchQuery ? <button aria-label="清除搜索" type="button" onClick={() => setSearchQuery("")}><Icon name="close" size={13} /></button> : null}</label>
-      <span className="semantic-toolbar__status">{document.block_count} 块 · {translatedCount} 已译 · {Math.round((readingState.data?.progress ?? 0) * 100)}%</span>
-      <button className={workspaceOpen ? "toolbar-button active" : "toolbar-button"} type="button" aria-expanded={workspaceOpen} onClick={() => setWorkspaceOpen((value) => !value)}><Icon name="note" size={15} />笔记 {annotations.data?.length ?? 0}<span className="toolbar-count">{bookmarks.length}</span></button>
-      <button className="toolbar-button" type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}><Icon name="settings" size={15} />设置</button>
-      <button className="primary-toolbar-button" disabled={Boolean(isRunning)} type="button" onClick={() => void startTranslation()}><Icon name={isRunning ? "activity" : "languages"} size={15} />{isRunning ? "处理中" : translatedCount ? "重新翻译与识别" : "翻译与语义识别"}</button>
-    </header>
-    {settingsOpen ? <section className="semantic-settings" aria-label="阅读设置">
-      <label>目标语言<select value={readerSettings.target_language} onChange={(event) => patchSettings({ target_language: event.target.value })}><option value="zh-CN">简体中文</option><option value="zh-TW">繁体中文</option><option value="en">English</option></select></label>
-      <label>字号<select value={readerSettings.font_size} onChange={(event) => patchSettings({ font_size: event.target.value as ReaderPreferences["font_size"] })}><option value="small">紧凑</option><option value="medium">标准</option><option value="large">大字</option></select></label>
-      <label>行距<select value={readerSettings.line_height} onChange={(event) => patchSettings({ line_height: event.target.value as ReaderPreferences["line_height"] })}><option value="compact">紧凑</option><option value="standard">标准</option><option value="relaxed">舒展</option></select></label>
-      <label>行宽<select value={readerSettings.measure} onChange={(event) => patchSettings({ measure: event.target.value as ReaderPreferences["measure"] })}><option value="focused">专注</option><option value="balanced">均衡</option><option value="wide">宽屏</option></select></label>
-      <label>块间距<select value={readerSettings.density} onChange={(event) => patchSettings({ density: event.target.value as ReaderPreferences["density"] })}><option value="compact">紧密</option><option value="comfortable">舒展</option></select></label>
-      <div className="semantic-settings__toggles">
-        <label><input checked={readerSettings.show_outline} type="checkbox" onChange={(event) => patchSettings({ show_outline: event.target.checked })} />显示目录</label>
-        <label><input checked={readerSettings.restore_position} type="checkbox" onChange={(event) => patchSettings({ restore_position: event.target.checked })} />恢复进度</label>
-        <label><input checked={readerSettings.large_touch_targets} type="checkbox" onChange={(event) => patchSettings({ large_touch_targets: event.target.checked })} />大触控区</label>
-      </div>
-      <button className="settings-save-button" disabled={preferences.loading || !preferences.data} type="button" onClick={() => void savePreferences()}><Icon name="check" size={15} />保存为所有设备默认</button>
-    </section> : null}
-    {notice ? <div className="semantic-job-message semantic-job-message--success">{notice}</div> : null}
-    {actionError || activeJob?.error_message ? <div className="semantic-job-message semantic-job-message--error">{actionError || activeJob?.error_message}</div> : isRunning ? <div className="semantic-job-message"><Icon name="activity" size={14} />后台任务进行中；可以继续阅读现有内容。</div> : null}
-    <div className={layoutClass}>
-      {readerSettings.show_outline ? <nav className="semantic-outline" aria-label="文档目录">
-        <span>文档节奏</span>
-        {outline.map((block) => <button key={block.id} type="button" onClick={() => jumpToBlock(block.id)}>{block.source_text}</button>)}
-      </nav> : null}
-      <main className="semantic-scroll" onScroll={handleReaderScroll} ref={scrollRef}>
-        <article className="semantic-document">
-          {blocks.loading ? <AsyncMessage kind="loading">正在装配阅读块…</AsyncMessage> : null}
-          {blocks.error ? <AsyncMessage kind="error" onRetry={() => void blocks.retry()}>{blocks.error}</AsyncMessage> : null}
-          {!blocks.loading && !visibleBlocks.length ? <AsyncMessage kind="empty">当前筛选没有匹配的阅读块</AsyncMessage> : null}
-          {visibleBlocks.map((block) => <SemanticBlockCard
-            annotations={annotationsByBlock.get(block.id) ?? []}
-            block={block}
-            bookmark={bookmarks.find((item) => item.block_id === block.id)}
-            busy={busyBlockId === block.id}
-            composer={composerBlockId === block.id}
-            editingAnnotationId={editingAnnotationId}
-            key={block.id}
-            mode={effectiveMode}
-            noteBody={noteBody}
-            noteKind={noteKind}
-            noteQuote={noteQuote}
-            noteTags={noteTags}
-            onBookmark={() => void toggleBookmark(block)}
-            onCancelComposer={closeComposer}
-            onDeleteAnnotation={(annotation) => void deleteAnnotation(annotation)}
-            onEditAnnotation={(annotation) => openComposer(block, annotation)}
-            onNoteBody={setNoteBody}
-            onNoteKind={setNoteKind}
-            onNoteTags={setNoteTags}
-            onOpenComposer={() => openComposer(block)}
+  return (
+    <div
+      className={[
+        "semantic-reader",
+        `semantic-reader--${readerSettings.font_size}`,
+        `semantic-reader--${readerSettings.measure}`,
+        `semantic-reader--${readerSettings.density}`,
+        `semantic-reader--font-${readerSettings.font_family}`,
+        `semantic-reader--line-${readerSettings.line_height}`,
+        `semantic-reader--flow-${readerSettings.flow}`,
+        `semantic-reader--columns-${readerSettings.columns}`,
+        `semantic-reader--theme-${readerSettings.theme}`,
+        preferences.data?.bilingual.layout === "stacked"
+          ? "semantic-reader--bilingual-stacked"
+          : "",
+        preferences.data?.bilingual.highlight_terms
+          ? "semantic-reader--highlight-terms"
+          : "",
+        preferences.data?.bilingual.synchronize_blocks
+          ? "semantic-reader--blocks-synced"
+          : "",
+        readerSettings.reduce_motion ? "semantic-reader--reduce-motion" : "",
+        readerSettings.large_touch_targets ? "semantic-reader--touch" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <header className="semantic-toolbar">
+        <div className="semantic-segments" aria-label="阅读语言">
+          {(["source", "bilingual", "translation"] as ReadingMode[]).map(
+            (value) => (
+              <button
+                aria-pressed={effectiveMode === value}
+                className={effectiveMode === value ? "active" : ""}
+                disabled={!translatedCount && value !== "source"}
+                key={value}
+                type="button"
+                onClick={() => setMode(value)}
+              >
+                {value === "source"
+                  ? "原文"
+                  : value === "bilingual"
+                    ? "双语"
+                    : "译文"}
+              </button>
+            ),
+          )}
+        </div>
+        <label className="semantic-role-filter">
+          <span>语义</span>
+          <select
+            value={role}
+            onChange={(event) =>
+              setRole(event.target.value as SemanticRole | "all")
+            }
+          >
+            <option value="all">全部节奏</option>
+            {Object.entries(roleLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="semantic-search">
+          <Icon name="search" size={14} />
+          <input
+            aria-label="全文搜索"
+            placeholder="搜索原文或译文"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          {searchQuery ? (
+            <button
+              aria-label="清除搜索"
+              type="button"
+              onClick={() => setSearchQuery("")}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          ) : null}
+        </label>
+        <span className="semantic-toolbar__status">
+          {document.block_count} 块 · {translatedCount} 已译 ·{" "}
+          {Math.round((readingState.data?.progress ?? 0) * 100)}%
+        </span>
+        <button
+          className={workspaceOpen ? "toolbar-button active" : "toolbar-button"}
+          type="button"
+          aria-expanded={workspaceOpen}
+          onClick={() => setWorkspaceOpen((value) => !value)}
+        >
+          <Icon name="note" size={15} />
+          笔记 {annotations.data?.length ?? 0}
+          <span className="toolbar-count">{bookmarks.length}</span>
+        </button>
+        <button
+          className="toolbar-button"
+          type="button"
+          aria-expanded={settingsOpen}
+          onClick={() => setSettingsOpen((value) => !value)}
+        >
+          <Icon name="settings" size={15} />
+          设置
+        </button>
+        <button
+          className="primary-toolbar-button"
+          disabled={Boolean(isRunning)}
+          type="button"
+          onClick={() => void startTranslation()}
+        >
+          <Icon name={isRunning ? "activity" : "languages"} size={15} />
+          {isRunning
+            ? "处理中"
+            : translatedCount
+              ? "重新翻译与识别"
+              : "翻译与语义识别"}
+        </button>
+      </header>
+      {settingsOpen ? (
+        <section className="semantic-settings" aria-label="阅读设置">
+          <label>
+            目标语言
+            <select
+              value={readerSettings.target_language}
+              onChange={(event) =>
+                patchSettings({ target_language: event.target.value })
+              }
+            >
+              <option value="zh-CN">简体中文</option>
+              <option value="zh-TW">繁体中文</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <label>
+            字号
+            <select
+              value={readerSettings.font_size}
+              onChange={(event) =>
+                patchSettings({
+                  font_size: event.target
+                    .value as ReaderPreferences["font_size"],
+                })
+              }
+            >
+              <option value="small">紧凑</option>
+              <option value="medium">标准</option>
+              <option value="large">大字</option>
+            </select>
+          </label>
+          <label>
+            行距
+            <select
+              value={readerSettings.line_height}
+              onChange={(event) =>
+                patchSettings({
+                  line_height: event.target
+                    .value as ReaderPreferences["line_height"],
+                })
+              }
+            >
+              <option value="compact">紧凑</option>
+              <option value="standard">标准</option>
+              <option value="relaxed">舒展</option>
+            </select>
+          </label>
+          <label>
+            行宽
+            <select
+              value={readerSettings.measure}
+              onChange={(event) =>
+                patchSettings({
+                  measure: event.target.value as ReaderPreferences["measure"],
+                })
+              }
+            >
+              <option value="focused">专注</option>
+              <option value="balanced">均衡</option>
+              <option value="wide">宽屏</option>
+            </select>
+          </label>
+          <label>
+            块间距
+            <select
+              value={readerSettings.density}
+              onChange={(event) =>
+                patchSettings({
+                  density: event.target.value as ReaderPreferences["density"],
+                })
+              }
+            >
+              <option value="compact">紧密</option>
+              <option value="comfortable">舒展</option>
+            </select>
+          </label>
+          <div className="semantic-settings__toggles">
+            <label>
+              <input
+                checked={readerSettings.show_outline}
+                type="checkbox"
+                onChange={(event) =>
+                  patchSettings({ show_outline: event.target.checked })
+                }
+              />
+              显示目录
+            </label>
+            <label>
+              <input
+                checked={readerSettings.restore_position}
+                type="checkbox"
+                onChange={(event) =>
+                  patchSettings({ restore_position: event.target.checked })
+                }
+              />
+              恢复进度
+            </label>
+            <label>
+              <input
+                checked={readerSettings.large_touch_targets}
+                type="checkbox"
+                onChange={(event) =>
+                  patchSettings({ large_touch_targets: event.target.checked })
+                }
+              />
+              大触控区
+            </label>
+          </div>
+          <button
+            className="settings-save-button"
+            disabled={preferences.loading || !preferences.data}
+            type="button"
+            onClick={() => void savePreferences()}
+          >
+            <Icon name="check" size={15} />
+            保存为所有设备默认
+          </button>
+        </section>
+      ) : null}
+      {notice ? (
+        <div className="semantic-job-message semantic-job-message--success">
+          {notice}
+        </div>
+      ) : null}
+      {actionError || activeJob?.error_message ? (
+        <div className="semantic-job-message semantic-job-message--error">
+          {actionError || activeJob?.error_message}
+        </div>
+      ) : isRunning ? (
+        <div className="semantic-job-message">
+          <Icon name="activity" size={14} />
+          后台任务进行中；可以继续阅读现有内容。
+        </div>
+      ) : null}
+      <div className={layoutClass}>
+        {readerSettings.show_outline ? (
+          <nav className="semantic-outline" aria-label="文档目录">
+            <span>文档节奏</span>
+            {outline.map((block) => (
+              <button
+                key={block.id}
+                type="button"
+                onClick={() => jumpToBlock(block.id)}
+              >
+                {block.source_text}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        <main
+          className="semantic-scroll"
+          onScroll={handleReaderScroll}
+          ref={scrollRef}
+        >
+          <article className="semantic-document">
+            {blocks.loading ? (
+              <AsyncMessage kind="loading">正在装配阅读块…</AsyncMessage>
+            ) : null}
+            {blocks.error ? (
+              <AsyncMessage kind="error" onRetry={() => void blocks.retry()}>
+                {blocks.error}
+              </AsyncMessage>
+            ) : null}
+            {!blocks.loading && !visibleBlocks.length ? (
+              <AsyncMessage kind="empty">当前筛选没有匹配的阅读块</AsyncMessage>
+            ) : null}
+            {visibleBlocks.map((block) => (
+              <SemanticBlockCard
+                annotations={annotationsByBlock.get(block.id) ?? []}
+                block={block}
+                bookmark={bookmarks.find((item) => item.block_id === block.id)}
+                busy={busyBlockId === block.id}
+                composer={composerBlockId === block.id}
+                editingAnnotationId={editingAnnotationId}
+                key={block.id}
+                glossary={glossary}
+                highlightTerms={
+                  preferences.data?.bilingual.highlight_terms ?? false
+                }
+                mode={effectiveMode}
+                noteBody={noteBody}
+                noteKind={noteKind}
+                noteQuote={noteQuote}
+                noteTags={noteTags}
+                onBookmark={() => void toggleBookmark(block)}
+                onCancelComposer={closeComposer}
+                onDeleteAnnotation={(annotation) =>
+                  void deleteAnnotation(annotation)
+                }
+                onEditAnnotation={(annotation) =>
+                  openComposer(block, annotation)
+                }
+                onNoteBody={setNoteBody}
+                onNoteKind={setNoteKind}
+                onNoteTags={setNoteTags}
+                onOpenComposer={() => openComposer(block)}
+                onOpenPdf={onOpenPdf}
+                onSaveAnnotation={() => void saveAnnotation(block)}
+                synchronizeBlocks={
+                  preferences.data?.bilingual.synchronize_blocks ?? false
+                }
+              />
+            ))}
+          </article>
+        </main>
+        {workspaceOpen ? (
+          <ReadingWorkspace
+            annotations={annotations.data ?? []}
+            bookmarks={bookmarks}
+            onClose={() => setWorkspaceOpen(false)}
+            onDeleteAnnotation={(annotation) =>
+              void deleteAnnotation(annotation)
+            }
+            onJump={jumpToBlock}
             onOpenPdf={onOpenPdf}
-            onSaveAnnotation={() => void saveAnnotation(block)}
-          />)}
-        </article>
-      </main>
-      {workspaceOpen ? <ReadingWorkspace
-        annotations={annotations.data ?? []}
-        bookmarks={bookmarks}
-        onClose={() => setWorkspaceOpen(false)}
-        onDeleteAnnotation={(annotation) => void deleteAnnotation(annotation)}
-        onJump={jumpToBlock}
-        progress={readingState.data?.progress ?? 0}
-      /> : null}
+            progress={readingState.data?.progress ?? 0}
+          />
+        ) : null}
+      </div>
     </div>
-  </div>;
+  );
 }
 
 interface BlockCardProps {
@@ -615,6 +1018,8 @@ interface BlockCardProps {
   busy: boolean;
   composer: boolean;
   editingAnnotationId: string | null;
+  glossary: GlossaryPreference[];
+  highlightTerms: boolean;
   noteKind: AnnotationKind;
   noteQuote: string | null;
   noteBody: string;
@@ -629,6 +1034,7 @@ interface BlockCardProps {
   onNoteTags: (tags: string) => void;
   onSaveAnnotation: () => void;
   onCancelComposer: () => void;
+  synchronizeBlocks: boolean;
 }
 
 function SemanticBlockCard({
@@ -639,6 +1045,8 @@ function SemanticBlockCard({
   busy,
   composer,
   editingAnnotationId,
+  glossary,
+  highlightTerms,
   noteKind,
   noteQuote,
   noteBody,
@@ -653,42 +1061,342 @@ function SemanticBlockCard({
   onNoteTags,
   onSaveAnnotation,
   onCancelComposer,
+  synchronizeBlocks,
 }: BlockCardProps) {
-  const heading = block.kind === "title" || block.kind === "heading";
-  const source = heading ? <h2>{block.source_text}</h2> : <p>{block.source_text}</p>;
-  const translation = block.translation
-    ? heading
-      ? <h2>{block.translation.translated_text}</h2>
-      : <p>{block.translation.translated_text}</p>
-    : <p className="semantic-untranslated">尚无此语言的译文</p>;
-  return <section className={`semantic-block semantic-block--${block.kind}`} data-reading-block={block.id} id={`block-${block.id}`}>
-    <div className="semantic-block__meta">
-      {block.semantic_role ? <span className={`role-chip role-chip--${block.semantic_role}`}>{roleLabels[block.semantic_role]}</span> : <span className="role-chip">未分类</span>}
-      <button type="button" onClick={() => onOpenPdf(block.page_start)}>{block.page_start ? `第 ${block.page_start} 页` : "无页码"}<Icon name="arrow-right" size={12} /></button>
-      <span className="semantic-block__spacer" />
-      <button aria-label={bookmark ? "取消书签" : "添加书签"} className={bookmark ? "semantic-icon-action active" : "semantic-icon-action"} disabled={busy} type="button" onClick={onBookmark}><Icon name="bookmark" size={15} /><span>{bookmark ? "已收藏" : "书签"}</span></button>
-      <button className="semantic-icon-action" disabled={busy} type="button" onClick={onOpenComposer}><Icon name="note" size={15} /><span>批注</span></button>
-    </div>
-    <div className={`semantic-block__content semantic-block__content--${mode}`}>
-      {mode !== "translation" ? <div data-source-content lang="en">{source}</div> : null}
-      {mode !== "source" ? <div lang="zh-CN">{translation}</div> : null}
-    </div>
-    {annotations.length ? <div className="block-annotations">
-      {annotations.map((annotation) => <article className={`block-note block-note--${annotation.kind}`} key={annotation.id}>
-        <header><span>{annotationLabels[annotation.kind]}{annotation.anchor_status !== "valid" ? <em className={`anchor-status anchor-status--${annotation.anchor_status}`}>{anchorStatusLabels[annotation.anchor_status]}</em> : null}</span><div><button aria-label="编辑批注" type="button" onClick={() => onEditAnnotation(annotation)}><Icon name="edit" size={13} /></button><button aria-label="删除批注" type="button" onClick={() => onDeleteAnnotation(annotation)}><Icon name="trash" size={13} /></button></div></header>
-        {annotation.body ? <p>{annotation.body}</p> : <p className="block-note__quote">已标记本段</p>}
-        {annotation.tags.length ? <footer>{annotation.tags.map((tag) => <span key={tag}>#{tag}</span>)}</footer> : null}
-      </article>)}
-    </div> : null}
-    {composer ? <form className="annotation-composer" onSubmit={(event) => { event.preventDefault(); onSaveAnnotation(); }}>
-      <div className="annotation-composer__header"><strong>{editingAnnotationId ? "编辑批注" : "记录这一段"}</strong><button aria-label="关闭批注编辑器" type="button" onClick={onCancelComposer}><Icon name="close" size={15} /></button></div>
-      {noteQuote ? <blockquote className="annotation-composer__quote">“{noteQuote}”</blockquote> : null}
-      <label>类型<select value={noteKind} onChange={(event) => onNoteKind(event.target.value as AnnotationKind)}>{Object.entries(annotationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label className="annotation-composer__body">内容<textarea autoFocus placeholder="写下问题、判断或可复用的研究线索…" rows={3} value={noteBody} onChange={(event) => onNoteBody(event.target.value)} /></label>
-      <label>标签<input placeholder="方法, 复现" value={noteTags} onChange={(event) => onNoteTags(event.target.value)} /></label>
-      <div className="annotation-composer__actions"><button type="button" onClick={onCancelComposer}>取消</button><button className="primary-toolbar-button" disabled={busy} type="submit">{busy ? "保存中…" : "保存批注"}</button></div>
-    </form> : null}
-  </section>;
+  const sourceTerms = highlightTerms
+    ? glossary.map((term) => term.source_term)
+    : [];
+  const translatedTerms = highlightTerms
+    ? glossary.map((term) => term.translated_term)
+    : [];
+  const source = (
+    <SemanticBlockContent
+      kind={block.kind}
+      terms={sourceTerms}
+      text={block.source_text}
+    />
+  );
+  const translation = block.translation ? (
+    <SemanticBlockContent
+      kind={block.kind}
+      terms={translatedTerms}
+      text={block.translation.translated_text}
+    />
+  ) : (
+    <p className="semantic-untranslated">尚无此语言的译文</p>
+  );
+  return (
+    <section
+      className={`semantic-block semantic-block--${block.kind}${synchronizeBlocks ? " semantic-block--synchronized" : ""}`}
+      data-reading-block={block.id}
+      id={`block-${block.id}`}
+    >
+      <div className="semantic-block__meta">
+        {block.semantic_role ? (
+          <span className={`role-chip role-chip--${block.semantic_role}`}>
+            {roleLabels[block.semantic_role]}
+          </span>
+        ) : (
+          <span className="role-chip">未分类</span>
+        )}
+        {block.section_path.length &&
+        block.kind !== "title" &&
+        block.kind !== "heading" ? (
+          <span
+            className="semantic-section-path"
+            title={block.section_path.join(" › ")}
+          >
+            {block.section_path.at(-1)}
+          </span>
+        ) : null}
+        <button type="button" onClick={() => onOpenPdf(block.page_start)}>
+          {block.page_start ? `第 ${block.page_start} 页` : "无页码"}
+          <Icon name="arrow-right" size={12} />
+        </button>
+        <span className="semantic-block__spacer" />
+        <button
+          aria-label={bookmark ? "取消书签" : "添加书签"}
+          className={
+            bookmark ? "semantic-icon-action active" : "semantic-icon-action"
+          }
+          disabled={busy}
+          type="button"
+          onClick={onBookmark}
+        >
+          <Icon name="bookmark" size={15} />
+          <span>{bookmark ? "已收藏" : "书签"}</span>
+        </button>
+        <button
+          className="semantic-icon-action"
+          disabled={busy}
+          type="button"
+          onClick={onOpenComposer}
+        >
+          <Icon name="note" size={15} />
+          <span>批注</span>
+        </button>
+      </div>
+      <div
+        className={`semantic-block__content semantic-block__content--${mode}`}
+      >
+        {mode !== "translation" ? (
+          <div data-source-content lang="en">
+            {source}
+          </div>
+        ) : null}
+        {mode !== "source" ? <div lang="zh-CN">{translation}</div> : null}
+      </div>
+      {annotations.length ? (
+        <div className="block-annotations">
+          {annotations.map((annotation) => (
+            <article
+              className={`block-note block-note--${annotation.kind}`}
+              key={annotation.id}
+            >
+              <header>
+                <span>
+                  {annotationLabels[annotation.kind]}
+                  {annotation.anchor_status !== "valid" ? (
+                    <em
+                      className={`anchor-status anchor-status--${annotation.anchor_status}`}
+                    >
+                      {anchorStatusLabels[annotation.anchor_status]}
+                    </em>
+                  ) : null}
+                </span>
+                <div>
+                  <button
+                    aria-label="编辑批注"
+                    type="button"
+                    onClick={() => onEditAnnotation(annotation)}
+                  >
+                    <Icon name="edit" size={13} />
+                  </button>
+                  <button
+                    aria-label="删除批注"
+                    type="button"
+                    onClick={() => onDeleteAnnotation(annotation)}
+                  >
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
+              </header>
+              {annotation.body ? (
+                <p>{annotation.body}</p>
+              ) : (
+                <p className="block-note__quote">已标记本段</p>
+              )}
+              {annotation.tags.length ? (
+                <footer>
+                  {annotation.tags.map((tag) => (
+                    <span key={tag}>#{tag}</span>
+                  ))}
+                </footer>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+      {composer ? (
+        <form
+          className="annotation-composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveAnnotation();
+          }}
+        >
+          <div className="annotation-composer__header">
+            <strong>{editingAnnotationId ? "编辑批注" : "记录这一段"}</strong>
+            <button
+              aria-label="关闭批注编辑器"
+              type="button"
+              onClick={onCancelComposer}
+            >
+              <Icon name="close" size={15} />
+            </button>
+          </div>
+          {noteQuote ? (
+            <blockquote className="annotation-composer__quote">
+              “{noteQuote}”
+            </blockquote>
+          ) : null}
+          <label>
+            类型
+            <select
+              value={noteKind}
+              onChange={(event) =>
+                onNoteKind(event.target.value as AnnotationKind)
+              }
+            >
+              {Object.entries(annotationLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="annotation-composer__body">
+            内容
+            <textarea
+              autoFocus
+              placeholder="写下问题、判断或可复用的研究线索…"
+              rows={3}
+              value={noteBody}
+              onChange={(event) => onNoteBody(event.target.value)}
+            />
+          </label>
+          <label>
+            标签
+            <input
+              placeholder="方法, 复现"
+              value={noteTags}
+              onChange={(event) => onNoteTags(event.target.value)}
+            />
+          </label>
+          <div className="annotation-composer__actions">
+            <button type="button" onClick={onCancelComposer}>
+              取消
+            </button>
+            <button
+              className="primary-toolbar-button"
+              disabled={busy}
+              type="submit"
+            >
+              {busy ? "保存中…" : "保存批注"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+function SemanticBlockContent({
+  kind,
+  text,
+  terms,
+}: {
+  kind: DocumentBlock["kind"];
+  text: string;
+  terms: string[];
+}) {
+  const inline = (value: string) => highlightGlossaryTerms(value, terms);
+  if (kind === "title") return <h1>{inline(text)}</h1>;
+  if (kind === "heading") return <h2>{inline(text)}</h2>;
+  if (kind === "list") {
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const ordered =
+      lines.length > 0 && lines.every((line) => /^\d+[.)]\s+/.test(line));
+    const List = ordered ? "ol" : "ul";
+    return (
+      <List>
+        {lines.map((line, index) => (
+          <li key={`${index}-${line.slice(0, 20)}`}>
+            {inline(line.replace(/^(?:[-*•]|\d+[.)])\s+/, ""))}
+          </li>
+        ))}
+      </List>
+    );
+  }
+  if (kind === "formula")
+    return (
+      <figure className="semantic-formula">
+        <pre>
+          <code>{text}</code>
+        </pre>
+      </figure>
+    );
+  if (kind === "table") {
+    const rows = parseTable(text);
+    const header = rows[0];
+    if (header && rows.length >= 2) {
+      return (
+        <div className="semantic-table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {header.map((cell, index) => (
+                  <th key={`${index}-${cell}`}>{inline(cell)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(1).map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, index) => (
+                    <td key={`${index}-${cell}`}>{inline(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    return <pre className="semantic-table-fallback">{text}</pre>;
+  }
+  if (kind === "figure")
+    return (
+      <figure className="semantic-figure">
+        <span aria-hidden="true">
+          <Icon name="file-text" size={19} />
+        </span>
+        <figcaption>{inline(text)}</figcaption>
+      </figure>
+    );
+  if (kind === "footnote")
+    return <aside className="semantic-footnote">{inline(text)}</aside>;
+  if (kind === "reference")
+    return (
+      <p className="semantic-reference">
+        <cite>{inline(text)}</cite>
+      </p>
+    );
+  return <p>{inline(text)}</p>;
+}
+
+function parseTable(text: string): string[][] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.includes("|") && !/^\|?[\s:|-]+\|?$/.test(line))
+    .map((line) =>
+      line
+        .replace(/^\||\|$/g, "")
+        .split("|")
+        .map((cell) => cell.trim()),
+    )
+    .filter((row) => row.some(Boolean));
+}
+
+function highlightGlossaryTerms(text: string, terms: string[]): ReactNode {
+  const normalized = [
+    ...new Set(
+      terms.map((term) => term.trim()).filter((term) => term.length > 1),
+    ),
+  ].sort((left, right) => right.length - left.length);
+  if (!normalized.length) return text;
+  const expression = new RegExp(
+    `(${normalized.map(escapeRegExp).join("|")})`,
+    "giu",
+  );
+  const lookup = new Set(normalized.map((term) => term.toLocaleLowerCase()));
+  return text.split(expression).map((part, index) =>
+    lookup.has(part.toLocaleLowerCase()) ? (
+      <mark className="semantic-glossary-term" key={`${index}-${part}`}>
+        {part}
+      </mark>
+    ) : (
+      <span key={`${index}-${part}`}>{part}</span>
+    ),
+  );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function ReadingWorkspace({
@@ -698,6 +1406,7 @@ function ReadingWorkspace({
   onClose,
   onJump,
   onDeleteAnnotation,
+  onOpenPdf,
 }: {
   annotations: Annotation[];
   bookmarks: ReadingBookmark[];
@@ -705,11 +1414,111 @@ function ReadingWorkspace({
   onClose: () => void;
   onJump: (blockId: string) => void;
   onDeleteAnnotation: (annotation: Annotation) => void;
+  onOpenPdf: (page: number | null) => void;
 }) {
-  return <aside className="reading-notes-panel" aria-label="阅读笔记">
-    <header><div><span className="eyebrow">READING MEMORY</span><h2>阅读工作区</h2></div><button aria-label="关闭阅读工作区" type="button" onClick={onClose}><Icon name="close" size={17} /></button></header>
-    <section className="reading-progress-card"><div><strong>{Math.round(progress * 100)}%</strong><span>本篇进度</span></div><div className="reading-progress-track"><span style={{ width: `${Math.round(progress * 100)}%` }} /></div></section>
-    <section><h3><Icon name="bookmark" size={14} />书签 <span>{bookmarks.length}</span></h3>{bookmarks.length ? <div className="reading-memory-list">{bookmarks.map((bookmark) => <button key={bookmark.id} type="button" onClick={() => bookmark.block_id && onJump(bookmark.block_id)}><strong>{bookmark.label}</strong><small>{bookmark.page_number ? `第 ${bookmark.page_number} 页` : "语义位置"}</small></button>)}</div> : <p className="reading-panel-empty">从段落右上角添加书签。</p>}</section>
-    <section><h3><Icon name="note" size={14} />批注 <span>{annotations.length}</span></h3>{annotations.length ? <div className="reading-memory-list">{annotations.map((annotation) => <article className={annotation.anchor_status === "valid" ? "" : "reading-memory-anchor-stale"} key={annotation.id}><button disabled={!annotation.block_id || annotation.anchor_status !== "valid"} type="button" onClick={() => annotation.block_id && onJump(annotation.block_id)}><small>{annotationLabels[annotation.kind]}{annotation.page_number ? ` · 第 ${annotation.page_number} 页` : ""}{annotation.anchor_status !== "valid" ? ` · ${anchorStatusLabels[annotation.anchor_status]}` : ""}</small><strong>{annotation.body || annotation.quoted_text?.slice(0, 100) || "已标记段落"}</strong></button><button aria-label="删除批注" type="button" onClick={() => onDeleteAnnotation(annotation)}><Icon name="trash" size={13} /></button></article>)}</div> : <p className="reading-panel-empty">批注会与稳定段落锚点一起保存。</p>}</section>
-  </aside>;
+  return (
+    <aside className="reading-notes-panel" aria-label="阅读笔记">
+      <header>
+        <div>
+          <span className="eyebrow">READING MEMORY</span>
+          <h2>阅读工作区</h2>
+        </div>
+        <button aria-label="关闭阅读工作区" type="button" onClick={onClose}>
+          <Icon name="close" size={17} />
+        </button>
+      </header>
+      <section className="reading-progress-card">
+        <div>
+          <strong>{Math.round(progress * 100)}%</strong>
+          <span>本篇进度</span>
+        </div>
+        <div className="reading-progress-track">
+          <span style={{ width: `${Math.round(progress * 100)}%` }} />
+        </div>
+      </section>
+      <section>
+        <h3>
+          <Icon name="bookmark" size={14} />
+          书签 <span>{bookmarks.length}</span>
+        </h3>
+        {bookmarks.length ? (
+          <div className="reading-memory-list">
+            {bookmarks.map((bookmark) => (
+              <button
+                key={bookmark.id}
+                type="button"
+                onClick={() => bookmark.block_id && onJump(bookmark.block_id)}
+              >
+                <strong>{bookmark.label}</strong>
+                <small>
+                  {bookmark.page_number
+                    ? `第 ${bookmark.page_number} 页`
+                    : "语义位置"}
+                </small>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="reading-panel-empty">从段落右上角添加书签。</p>
+        )}
+      </section>
+      <section>
+        <h3>
+          <Icon name="note" size={14} />
+          批注 <span>{annotations.length}</span>
+        </h3>
+        {annotations.length ? (
+          <div className="reading-memory-list">
+            {annotations.map((annotation) => (
+              <article
+                className={
+                  annotation.anchor_status === "valid"
+                    ? ""
+                    : "reading-memory-anchor-stale"
+                }
+                key={annotation.id}
+              >
+                <button
+                  disabled={
+                    (!annotation.block_id && !annotation.page_number) ||
+                    annotation.anchor_status !== "valid"
+                  }
+                  type="button"
+                  onClick={() =>
+                    annotation.block_id
+                      ? onJump(annotation.block_id)
+                      : onOpenPdf(annotation.page_number)
+                  }
+                >
+                  <small>
+                    {annotationLabels[annotation.kind]}
+                    {annotation.page_number
+                      ? ` · 第 ${annotation.page_number} 页`
+                      : ""}
+                    {annotation.anchor_status !== "valid"
+                      ? ` · ${anchorStatusLabels[annotation.anchor_status]}`
+                      : ""}
+                  </small>
+                  <strong>
+                    {annotation.body ||
+                      annotation.quoted_text?.slice(0, 100) ||
+                      "已标记段落"}
+                  </strong>
+                </button>
+                <button
+                  aria-label="删除批注"
+                  type="button"
+                  onClick={() => onDeleteAnnotation(annotation)}
+                >
+                  <Icon name="trash" size={13} />
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="reading-panel-empty">批注会与稳定段落锚点一起保存。</p>
+        )}
+      </section>
+    </aside>
+  );
 }

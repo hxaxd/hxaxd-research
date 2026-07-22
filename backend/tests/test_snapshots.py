@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
-from datetime import UTC, datetime
+import sqlite3
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from fastapi import FastAPI
@@ -19,7 +19,7 @@ from app.platform.activation import (
     activate_snapshot_directory,
     recover_pending_activation,
 )
-from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
+from app.platform.db import WorkspaceDatabase
 from app.platform.processes import CancellationToken
 from app.snapshots.models import SnapshotRestoreRequest
 from app.snapshots.router import create_snapshot_router
@@ -27,17 +27,12 @@ from app.snapshots.service import SnapshotBusyError, SnapshotService
 from app.utils.snapshots.backup import SnapshotWriter
 from app.utils.snapshots.contract import (
     DATABASE_ARCHIVE_PATH,
-    MANIFEST_PATH,
-    V2_SNAPSHOT_FORMAT,
-    SnapshotFile,
     SnapshotManifest,
 )
 from app.utils.snapshots.errors import SnapshotError
-from app.utils.snapshots.hashing import sha256_file
 from app.utils.snapshots.paths import payload_relative_path
 from app.utils.snapshots.restore import SnapshotRestorer
 from tests.sample_data import PDF
-from tests.test_v2_importer import _create_v2_workspace
 
 NOW = "2026-07-21T00:00:00+00:00"
 
@@ -46,8 +41,8 @@ class _SimulatedProcessCrash(BaseException):
     pass
 
 
-def test_v3_snapshot_round_trip_preserves_catalog_and_blob(tmp_path):
-    data_dir, database, storage_key = _create_v3_workspace(tmp_path / "source")
+def test_current_snapshot_round_trip_preserves_catalog_and_blob(tmp_path):
+    data_dir, database, storage_key = _create_current_workspace(tmp_path / "source")
     archive = tmp_path / "today.researchpack"
 
     written = SnapshotWriter(data_dir, database).write(archive)
@@ -65,7 +60,7 @@ def test_v3_snapshot_round_trip_preserves_catalog_and_blob(tmp_path):
 
 
 def test_writer_rejects_other_active_jobs_and_omits_its_own_control_job(tmp_path):
-    data_dir, database, _ = _create_v3_workspace(tmp_path / "source")
+    data_dir, database, _ = _create_current_workspace(tmp_path / "source")
     jobs = SqliteJobRepository(database.path)
     jobs.initialize_schema()
     active = jobs.enqueue(JobCreate(kind="snapshot.create"))
@@ -84,26 +79,34 @@ def test_writer_rejects_other_active_jobs_and_omits_its_own_control_job(tmp_path
     assert audit is not None
 
 
-def test_v2_safety_snapshot_is_migrated_in_staging(tmp_path):
-    source = tmp_path / "v2"
-    source.mkdir()
-    database_path = source / "research.sqlite3"
-    _create_v2_workspace(database_path, source)
-    archive = tmp_path / "legacy.researchpack"
-    _write_v2_snapshot(source, database_path, archive)
+@pytest.mark.parametrize(
+    ("format_", "schema_version", "contract_version"),
+    [
+        ("hxaxd-learning-v2", 2, "2.0"),
+        ("hxaxd-research-v3", 3, "3.0"),
+    ],
+)
+def test_snapshot_manifest_rejects_retired_formats(
+    format_: str,
+    schema_version: int,
+    contract_version: str,
+):
+    payload = {
+        "format": format_,
+        "created_at": NOW,
+        "schema_version": schema_version,
+        "contract_version": contract_version,
+        "files": [
+            {"path": DATABASE_ARCHIVE_PATH, "sha256": "0" * 64, "size": 0},
+        ],
+    }
 
-    result = SnapshotRestorer().restore(archive, tmp_path / "restored")
-
-    assert result.source_format == V2_SNAPSHOT_FORMAT
-    assert inspect_database(result.database.path).kind is DatabaseKind.V4
-    with result.database.read() as connection:
-        assert connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 1
-        assert connection.execute("SELECT COUNT(*) FROM bibliographic_items").fetchone()[0] == 1
-        assert connection.execute("SELECT COUNT(*) FROM attachments").fetchone()[0] == 2
+    with pytest.raises(SnapshotError, match="格式不受支持"):
+        SnapshotManifest.from_json(json.dumps(payload))
 
 
 def test_restore_requires_explicit_replace(tmp_path):
-    data_dir, database, _ = _create_v3_workspace(tmp_path / "source")
+    data_dir, database, _ = _create_current_workspace(tmp_path / "source")
     archive = tmp_path / "today.researchpack"
     SnapshotWriter(data_dir, database).write(archive)
     target = tmp_path / "occupied"
@@ -115,10 +118,10 @@ def test_restore_requires_explicit_replace(tmp_path):
 
 
 def test_restore_failure_before_activation_preserves_current_workspace(tmp_path):
-    source_dir, source_database, _ = _create_v3_workspace(tmp_path / "source")
+    source_dir, source_database, _ = _create_current_workspace(tmp_path / "source")
     archive = tmp_path / "today.researchpack"
     SnapshotWriter(source_dir, source_database).write(archive)
-    target_dir, target_database, _ = _create_v3_workspace(tmp_path / "target")
+    target_dir, target_database, _ = _create_current_workspace(tmp_path / "target")
     _seed_second_item(target_database)
 
     def report_busy() -> None:
@@ -139,8 +142,8 @@ def test_restore_failure_before_activation_preserves_current_workspace(tmp_path)
 
 
 def test_snapshot_activation_is_replayed_after_process_crash_in_rename_window(tmp_path):
-    source_dir, _, _ = _create_v3_workspace(tmp_path / "source")
-    target_dir, target_database, _ = _create_v3_workspace(tmp_path / "target")
+    source_dir, _, _ = _create_current_workspace(tmp_path / "source")
+    target_dir, target_database, _ = _create_current_workspace(tmp_path / "target")
     _seed_second_item(target_database)
     temporary_root = tmp_path / ".snapshot-restore-fault"
     stage = temporary_root / "data"
@@ -168,7 +171,6 @@ def test_snapshot_activation_is_replayed_after_process_crash_in_rename_window(tm
     recovered = recover_pending_activation(
         journal_path,
         data_dir=target_dir,
-        database_path=target_dir / "research.sqlite3",
     )
 
     assert recovered == "snapshot_restore:committed"
@@ -184,14 +186,32 @@ def test_unjournaled_activation_residue_never_initializes_an_empty_database(tmp_
 
     settings = _settings(tmp_path)
     settings.data_dir.mkdir(parents=True)
-    residue = settings.data_dir / ".research.sqlite3.v4-migrating-orphan"
-    residue.write_bytes(b"incomplete shadow")
+    residue = settings.data_dir.parent / ".snapshot-restore-orphan"
+    residue.mkdir()
     context = build_app_context(settings)
 
     with pytest.raises(ActivationError, match="拒绝初始化空库"):
         context.startup()
 
     assert not settings.database_path.exists()
+    context.process_runner.shutdown()
+
+
+def test_startup_rejects_a_retired_database_without_rewriting_it(tmp_path):
+    from app.core.bootstrap import build_app_context
+
+    settings = _settings(tmp_path)
+    settings.data_dir.mkdir(parents=True)
+    with sqlite3.connect(settings.database_path) as connection:
+        connection.execute("CREATE TABLE papers(id TEXT PRIMARY KEY)")
+        connection.execute("INSERT INTO papers VALUES('preserved')")
+    context = build_app_context(settings)
+
+    with pytest.raises(RuntimeError, match="当前 v4 格式"):
+        context.startup()
+
+    with sqlite3.connect(settings.database_path) as connection:
+        assert connection.execute("SELECT id FROM papers").fetchone()[0] == "preserved"
     context.process_runner.shutdown()
 
 
@@ -203,7 +223,7 @@ def test_payload_paths_cannot_escape_archive(path):
 
 def test_snapshot_jobs_are_durable_and_restore_job_survives_database_swap(tmp_path):
     settings = _settings(tmp_path)
-    data_dir, database, _ = _create_v3_workspace(settings.data_dir)
+    data_dir, database, _ = _create_current_workspace(settings.data_dir)
     assert data_dir == settings.data_dir
     archive = settings.snapshot_dir / "baseline.researchpack"
     settings.snapshot_dir.mkdir(parents=True)
@@ -245,7 +265,7 @@ def test_snapshot_jobs_are_durable_and_restore_job_survives_database_swap(tmp_pa
 
 def test_snapshot_service_enqueues_creation_and_router_exposes_job(tmp_path):
     settings = _settings(tmp_path)
-    _, database, _ = _create_v3_workspace(settings.data_dir)
+    _, database, _ = _create_current_workspace(settings.data_dir)
     jobs = SqliteJobRepository(database.path)
     jobs.initialize_schema()
     registry = JobRegistry()
@@ -275,7 +295,7 @@ def test_snapshot_service_enqueues_creation_and_router_exposes_job(tmp_path):
 
 def test_cancelled_snapshot_job_never_publishes_an_archive(tmp_path):
     settings = _settings(tmp_path)
-    _, database, _ = _create_v3_workspace(settings.data_dir)
+    _, database, _ = _create_current_workspace(settings.data_dir)
     jobs = SqliteJobRepository(database.path)
     jobs.initialize_schema()
     registry = JobRegistry()
@@ -295,7 +315,7 @@ def test_cancelled_snapshot_job_never_publishes_an_archive(tmp_path):
 
 def test_published_snapshot_is_reconciled_after_worker_crash(tmp_path):
     settings = _settings(tmp_path)
-    _, database, _ = _create_v3_workspace(settings.data_dir)
+    _, database, _ = _create_current_workspace(settings.data_dir)
     jobs = SqliteJobRepository(database.path)
     jobs.initialize_schema()
     scheduler = JobScheduler(jobs)
@@ -334,7 +354,7 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
-def _create_v3_workspace(root: Path) -> tuple[Path, WorkspaceDatabase, str]:
+def _create_current_workspace(root: Path) -> tuple[Path, WorkspaceDatabase, str]:
     data_dir = root.resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     database = WorkspaceDatabase(data_dir / "research.sqlite3")
@@ -395,31 +415,3 @@ def _seed_second_item(database: WorkspaceDatabase) -> None:
             """,
             (NOW, NOW),
         )
-
-
-def _write_v2_snapshot(source: Path, database: Path, archive: Path) -> None:
-    paths = [
-        database,
-        source / "artifacts/paper-1/resource-original/paper.pdf",
-        source / "artifacts/paper-1/resource-translated/paper-zh.pdf",
-    ]
-    archive_paths = [
-        DATABASE_ARCHIVE_PATH,
-        "payload/artifacts/paper-1/resource-original/paper.pdf",
-        "payload/artifacts/paper-1/resource-translated/paper-zh.pdf",
-    ]
-    files = tuple(
-        SnapshotFile(path=archive_path, sha256=sha256_file(path), size=path.stat().st_size)
-        for path, archive_path in zip(paths, archive_paths, strict=True)
-    )
-    manifest = SnapshotManifest(
-        format=V2_SNAPSHOT_FORMAT,
-        created_at=datetime.now(UTC).isoformat(),
-        schema_version=2,
-        contract_version="2.0",
-        files=files,
-    )
-    with ZipFile(archive, "w", ZIP_DEFLATED) as output:
-        for path, archive_path in zip(paths, archive_paths, strict=True):
-            output.write(path, archive_path)
-        output.writestr(MANIFEST_PATH, manifest.to_json())

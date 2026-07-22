@@ -578,6 +578,34 @@ class _FakeProvider:
         )
 
 
+class _ChangedExtractor(_FakeExtractor):
+    name = "changed-layout"
+    version = "2.0"
+
+    def extract(self, _path, *, ocr_mode, callbacks):
+        extracted = super().extract(_path, ocr_mode=ocr_mode, callbacks=callbacks)
+        changed = list(extracted.blocks)
+        changed[1] = changed[1].model_copy(
+            update={
+                "source_text": (
+                    "The revised method changes only this paragraph while the title stays stable."
+                )
+            }
+        )
+        return extracted.model_copy(update={"blocks": changed})
+
+
+class _ReclassifiedExtractor(_ChangedExtractor):
+    name = "reclassified-layout"
+    version = "3.0"
+
+    def extract(self, _path, *, ocr_mode, callbacks):
+        extracted = super().extract(_path, ocr_mode=ocr_mode, callbacks=callbacks)
+        changed = list(extracted.blocks)
+        changed[1] = changed[1].model_copy(update={"section_path": ["Results"]})
+        return extracted.model_copy(update={"blocks": changed})
+
+
 class _CancelableExtractor(_FakeExtractor):
     name = "cancelable-layout"
 
@@ -775,19 +803,21 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
     assert "$x_i$" in translated[1]["translation"]["translated_text"]
     assert "https://example.org" in translated[1]["translation"]["translated_text"]
     assert translated[2]["translation"] is None
-    with context.database.read() as connection:
-        actions = {
-            row["action"]
-            for row in connection.execute(
-                "SELECT action FROM audit_events WHERE entity_id = ?", (document["id"],)
-            )
-        }
-        glossary_count = connection.execute(
-            "SELECT COUNT(*) FROM document_glossary_entries WHERE document_id = ?",
-            (document["id"],),
-        ).fetchone()[0]
+    audit_page = client.get(
+        "/api/audit-events",
+        params={"entity_type": "document", "entity_id": document["id"]},
+    )
+    assert audit_page.status_code == 200, audit_page.text
+    actions = {event["action"] for event in audit_page.json()["items"]}
+    glossary = client.get(
+        f"/api/documents/{document['id']}/glossary",
+        params={"target_language": "zh-CN"},
+    )
+    assert glossary.status_code == 200, glossary.text
     assert {"document.extracted", "document.translated"} <= actions
-    assert glossary_count == 1
+    assert len(glossary.json()) == 1
+    assert glossary.json()[0]["source_term"] == "stable block"
+    assert client.get("/api/documents/missing/glossary").status_code == 404
 
     current_preferences = client.get("/api/user-preferences").json()
     full_retranslation_preferences = {
@@ -841,6 +871,91 @@ def test_document_jobs_are_atomic_idempotent_and_translate_in_one_request(client
         params={"target_language": "zh-TW"},
     ).json()["items"]
     assert all(item["translation"] is None for item in untranslated)
+
+
+def test_changed_scope_reuses_stable_blocks_across_document_versions(client) -> None:
+    context = client.app.state.context
+    work = context.catalog_commands.create_work(
+        BibliographicItemDraft(title="Changed-block translation fixture", language="en")
+    )
+    item_id = work.items[0].id
+    first_attachment = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={"upload": ("first.pdf", PDF, "application/pdf")},
+    ).json()
+    context.documents.extractor = _FakeExtractor()
+    first_provider = _FakeProvider()
+    context.documents.translation_provider = first_provider
+    first_extraction = client.post(
+        f"/api/attachments/{first_attachment['id']}/documents",
+        json={"ocr_mode": "auto"},
+    ).json()
+    assert _wait_for_job(client, first_extraction["id"])["status"] == "succeeded"
+    first_document = client.get(f"/api/items/{item_id}/documents").json()[0]
+    first_translation = client.post(
+        f"/api/documents/{first_document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+    assert _wait_for_job(client, first_translation["id"])["status"] == "succeeded"
+    assert len(first_provider.calls[0]) == 2
+
+    second_attachment = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={"upload": ("revised.pdf", PDF + b"revised", "application/pdf")},
+    ).json()
+    context.documents.extractor = _ChangedExtractor()
+    second_extraction = client.post(
+        f"/api/attachments/{second_attachment['id']}/documents",
+        json={"ocr_mode": "auto"},
+    ).json()
+    assert _wait_for_job(client, second_extraction["id"])["status"] == "succeeded"
+    second_document = client.get(f"/api/items/{item_id}/documents").json()[0]
+    assert second_document["id"] != first_document["id"]
+
+    changed_provider = _FakeProvider()
+    context.documents.translation_provider = changed_provider
+    second_translation = client.post(
+        f"/api/documents/{second_document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+    completed = _wait_for_job(client, second_translation["id"])
+    assert completed["status"] == "succeeded", completed
+    assert len(changed_provider.calls) == 1
+    assert [block.source_text for block in changed_provider.calls[0]] == [
+        "The revised method changes only this paragraph while the title stays stable."
+    ]
+    translated = client.get(
+        f"/api/documents/{second_document['id']}/blocks",
+        params={"target_language": "zh-CN"},
+    ).json()["items"]
+    assert translated[0]["translation"]["translated_text"] == (
+        "zh-CN：Whole-document translation"
+    )
+    assert translated[1]["translation"]["translated_text"].startswith("zh-CN：The revised")
+    events = context.job_repository.list_events(second_translation["id"])
+    assert any(event.event_type == "document.translation_blocks_reused" for event in events)
+
+    third_attachment = client.post(
+        f"/api/items/{item_id}/attachments",
+        files={"upload": ("reclassified.pdf", PDF + b"reclassified", "application/pdf")},
+    ).json()
+    context.documents.extractor = _ReclassifiedExtractor()
+    third_extraction = client.post(
+        f"/api/attachments/{third_attachment['id']}/documents",
+        json={"ocr_mode": "auto"},
+    ).json()
+    assert _wait_for_job(client, third_extraction["id"])["status"] == "succeeded"
+    third_document = client.get(f"/api/items/{item_id}/documents").json()[0]
+    reclassified_provider = _FakeProvider()
+    context.documents.translation_provider = reclassified_provider
+    third_translation = client.post(
+        f"/api/documents/{third_document['id']}/translate",
+        json={"target_language": "zh-CN"},
+    ).json()
+    assert _wait_for_job(client, third_translation["id"])["status"] == "succeeded"
+    assert [block.source_text for block in reclassified_provider.calls[0]] == [
+        "The revised method changes only this paragraph while the title stays stable."
+    ]
 
 
 def test_chapter_fallback_reuses_verified_checkpoints_after_retry(client) -> None:

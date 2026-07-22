@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { CandidateInbox } from "../../features/candidates/CandidateInbox";
+import { useAppData } from "../AppDataContext";
 import { api } from "../../shared/api/client";
 import type { CandidateDecision, ProjectItem, ProjectItemStatus } from "../../shared/api/contracts";
 import { useApiResource } from "../../shared/api/useApiResource";
@@ -12,15 +13,20 @@ import "./pages.css";
 type ProjectTab = "candidates" | "library";
 
 export function ProjectPage() {
+  const { refresh: refreshWorkspace } = useAppData();
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [deciding, setDeciding] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
-  const tab = (params.get("tab") as ProjectTab | null) ?? "candidates";
+  const requestedTab = params.get("tab") as ProjectTab | null;
   const status = (params.get("status") as ProjectItemStatus | null) ?? "included";
   const resource = useApiResource(
-    () => projectId ? Promise.all([api.project(projectId), api.candidates(projectId), api.projectItems(projectId, "all")]) : Promise.reject(new Error("项目地址无效")),
+    () => projectId ? Promise.all([
+      api.project(projectId),
+      api.candidates(projectId, ["staged", "matched"]),
+      api.projectItems(projectId, "all"),
+    ]) : Promise.reject(new Error("项目地址无效")),
     [projectId],
   );
 
@@ -29,9 +35,8 @@ export function ProjectPage() {
   if (!projectId || !resource.data) return <AsyncMessage kind="empty">项目不存在</AsyncMessage>;
   const validProjectId = projectId;
   const [project, candidates, items] = resource.data;
-  const pending = candidates.filter(
-    (item) => item.state === "staged" || item.state === "matched",
-  ).length;
+  const pending = project.candidate_count;
+  const tab = requestedTab ?? (pending > 0 ? "candidates" : "library");
 
   async function decide(
     decisions: CandidateDecision[],
@@ -47,6 +52,7 @@ export function ProjectPage() {
       const target = includedIndex >= 0
         ? candidateDecisionTarget(validProjectId, decisions[includedIndex]!, results[includedIndex])
         : null;
+      await refreshWorkspace();
       if (target) {
         navigate(target);
         return;

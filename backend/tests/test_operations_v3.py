@@ -44,7 +44,6 @@ from app.operations.models import (
     CompileJobRequest,
     ManagedToolName,
     ManagedToolStatus,
-    TranslationJobRequest,
 )
 from app.operations.service import OperationService
 from app.platform.processes import (
@@ -283,13 +282,6 @@ def test_scheduling_validates_attachment_kind_and_hides_url_from_concurrency_key
     assert compile_request.max_attempts == 2
     assert compile_request.input["main_tex"] == "paper/main.tex"
 
-    attachments.source = source.model_copy(update={"language_mode": LanguageMode.TRANSLATED})
-    with pytest.raises(ValueError, match="原文 PDF"):
-        service.translate_attachment(
-            source.id, TranslationJobRequest(), project_id="project-1"
-        )
-
-
 def test_download_rejects_private_dns_and_cancellation_without_network(tmp_path, monkeypatch):
     monkeypatch.setattr(
         socket,
@@ -427,116 +419,6 @@ def test_archive_extraction_rejects_unsafe_paths(tmp_path, member):
 
     assert failure.value.code == "unsafe_archive"
     assert list(target.rglob("*")) == []
-
-
-def test_translation_registers_both_outputs_in_one_batch_and_records_job_attachments(
-    tmp_path, monkeypatch
-):
-    settings = _settings(tmp_path)
-    executable = settings.pdf2zh_executable
-    executable.parent.mkdir(parents=True)
-    executable.write_bytes(b"fake executable")
-    source_path = tmp_path / "paper.pdf"
-    source_path.write_bytes(b"source pdf")
-    source = _attachment("source", AttachmentType.FULLTEXT, AttachmentFormat.PDF)
-    attachments = FakeAttachmentService(source, source_path)
-    runner = FakeRunner()
-    handler = OperationHandlers(
-        settings,
-        attachments,  # type: ignore[arg-type]
-        runner,  # type: ignore[arg-type]
-    )
-    context = _context(
-        "attachment.translate",
-        {
-            "attachment_id": source.id,
-            "item_id": source.item_id,
-            "project_id": "project-1",
-            "qps": 3,
-            "workers": 2,
-        },
-    )
-    monkeypatch.setenv("PDF2ZH_DEEPSEEK_API_KEY", "secret-key")
-
-    result = handler.translate(context)
-
-    assert len(attachments.batch_calls) == 1
-    assert len(attachments.batch_calls[0]["outputs"]) == 2
-    assert [item.role for item in result.attachments] == [
-        "input",
-        "translated",
-        "bilingual",
-    ]
-    assert all(item.job_id == context.claimed.job.id for item in result.attachments)
-    assert all(item.attempt_id == context.claimed.attempt.id for item in result.attachments)
-    assert runner.specs[0].environment["PDF2ZH_DEEPSEEK_API_KEY"] == "secret-key"
-    assert runner.specs[0].sensitive_values == ("secret-key",)
-
-
-def test_translation_registration_failure_does_not_split_the_output_batch(
-    tmp_path, monkeypatch
-):
-    settings = _settings(tmp_path)
-    settings.pdf2zh_executable.parent.mkdir(parents=True)
-    settings.pdf2zh_executable.write_bytes(b"fake executable")
-    source_path = tmp_path / "paper.pdf"
-    source_path.write_bytes(b"source pdf")
-    source = _attachment("source", AttachmentType.FULLTEXT, AttachmentFormat.PDF)
-    attachments = FakeAttachmentService(source, source_path)
-    attachments.fail_registration = True
-    handler = OperationHandlers(
-        settings,
-        attachments,  # type: ignore[arg-type]
-        FakeRunner(),  # type: ignore[arg-type]
-    )
-    monkeypatch.setenv("PDF2ZH_DEEPSEEK_API_KEY", "secret-key")
-
-    with pytest.raises(RuntimeError, match="atomic"):
-        handler.translate(
-            _context(
-                "attachment.translate",
-                {
-                    "attachment_id": source.id,
-                    "item_id": source.item_id,
-                    "project_id": "project-1",
-                },
-            )
-        )
-
-    assert len(attachments.batch_calls) == 1
-    assert len(attachments.batch_calls[0]["outputs"]) == 2
-
-
-def test_canceled_translation_is_retryable_and_never_registers_outputs(tmp_path, monkeypatch):
-    settings = _settings(tmp_path)
-    settings.pdf2zh_executable.parent.mkdir(parents=True)
-    settings.pdf2zh_executable.write_bytes(b"fake executable")
-    source_path = tmp_path / "paper.pdf"
-    source_path.write_bytes(b"source pdf")
-    source = _attachment("source", AttachmentType.FULLTEXT, AttachmentFormat.PDF)
-    attachments = FakeAttachmentService(source, source_path)
-    handler = OperationHandlers(
-        settings,
-        attachments,  # type: ignore[arg-type]
-        FakeRunner(ProcessOutcome.CANCELED),  # type: ignore[arg-type]
-    )
-    monkeypatch.setenv("PDF2ZH_DEEPSEEK_API_KEY", "secret-key")
-
-    with pytest.raises(JobFailure) as failure:
-        handler.translate(
-            _context(
-                "attachment.translate",
-                {
-                    "attachment_id": source.id,
-                    "item_id": source.item_id,
-                    "project_id": "project-1",
-                },
-            )
-        )
-
-    assert failure.value.code == "canceled"
-    assert failure.value.retryable
-    assert attachments.batch_calls == []
 
 
 def test_compile_uses_process_runner_with_shell_escape_disabled(tmp_path):

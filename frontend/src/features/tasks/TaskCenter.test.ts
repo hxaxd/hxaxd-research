@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { Job, JobEvent } from "../../shared/api/contracts";
-import { taskFailureGuidance } from "./TaskCenter";
+import type { AgentRun, ChangeSet, Job, JobEvent } from "../../shared/api/contracts";
+import { defaultTaskKind, taskFailureGuidance } from "./TaskCenter";
 
 const job: Job = {
   id: "job-1",
@@ -10,6 +10,7 @@ const job: Job = {
   subject_id: "document-1",
   status: "failed",
   priority: 0,
+  result: null,
   error_code: "provider_unavailable",
   error_message: "服务暂时不可用",
   max_attempts: 3,
@@ -49,5 +50,15 @@ describe("task failure guidance", () => {
       { ...job, kind: "tool.install.pdf2zh", error_code: "installer_missing" },
       { ...failureEvent(false), payload: { code: "installer_missing", retryable: false } },
     )).toMatchObject({ href: "/settings", actionLabel: "打开系统设置" });
+  });
+});
+
+describe("task center default view", () => {
+  it("opens the first actionable non-empty view", () => {
+    const run = { status: "running" } as AgentRun;
+    const change = { status: "submitted" } as ChangeSet;
+    expect(defaultTaskKind([job], [], [])).toBe("jobs");
+    expect(defaultTaskKind([], [run], [])).toBe("agents");
+    expect(defaultTaskKind([job], [run], [change])).toBe("changes");
   });
 });

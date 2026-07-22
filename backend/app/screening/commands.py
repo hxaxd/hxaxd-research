@@ -19,8 +19,6 @@ from .models import (
     CandidatePromotionRequest,
     CandidateView,
     ProjectCreate,
-    ProjectDeleteRequest,
-    ProjectDeleteResult,
     ProjectInsightsPatch,
     ProjectView,
     ProjectWorkDecision,
@@ -73,97 +71,6 @@ class ScreeningCommands:
             raise ScreeningConflictError("a project with this name already exists") from error
         return self.queries.get_project(project_id)
 
-    def delete_project(
-        self, project_id: str, payload: ProjectDeleteRequest
-    ) -> ProjectDeleteResult:
-        """Delete an explicitly confirmed project and selected empty orphan works."""
-
-        now = _now()
-        requested_work_ids = set(payload.orphan_work_ids)
-        with self.database.transaction() as connection:
-            project = connection.execute(
-                "SELECT * FROM projects WHERE id = ?", (project_id,)
-            ).fetchone()
-            if project is None:
-                raise ScreeningNotFoundError("project does not exist")
-            current_updated_at = datetime.fromisoformat(
-                str(project["updated_at"]).replace("Z", "+00:00")
-            )
-            if (
-                project["name"] != payload.expected_name
-                or current_updated_at != payload.expected_updated_at
-            ):
-                raise ScreeningConflictError("project confirmation no longer matches")
-            if connection.execute(
-                "SELECT 1 FROM agent_runs WHERE project_id = ? LIMIT 1", (project_id,)
-            ).fetchone() is not None:
-                raise ScreeningConflictError("project has agent run history")
-            if connection.execute(
-                "SELECT 1 FROM change_sets WHERE project_id = ? LIMIT 1", (project_id,)
-            ).fetchone() is not None:
-                raise ScreeningConflictError("project has change set history")
-            if connection.execute(
-                """
-                SELECT 1 FROM candidates
-                WHERE project_id = ? AND state IN ('staged', 'matched')
-                LIMIT 1
-                """,
-                (project_id,),
-            ).fetchone() is not None:
-                raise ScreeningConflictError("project has unresolved candidates")
-
-            project_work_ids = {
-                str(row["work_id"])
-                for row in connection.execute(
-                    "SELECT work_id FROM project_works WHERE project_id = ?",
-                    (project_id,),
-                ).fetchall()
-            }
-            if requested_work_ids != project_work_ids:
-                raise ScreeningConflictError(
-                    "orphan work confirmation does not match the project"
-                )
-            for work_id in sorted(requested_work_ids):
-                self._require_disposable_orphan_work(connection, project_id, work_id)
-
-            source_record_ids = [
-                str(row["source_record_id"])
-                for row in connection.execute(
-                    """
-                    SELECT DISTINCT source_record_id FROM candidates
-                    WHERE project_id = ? AND source_record_id IS NOT NULL
-                    """,
-                    (project_id,),
-                ).fetchall()
-            ]
-            self._audit(
-                connection,
-                now=now,
-                actor_type="user",
-                actor_id=None,
-                action="screening.project_deleted",
-                entity_type="project",
-                entity_id=project_id,
-                before={
-                    "name": project["name"],
-                    "description": project["description"],
-                    "updated_at": project["updated_at"],
-                    "deleted_orphan_work_ids": sorted(requested_work_ids),
-                },
-            )
-            connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-            for work_id in sorted(requested_work_ids):
-                connection.execute("DELETE FROM works WHERE id = ?", (work_id,))
-            for source_record_id in source_record_ids:
-                if not self._source_record_is_referenced(connection, source_record_id):
-                    connection.execute(
-                        "DELETE FROM source_records WHERE id = ?", (source_record_id,)
-                    )
-        return ProjectDeleteResult(
-            project_id=project_id,
-            deleted_orphan_work_ids=sorted(requested_work_ids),
-        )
-
     def stage_candidate(
         self,
         project_id: str,
@@ -186,85 +93,155 @@ class ScreeningCommands:
             ]
         except CatalogConflictError as error:
             raise ScreeningConflictError(str(error)) from error
+        dedupe_key = payload.dedupe_key or self._dedupe_key(payload.item, normalized)
         with self.database.transaction() as connection:
             self._require_project(connection, project_id)
-            if payload.discovery_session_id is not None:
+            discovery_session_id = payload.discovery_session_id
+            if discovery_session_id is None and actor_type == "agent" and correlation_id:
+                discovery_session_id = self._ensure_agent_discovery_session(
+                    connection,
+                    project_id=project_id,
+                    agent_run_id=correlation_id,
+                    now=now,
+                )
+            if discovery_session_id is not None:
                 session = connection.execute(
                     """
                     SELECT 1 FROM discovery_sessions
                     WHERE id = ? AND project_id = ?
                     """,
-                    (payload.discovery_session_id, project_id),
+                    (discovery_session_id, project_id),
                 ).fetchone()
                 if session is None:
                     raise ScreeningNotFoundError("discovery session does not exist")
-            source_record_id = self._save_source_record(
-                connection,
-                provider=payload.source_provider,
-                external_key=payload.source_external_key,
-                source_url=payload.source_url,
-                schema_version=payload.source_schema_version,
-                payload_json=payload_json,
-                payload_sha256=payload_sha256,
-                retrieved_at=now,
-            )
-            matches: set[str] = set()
-            for identifier in normalized:
-                if not identifier.is_identity:
-                    continue
-                row = connection.execute(
-                    """
-                    SELECT item.work_id
-                    FROM item_identifiers identifier
-                    JOIN bibliographic_items item ON item.id = identifier.item_id
-                    WHERE identifier.scheme = ?
-                      AND identifier.normalized_value = ?
-                      AND identifier.is_identity = 1
-                    """,
-                    (identifier.scheme, identifier.normalized_value),
-                ).fetchone()
-                if row is not None:
-                    matches.add(str(row["work_id"]))
-            if len(matches) > 1:
-                raise ScreeningConflictError(
-                    "candidate identifiers resolve to different existing works"
-                )
-            matched_work_id = next(iter(matches), None)
-            dedupe_key = payload.dedupe_key or self._dedupe_key(payload.item, normalized)
-            connection.execute(
+            existing = connection.execute(
                 """
-                INSERT INTO candidates(
-                    id, project_id, discovery_session_id, source_record_id, state,
-                    proposed_item_json, dedupe_key, matched_work_id,
-                    rank, rationale, created_at, resolved_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                SELECT id FROM candidates
+                WHERE project_id = ? AND dedupe_key = ?
+                  AND state IN ('staged', 'matched')
+                ORDER BY created_at DESC LIMIT 1
                 """,
-                (
-                    candidate_id,
-                    project_id,
-                    payload.discovery_session_id,
-                    source_record_id,
-                    "matched" if matched_work_id else "staged",
-                    _json(proposed),
-                    dedupe_key,
-                    matched_work_id,
-                    payload.rank,
-                    payload.rationale,
-                    now,
-                ),
-            )
-            self._audit(
-                connection,
-                now=now,
-                actor_type=actor_type,
-                actor_id=actor_id,
-                action="screening.candidate_staged",
-                entity_type="candidate",
-                entity_id=candidate_id,
-                correlation_id=correlation_id,
-                after={"matched_work_id": matched_work_id, "title": payload.item.title},
-            )
+                (project_id, dedupe_key),
+            ).fetchone()
+            if existing is not None:
+                candidate_id = str(existing["id"])
+            if existing is None:
+                # The surrounding immediate transaction serializes concurrent staging,
+                # so repeated discovery calls converge on one active candidate.
+                source_record_id = self._save_source_record(
+                    connection,
+                    provider=payload.source_provider,
+                    external_key=payload.source_external_key,
+                    source_url=payload.source_url,
+                    schema_version=payload.source_schema_version,
+                    payload_json=payload_json,
+                    payload_sha256=payload_sha256,
+                    retrieved_at=now,
+                )
+                matches: set[str] = set()
+                for identifier in normalized:
+                    if not identifier.is_identity:
+                        continue
+                    row = connection.execute(
+                        """
+                        SELECT item.work_id
+                        FROM item_identifiers identifier
+                        JOIN bibliographic_items item ON item.id = identifier.item_id
+                        WHERE identifier.scheme = ?
+                          AND identifier.normalized_value = ?
+                          AND identifier.is_identity = 1
+                        """,
+                        (identifier.scheme, identifier.normalized_value),
+                    ).fetchone()
+                    if row is not None:
+                        matches.add(str(row["work_id"]))
+                if len(matches) > 1:
+                    raise ScreeningConflictError(
+                        "candidate identifiers resolve to different existing works"
+                    )
+                matched_work_id = next(iter(matches), None)
+                connection.execute(
+                    """
+                    INSERT INTO candidates(
+                        id, project_id, discovery_session_id, source_record_id, state,
+                        proposed_item_json, dedupe_key, matched_work_id,
+                        rank, rationale, created_at, resolved_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        candidate_id,
+                        project_id,
+                        discovery_session_id,
+                        source_record_id,
+                        "matched" if matched_work_id else "staged",
+                        _json(proposed),
+                        dedupe_key,
+                        matched_work_id,
+                        payload.rank,
+                        payload.rationale,
+                        now,
+                    ),
+                )
+                self._audit(
+                    connection,
+                    now=now,
+                    actor_type=actor_type,
+                    actor_id=actor_id,
+                    action="screening.candidate_staged",
+                    entity_type="candidate",
+                    entity_id=candidate_id,
+                    correlation_id=correlation_id,
+                    after={"matched_work_id": matched_work_id, "title": payload.item.title},
+                )
         return self.queries.get_candidate(project_id, candidate_id)
+
+    def finish_discovery_sessions(self, agent_run_id: str, status: str) -> int:
+        if status not in {"succeeded", "failed", "cancelled"}:
+            raise ValueError(f"invalid discovery session status: {status}")
+        now = _now()
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE discovery_sessions
+                SET status = ?, finished_at = ?
+                WHERE agent_run_id = ? AND status = 'running'
+                """,
+                (status, now, agent_run_id),
+            )
+            return cursor.rowcount
+
+    def reconcile_discovery_sessions(self) -> int:
+        """Converge discovery sessions after a process stopped between terminal writes."""
+
+        now = _now()
+        terminal_statuses = {
+            "completed": "succeeded",
+            "failed": "failed",
+            "canceled": "cancelled",
+        }
+        with self.database.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT session.id, run.status, run.finished_at
+                FROM discovery_sessions session
+                JOIN agent_runs run ON run.id = session.agent_run_id
+                WHERE session.status = 'running'
+                  AND run.status IN ('completed', 'failed', 'canceled')
+                """
+            ).fetchall()
+            for row in rows:
+                connection.execute(
+                    """
+                    UPDATE discovery_sessions
+                    SET status = ?, finished_at = ? WHERE id = ?
+                    """,
+                    (
+                        terminal_statuses[str(row["status"])],
+                        row["finished_at"] or now,
+                        row["id"],
+                    ),
+                )
+            return len(rows)
 
     def promote_candidate(
         self,
@@ -680,81 +657,47 @@ class ScreeningCommands:
         return self.queries.get_project_work(project_id, work_id)
 
     @staticmethod
-    def _require_disposable_orphan_work(
-        connection: sqlite3.Connection, project_id: str, work_id: str
-    ) -> None:
-        if connection.execute(
+    def _ensure_agent_discovery_session(
+        connection: sqlite3.Connection,
+        *,
+        project_id: str,
+        agent_run_id: str,
+        now: str,
+    ) -> str:
+        existing = connection.execute(
             """
-            SELECT 1 FROM project_works
-            WHERE work_id = ? AND project_id != ? LIMIT 1
+            SELECT id, status FROM discovery_sessions
+            WHERE project_id = ? AND agent_run_id = ?
+            ORDER BY created_at DESC LIMIT 1
             """,
-            (work_id, project_id),
-        ).fetchone() is not None:
-            raise ScreeningConflictError("work still belongs to another project")
-        if connection.execute(
+            (project_id, agent_run_id),
+        ).fetchone()
+        if existing is not None:
+            if existing["status"] != "running":
+                connection.execute(
+                    """
+                    UPDATE discovery_sessions
+                    SET status = 'running', finished_at = NULL WHERE id = ?
+                    """,
+                    (existing["id"],),
+                )
+            return str(existing["id"])
+        session_id = _id()
+        connection.execute(
             """
-            SELECT 1 FROM candidates
-            WHERE matched_work_id = ? AND project_id != ? LIMIT 1
+            INSERT INTO discovery_sessions(
+                id, project_id, agent_run_id, status, query_json, created_at
+            ) VALUES(?, ?, ?, 'running', ?, ?)
             """,
-            (work_id, project_id),
-        ).fetchone() is not None:
-            raise ScreeningConflictError("work is referenced by another project candidate")
-        item_ids = [
-            str(row["id"])
-            for row in connection.execute(
-                "SELECT id FROM bibliographic_items WHERE work_id = ?", (work_id,)
-            ).fetchall()
-        ]
-        if not item_ids:
-            raise ScreeningConflictError("work has no bibliographic item")
-        placeholders = ",".join("?" for _ in item_ids)
-        protected_tables = (
-            "attachments",
-            "annotations",
-            "reading_states",
-            "agent_runs",
-            "change_sets",
+            (
+                session_id,
+                project_id,
+                agent_run_id,
+                _json({"source": "agent", "task": "candidate_discovery"}),
+                now,
+            ),
         )
-        for table in protected_tables:
-            if connection.execute(
-                f"SELECT 1 FROM {table} WHERE item_id IN ({placeholders}) LIMIT 1",
-                item_ids,
-            ).fetchone() is not None:
-                raise ScreeningConflictError(f"work has protected {table} data")
-        if connection.execute(
-            f"""
-            SELECT 1 FROM item_relations
-            WHERE source_item_id IN ({placeholders})
-               OR target_item_id IN ({placeholders})
-            LIMIT 1
-            """,
-            [*item_ids, *item_ids],
-        ).fetchone() is not None:
-            raise ScreeningConflictError("work has item relations")
-        subject_ids = [project_id, work_id, *item_ids]
-        subject_placeholders = ",".join("?" for _ in subject_ids)
-        if connection.execute(
-            f"SELECT 1 FROM jobs WHERE subject_id IN ({subject_placeholders}) LIMIT 1",
-            subject_ids,
-        ).fetchone() is not None:
-            raise ScreeningConflictError("work has job history")
-
-    @staticmethod
-    def _source_record_is_referenced(
-        connection: sqlite3.Connection, source_record_id: str
-    ) -> bool:
-        return connection.execute(
-            """
-            SELECT 1 FROM candidates WHERE source_record_id = ?
-            UNION ALL SELECT 1 FROM item_creators WHERE source_record_id = ?
-            UNION ALL SELECT 1 FROM item_identifiers WHERE source_record_id = ?
-            UNION ALL SELECT 1 FROM item_links WHERE source_record_id = ?
-            UNION ALL SELECT 1 FROM item_tags WHERE source_record_id = ?
-            UNION ALL SELECT 1 FROM item_field_sources WHERE source_record_id = ?
-            LIMIT 1
-            """,
-            (source_record_id,) * 6,
-        ).fetchone() is not None
+        return session_id
 
     @staticmethod
     def _require_project(connection: sqlite3.Connection, project_id: str) -> None:

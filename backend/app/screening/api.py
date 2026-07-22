@@ -8,18 +8,22 @@ from app.catalog.api import get_workspace_database
 from app.platform.db import WorkspaceDatabase
 
 from .commands import ScreeningCommands
-from .domain import CandidateState, ScreeningConflictError, ScreeningNotFoundError
+from .domain import (
+    CandidateState,
+    ProjectWorkStatus,
+    ScreeningConflictError,
+    ScreeningNotFoundError,
+)
 from .models import (
     CandidateCreate,
     CandidateDecisionBatch,
     CandidateDecisionResult,
-    CandidatePromotionRequest,
+    CandidatePage,
     CandidateView,
     ProjectCreate,
-    ProjectDeleteRequest,
-    ProjectDeleteResult,
     ProjectView,
     ProjectWorkDecision,
+    ProjectWorkPage,
     ProjectWorkView,
 )
 from .queries import ScreeningQueries
@@ -65,18 +69,6 @@ def create_project(
         _raise_http(error)
 
 
-@router.delete("/projects/{project_id}", response_model=ProjectDeleteResult)
-def delete_project(
-    project_id: str,
-    payload: ProjectDeleteRequest,
-    commands: Annotated[ScreeningCommands, Depends(get_commands)],
-) -> ProjectDeleteResult:
-    try:
-        return commands.delete_project(project_id, payload)
-    except (ScreeningConflictError, ScreeningNotFoundError) as error:
-        _raise_http(error)
-
-
 @router.get("/projects/{project_id}", response_model=ProjectView)
 def get_project(
     project_id: str,
@@ -88,15 +80,14 @@ def get_project(
         _raise_http(error)
 
 
-@router.get("/projects/{project_id}/works", response_model=list[ProjectWorkView])
-@router.get("/projects/{project_id}/items", response_model=list[ProjectWorkView])
+@router.get("/projects/{project_id}/items", response_model=ProjectWorkPage)
 def list_project_works(
     project_id: str,
     queries: Annotated[ScreeningQueries, Depends(get_queries)],
-    status: str | None = None,
+    status: ProjectWorkStatus | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[ProjectWorkView]:
+) -> ProjectWorkPage:
     try:
         return queries.list_project_works(project_id, status=status, limit=limit, offset=offset)
     except ScreeningNotFoundError as error:
@@ -131,14 +122,14 @@ def decide_project_work(
         _raise_http(error)
 
 
-@router.get("/projects/{project_id}/candidates", response_model=list[CandidateView])
+@router.get("/projects/{project_id}/candidates", response_model=CandidatePage)
 def list_candidates(
     project_id: str,
     queries: Annotated[ScreeningQueries, Depends(get_queries)],
     state: CandidateState | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[CandidateView]:
+) -> CandidatePage:
     try:
         return queries.list_candidates(project_id, state=state, limit=limit, offset=offset)
     except ScreeningNotFoundError as error:
@@ -153,36 +144,5 @@ def stage_candidate(
 ) -> CandidateView:
     try:
         return commands.stage_candidate(project_id, payload)
-    except (ScreeningConflictError, ScreeningNotFoundError) as error:
-        _raise_http(error)
-
-
-@router.post(
-    "/projects/{project_id}/candidates/{candidate_id}/promote",
-    response_model=ProjectWorkView,
-)
-def promote_candidate(
-    project_id: str,
-    candidate_id: str,
-    payload: CandidatePromotionRequest,
-    commands: Annotated[ScreeningCommands, Depends(get_commands)],
-) -> ProjectWorkView:
-    try:
-        return commands.promote_candidate(project_id, candidate_id, payload)
-    except (ScreeningConflictError, ScreeningNotFoundError) as error:
-        _raise_http(error)
-
-
-@router.post(
-    "/projects/{project_id}/candidates/{candidate_id}/dismiss",
-    response_model=CandidateView,
-)
-def dismiss_candidate(
-    project_id: str,
-    candidate_id: str,
-    commands: Annotated[ScreeningCommands, Depends(get_commands)],
-) -> CandidateView:
-    try:
-        return commands.dismiss_candidate(project_id, candidate_id)
     except (ScreeningConflictError, ScreeningNotFoundError) as error:
         _raise_http(error)

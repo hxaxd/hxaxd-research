@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 from mcp.server.fastmcp import FastMCP
 
@@ -37,6 +39,7 @@ from app.documents import (
     RapidOcrExtractor,
     TexStructureExtractor,
 )
+from app.history import HistoryQueryService
 from app.integrations.zotero import (
     SqliteZoteroTransferRepository,
     V3ZoteroDomainGateway,
@@ -46,7 +49,6 @@ from app.integrations.zotero import (
     ZoteroWebClient,
 )
 from app.jobs import JobRegistry, JobScheduler, JobWorker, SqliteJobRepository
-from app.legacy.v2_importer import V2MigrationReport, migrate_v2_database
 from app.library.repository import AttachmentRepository
 from app.library.service import AttachmentService
 from app.library.storage import AttachmentStorage
@@ -59,7 +61,6 @@ from app.platform import (
     recover_pending_activation,
 )
 from app.platform.db import DatabaseKind, WorkspaceDatabase, inspect_database
-from app.platform.db.v4_migration import V3MigrationReport, migrate_workspace_database
 from app.platform.processes import ExecutableRegistry, ProcessRunner
 from app.platform.processes.runner import DEFAULT_ENVIRONMENT_ALLOWLIST
 from app.preferences import PreferencesRepository, PreferencesService
@@ -124,7 +125,7 @@ class AppContext:
     mcp_server: FastMCP
     snapshots: SnapshotService
     zotero_service: ZoteroTransferService
-    migration_report: V2MigrationReport | V3MigrationReport | None = None
+    history: HistoryQueryService
 
     def startup(self) -> None:
         self.process_lock.acquire()
@@ -132,7 +133,6 @@ class AppContext:
             recover_pending_activation(
                 self.settings.activation_journal_path,
                 data_dir=self.settings.data_dir,
-                database_path=self.settings.database_path,
             )
             ensure_no_activation_residue(
                 journal_path=self.settings.activation_journal_path,
@@ -144,22 +144,8 @@ class AppContext:
             self.settings.agent_work_dir.mkdir(parents=True, exist_ok=True)
             self.settings.operation_staging_dir.mkdir(parents=True, exist_ok=True)
             state = inspect_database(self.settings.database_path)
-            if state.kind is DatabaseKind.LEGACY_V2:
-                self.migration_report = migrate_v2_database(
-                    self.settings.database_path,
-                    data_dir=self.settings.data_dir,
-                    verify_files=True,
-                    activation_journal=self.settings.activation_journal_path,
-                )
-            elif state.kind is DatabaseKind.LEGACY_V3:
-                self.migration_report = migrate_workspace_database(
-                    self.settings.database_path,
-                    activation_journal=self.settings.activation_journal_path,
-                )
-            elif state.kind is DatabaseKind.LEGACY_V1:
-                raise RuntimeError("v1 数据库不能直接启动；请先用安全快照恢复到 v3")
-            elif state.kind is DatabaseKind.UNKNOWN:
-                raise RuntimeError("数据库格式无法识别，拒绝启动以避免覆盖数据")
+            if state.kind is DatabaseKind.UNKNOWN:
+                raise RuntimeError("数据库不是当前 v4 格式，拒绝启动以避免覆盖数据")
             self.database.initialize()
             self.attachments.storage.initialize()
             self.job_repository.initialize_schema()
@@ -168,8 +154,12 @@ class AppContext:
             self.operations.reconcile_committed()
             self.documents.reconcile_committed()
             self.snapshots.reconcile_committed()
+            self.zotero_service.reconcile_interrupted()
             self.agent_repository.reconcile_interrupted()
-            self.job_worker.start(recover=True)
+            self.job_repository.recover_interrupted()
+            self.changes.reconcile_pending()
+            self.screening_commands.reconcile_discovery_sessions()
+            self.job_worker.start(recover=False)
         except Exception:
             self.process_lock.release()
             raise
@@ -183,12 +173,14 @@ class AppContext:
 
 
 def build_app_context(settings: Settings) -> AppContext:
+    _validate_internal_agent_base_url(settings.agent_base_url)
     mutation_gate = WorkspaceMutationGate()
     process_lock = WorkspaceProcessLock(settings.runtime_dir / "workspace.lock")
     database = WorkspaceDatabase(settings.database_path)
     storage = AttachmentStorage(settings)
     attachment_repository = AttachmentRepository(database)
     attachments = AttachmentService(attachment_repository, storage)
+    history = HistoryQueryService(database)
     catalog = CatalogQueries(database)
     catalog_commands = CatalogCommands(database)
     screening = ScreeningQueries(database)
@@ -424,7 +416,13 @@ def build_app_context(settings: Settings) -> AppContext:
         mcp_credentials=mcp_credentials,
         mcp_revoke=agent_capabilities.revoke_run,
     )
-    job_registry.register("agent.run", AgentRunJobHandler(agent_supervisor))
+    job_registry.register(
+        "agent.run",
+        AgentRunJobHandler(
+            agent_supervisor,
+            finish_discovery_sessions=screening_commands.finish_discovery_sessions,
+        ),
+    )
 
     snapshots = SnapshotService(
         settings,
@@ -466,6 +464,7 @@ def build_app_context(settings: Settings) -> AppContext:
         mcp_server=mcp_server,
         snapshots=snapshots,
         zotero_service=zotero_service,
+        history=history,
     )
 
 
@@ -504,3 +503,14 @@ def _job_worker_capability(worker: JobWorker) -> RuntimeCapability:
             "error_code": "job_worker_error" if last_error is not None else None,
         },
     )
+
+
+def _validate_internal_agent_base_url(value: str) -> None:
+    parsed = urlsplit(value)
+    hostname = parsed.hostname or ""
+    try:
+        local = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        local = hostname.casefold() == "localhost"
+    if parsed.scheme not in {"http", "https"} or not local:
+        raise ValueError("agent_base_url must use an HTTP(S) loopback address")

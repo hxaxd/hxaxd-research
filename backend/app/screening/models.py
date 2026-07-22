@@ -22,26 +22,10 @@ class ProjectView(BaseModel):
     name: str
     description: str
     work_count: int = 0
+    candidate_count: int = 0
     status_counts: dict[str, int] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
-
-
-class ProjectDeleteRequest(BaseModel):
-    expected_name: NonEmptyText
-    expected_updated_at: datetime
-    orphan_work_ids: list[str] = Field(default_factory=list, max_length=100)
-
-    @model_validator(mode="after")
-    def require_unique_work_ids(self) -> ProjectDeleteRequest:
-        if len(self.orphan_work_ids) != len(set(self.orphan_work_ids)):
-            raise ValueError("orphan work ids must be unique")
-        return self
-
-
-class ProjectDeleteResult(BaseModel):
-    project_id: str
-    deleted_orphan_work_ids: list[str]
 
 
 class CandidateCreate(BaseModel):
@@ -53,7 +37,11 @@ class CandidateCreate(BaseModel):
     raw_payload: dict[str, Any] | None = None
     discovery_session_id: str | None = None
     dedupe_key: str | None = None
-    rank: float | None = None
+    rank: int | None = Field(
+        default=None,
+        ge=1,
+        description="1-based position in the source result set; lower values come first",
+    )
     rationale: str | None = None
 
 
@@ -82,6 +70,13 @@ class CandidateView(BaseModel):
     evidence: list[CandidateEvidence] = Field(default_factory=list)
     created_at: datetime
     resolved_at: datetime | None
+
+
+class CandidatePage(BaseModel):
+    items: list[CandidateView]
+    total: int
+    limit: int
+    offset: int
 
 
 class CandidatePromotionRequest(BaseModel):
@@ -146,3 +141,10 @@ class ProjectWorkView(BaseModel):
     decided_by: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ProjectWorkPage(BaseModel):
+    items: list[ProjectWorkView]
+    total: int
+    limit: int
+    offset: int

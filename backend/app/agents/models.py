@@ -112,6 +112,13 @@ class PublicAgentRun(BaseModel):
     cancel_requested_at: datetime | None
 
 
+class PublicAgentRunPage(BaseModel):
+    items: list[PublicAgentRun]
+    total: int
+    limit: int
+    offset: int
+
+
 class PublicAgentTaskDefinition(BaseModel):
     id: str
     label: str

@@ -14,7 +14,9 @@ from .models import (
     AgentRun,
     AgentRunStatus,
     ApprovalDecision,
+    ApprovalStatus,
     PublicAgentRun,
+    PublicAgentRunPage,
     PublicAgentTaskDefinition,
     PublicApproval,
 )
@@ -65,6 +67,7 @@ def create_agent_router(
     scheduler_dep = Depends(scheduler_dependency)
     project_query = Query(default=None, max_length=200)
     limit_query = Query(default=200, ge=1, le=1000)
+    offset_query = Query(default=0, ge=0)
     after_query = Query(default=0, ge=0)
 
     @router.get(
@@ -130,21 +133,29 @@ def create_agent_router(
         except JobConflictError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
-    @runs.get("", response_model=list[PublicAgentRun])
+    @runs.get("", response_model=PublicAgentRunPage)
     def list_runs(
         repository: SqliteAgentRunRepository = repository_dep,
         project_id: str | None = project_query,
         status: AgentRunStatus | None = None,
         limit: int = limit_query,
-    ) -> list[PublicAgentRun]:
-        return [
+        offset: int = offset_query,
+    ) -> PublicAgentRunPage:
+        items = [
             project_public_run(run)
             for run in repository.list_runs(
                 project_id=project_id,
                 status=status,
                 limit=limit,
+                offset=offset,
             )
         ]
+        return PublicAgentRunPage(
+            items=items,
+            total=repository.count_runs(project_id=project_id, status=status),
+            limit=limit,
+            offset=offset,
+        )
 
     @runs.get("/{run_id}", response_model=PublicAgentRun)
     def get_run(
@@ -202,14 +213,15 @@ def create_agent_router(
         )
 
     @runs.get("/{run_id}/approvals", response_model=list[PublicApproval])
-    def pending_approvals(
+    def list_approvals(
         run_id: str,
         repository: SqliteAgentRunRepository = repository_dep,
+        status: ApprovalStatus | None = None,
     ) -> list[PublicApproval]:
         try:
             return [
                 project_public_approval(item)
-                for item in repository.pending_approvals(run_id)
+                for item in repository.list_approvals(run_id, status=status)
             ]
         except AgentNotFoundError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error

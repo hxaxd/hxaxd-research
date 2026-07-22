@@ -7,9 +7,11 @@ import socket
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from threading import Thread
 from urllib.parse import urlsplit
 
 import uvicorn
+from fastapi import FastAPI
 
 from app.core.config import REPOSITORY_ROOT, Settings
 from app.main import create_app
@@ -74,8 +76,15 @@ def _serve(arguments: argparse.Namespace) -> None:
         if _is_loopback(parsed.hostname):
             raise SystemExit("局域网模式的 --public-url 不能使用回环地址")
     public_host = urlsplit(public_url).hostname or "127.0.0.1"
-    agent_url = arguments.agent_url or (public_url if secure else f"http://127.0.0.1:{port}")
-    _validate_agent_url(agent_url)
+    agent_socket = (
+        _reserve_loopback_socket() if secure and arguments.agent_url is None else None
+    )
+    agent_url = _resolve_agent_url(
+        arguments.agent_url,
+        scheme=scheme,
+        port=port,
+        internal_port=(int(agent_socket.getsockname()[1]) if agent_socket else None),
+    )
     settings = replace(
         settings,
         public_base_url=public_url,
@@ -93,13 +102,30 @@ def _serve(arguments: argparse.Namespace) -> None:
             print("请确认电脑与平板都信任此证书，再在本机设置页生成一次性配对码。")
         else:
             print("警告：当前为未加密调试模式，安全 Cookie 与平板 PWA 不可用。")
-    uvicorn.run(
-        create_app(settings),
-        host=bind_host,
-        port=port,
-        ssl_certfile=str(certificate) if certificate else None,
-        ssl_keyfile=str(private_key) if private_key else None,
-    )
+    internal_server: uvicorn.Server | None = None
+    internal_thread: Thread | None = None
+    try:
+        application = create_app(settings)
+        if agent_socket is not None:
+            internal_server, internal_thread = _start_internal_agent_listener(
+                application, agent_socket
+            )
+        uvicorn.run(
+            application,
+            host=bind_host,
+            port=port,
+            ssl_certfile=str(certificate) if certificate else None,
+            ssl_keyfile=str(private_key) if private_key else None,
+        )
+    finally:
+        if internal_server is not None and internal_thread is not None:
+            internal_server.should_exit = True
+            internal_thread.join(timeout=5)
+            if internal_thread.is_alive():
+                internal_server.force_exit = True
+                internal_thread.join(timeout=5)
+        if agent_socket is not None:
+            agent_socket.close()
 
 
 def _tls_files(arguments: argparse.Namespace) -> tuple[Path | None, Path | None]:
@@ -124,6 +150,62 @@ def _validate_agent_url(value: str) -> None:
         or parsed.fragment
     ):
         raise SystemExit("--agent-url 必须是纯 http 或 https 地址")
+    if not _is_loopback(parsed.hostname):
+        raise SystemExit("--agent-url 必须使用本机回环地址，不能暴露智能体工具端点")
+
+
+def _resolve_agent_url(
+    value: str | None,
+    *,
+    scheme: str,
+    port: int,
+    internal_port: int | None = None,
+) -> str:
+    if value is not None:
+        resolved = value
+    elif scheme == "https":
+        if internal_port is None:
+            raise ValueError("secure serving requires a reserved internal agent listener")
+        resolved = f"http://127.0.0.1:{internal_port}"
+    else:
+        resolved = f"http://127.0.0.1:{port}"
+    _validate_agent_url(resolved)
+    return resolved.rstrip("/")
+
+
+def _reserve_loopback_socket() -> socket.socket:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(2048)
+    except Exception:
+        listener.close()
+        raise
+    return listener
+
+
+def _start_internal_agent_listener(
+    application: FastAPI,
+    listener: socket.socket,
+) -> tuple[uvicorn.Server, Thread]:
+    server = uvicorn.Server(
+        uvicorn.Config(
+            application,
+            host="127.0.0.1",
+            port=int(listener.getsockname()[1]),
+            lifespan="off",
+            access_log=False,
+            log_level="warning",
+        )
+    )
+    thread = Thread(
+        target=server.run,
+        kwargs={"sockets": [listener]},
+        name="embedded-agent-mcp",
+        daemon=True,
+    )
+    thread.start()
+    return server, thread
 
 
 def _build_frontend() -> None:
