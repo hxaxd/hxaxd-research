@@ -11,12 +11,19 @@ from app.platform.processes import CancellationToken
 
 from .models import AgentRun, AgentRunCreate, AgentRunStatus, Approval, ApprovalDecision
 from .prompting import PromptAssembler, PromptContext
-from .repository import AgentConflictError, SqliteAgentRunRepository
+from .repository import (
+    AgentConflictError,
+    AgentIdentityConflictError,
+    SqliteAgentRunRepository,
+)
 from .runtime import (
     AgentRuntime,
+    AgentRuntimeDefinition,
+    AgentRuntimeRegistry,
     RuntimeApprovalRequest,
     RuntimeEvent,
     RuntimeMcpCredentials,
+    RuntimeOutcome,
     RuntimeOutcomeStatus,
     RuntimeRequest,
 )
@@ -28,7 +35,7 @@ class AgentSupervisor:
     def __init__(
         self,
         repository: SqliteAgentRunRepository,
-        runtime: AgentRuntime,
+        runtime: AgentRuntime | AgentRuntimeRegistry,
         prompts: PromptAssembler,
         workspace_root: Path,
         *,
@@ -37,7 +44,11 @@ class AgentSupervisor:
         mcp_revoke: Callable[[str], None] | None = None,
     ) -> None:
         self.repository = repository
-        self.runtime = runtime
+        self.runtime_registry = (
+            runtime
+            if isinstance(runtime, AgentRuntimeRegistry)
+            else AgentRuntimeRegistry.single(runtime)
+        )
         self.prompts = prompts
         self.workspace_root = workspace_root.resolve()
         self.approval_timeout_seconds = approval_timeout_seconds
@@ -57,10 +68,16 @@ class AgentSupervisor:
         target_type: str | None = None,
         target_id: str | None = None,
         tool_scopes: tuple[str, ...] = (),
+        runtime: str | None = None,
         model: str | None = None,
         reasoning_effort: str | None = None,
     ) -> AgentRun:
         snapshot = self.prompts.assemble(context)
+        registration = self.runtime_registry.registration(runtime)
+        selected_model = self.runtime_registry.resolve_model(
+            registration.definition.id,
+            model,
+        )
         run_id = uuid4().hex
         cwd = self.workspace_root / run_id
         cwd.mkdir(parents=True, exist_ok=False)
@@ -79,9 +96,9 @@ class AgentSupervisor:
                     target_type=target_type,
                     target_id=target_id,
                     tool_scopes=tool_scopes,
-                    runtime=self.runtime.name,
-                    runtime_version=self.runtime.version,
-                    model=model,
+                    runtime=registration.definition.id,
+                    runtime_version=registration.definition.version,
+                    model=selected_model,
                     reasoning_effort=reasoning_effort,
                 )
             )
@@ -100,81 +117,157 @@ class AgentSupervisor:
         run = self.repository.get(run_id)
         if run.status is not AgentRunStatus.CREATED:
             raise AgentConflictError(f"agent run cannot execute from {run.status.value}")
-        self.repository.transition(run_id, AgentRunStatus.STARTING)
-        self.repository.transition(run_id, AgentRunStatus.RUNNING)
         token = cancellation or CancellationToken()
         with self._lock:
             self._tokens[run_id] = token
-        target_status = AgentRunStatus.FAILED
-        transition_values: dict[str, str | None] = {}
-        revoke_error: Exception | None = None
         try:
-            mcp = self.mcp_credentials(run) if self.mcp_credentials is not None else None
-            outcome = self.runtime.run(
-                RuntimeRequest(
-                    run_id=run_id,
-                    prompt=run.prompt,
-                    cwd=Path(run.cwd),
-                    thread_id=run.provider_thread_id,
-                    model=run.model,
-                    reasoning_effort=reasoning_effort or run.reasoning_effort,
-                    tool_scopes=run.tool_scopes,
-                    mcp=mcp,
-                ),
-                lambda event: self._record_event(run_id, event),
-                lambda request: self._request_approval(run_id, request, token),
-                token,
-            )
-            current = self.repository.get(run_id)
-            if (
-                outcome.status is RuntimeOutcomeStatus.CANCELED
-                or current.status is AgentRunStatus.CANCELLATION_REQUESTED
-            ):
-                status = AgentRunStatus.CANCELED
-            elif outcome.status is RuntimeOutcomeStatus.COMPLETED:
-                status = AgentRunStatus.COMPLETED
-            else:
-                status = AgentRunStatus.FAILED
-            target_status = status
-            transition_values = {
-                "provider_thread_id": outcome.thread_id,
-                "provider_turn_id": outcome.turn_id,
-                "final_message": outcome.final_message,
-                "error_code": outcome.error_code,
-                "error_message": outcome.error_message,
-            }
-        except Exception as error:
-            current = self.repository.get(run_id)
-            if current.status is AgentRunStatus.CANCELLATION_REQUESTED:
-                target_status = AgentRunStatus.CANCELED
-            else:
+            try:
+                run = self.repository.claim_execution(run_id)
+            except AgentConflictError:
+                current = self.repository.get(run_id)
+                if current.status is AgentRunStatus.CANCELED:
+                    token.cancel()
+                    return current
+                if current.status is AgentRunStatus.CANCELLATION_REQUESTED:
+                    token.cancel()
+                    return self.repository.transition(run_id, AgentRunStatus.CANCELED)
+                raise
+            if self.repository.get(run_id).status is AgentRunStatus.CANCELLATION_REQUESTED:
+                token.cancel()
+
+            target_status = AgentRunStatus.FAILED
+            transition_values: dict[str, str | None] = {}
+            revoke_error: Exception | None = None
+            try:
+                if token.is_cancelled:
+                    outcome = RuntimeOutcome(
+                        RuntimeOutcomeStatus.CANCELED,
+                        run.provider_thread_id,
+                        run.provider_turn_id,
+                    )
+                else:
+                    runtime = self.runtime_registry.runtime(run.runtime)
+                    mcp = self.mcp_credentials(run) if self.mcp_credentials is not None else None
+                    outcome = runtime.run(
+                        RuntimeRequest(
+                            run_id=run_id,
+                            prompt=run.prompt,
+                            cwd=Path(run.cwd),
+                            thread_id=run.provider_thread_id,
+                            model=run.model,
+                            reasoning_effort=reasoning_effort or run.reasoning_effort,
+                            tool_scopes=run.tool_scopes,
+                            mcp=mcp,
+                        ),
+                        lambda event: self._record_event(run_id, event),
+                        lambda request: self._request_approval(run_id, request, token),
+                        token,
+                    )
+                current = self.repository.get(run_id)
+                if (
+                    outcome.status is RuntimeOutcomeStatus.CANCELED
+                    or current.status is AgentRunStatus.CANCELLATION_REQUESTED
+                ):
+                    target_status = AgentRunStatus.CANCELED
+                elif outcome.status is RuntimeOutcomeStatus.COMPLETED:
+                    target_status = AgentRunStatus.COMPLETED
+                else:
+                    target_status = AgentRunStatus.FAILED
+                transition_values = {
+                    "provider_thread_id": outcome.thread_id,
+                    "provider_turn_id": outcome.turn_id,
+                    "final_message": outcome.final_message,
+                    "error_code": outcome.error_code,
+                    "error_message": outcome.error_message,
+                }
+            except AgentIdentityConflictError:
+                self._record_provider_identity_mismatch(run_id)
+                target_status = AgentRunStatus.FAILED
+                transition_values = self._provider_identity_failure()
+            except Exception as error:
+                current = self.repository.get(run_id)
+                if current.status is AgentRunStatus.CANCELLATION_REQUESTED:
+                    target_status = AgentRunStatus.CANCELED
+                else:
+                    target_status = AgentRunStatus.FAILED
+                    transition_values = {
+                        "error_code": "agent_runtime_error",
+                        "error_message": str(error)[-4000:],
+                    }
+            finally:
+                if self.mcp_revoke is not None:
+                    try:
+                        self.mcp_revoke(run_id)
+                    except Exception as error:
+                        revoke_error = error
+
+            if revoke_error is not None:
+                with suppress(Exception):
+                    self.repository.append_event(
+                        run_id,
+                        "security.mcp_revoke_failed",
+                        {"error_type": type(revoke_error).__name__},
+                        visibility="internal",
+                    )
                 target_status = AgentRunStatus.FAILED
                 transition_values = {
-                    "error_code": "agent_runtime_error",
-                    "error_message": str(error)[-4000:],
+                    "error_code": "mcp_revoke_failed",
+                    "error_message": "failed to revoke the run's MCP capability",
                 }
+            return self._finish_execution(run_id, target_status, transition_values)
         finally:
             with self._lock:
                 self._tokens.pop(run_id, None)
-            if self.mcp_revoke is not None:
+
+    def _finish_execution(
+        self,
+        run_id: str,
+        target_status: AgentRunStatus,
+        transition_values: dict[str, str | None],
+    ) -> AgentRun:
+        try:
+            return self.repository.transition(run_id, target_status, **transition_values)
+        except AgentIdentityConflictError:
+            self._record_provider_identity_mismatch(run_id)
+            return self.repository.transition(
+                run_id,
+                AgentRunStatus.FAILED,
+                **self._provider_identity_failure(),
+            )
+        except AgentConflictError:
+            current = self.repository.get(run_id)
+            if current.status is AgentRunStatus.CANCELLATION_REQUESTED:
                 try:
-                    self.mcp_revoke(run_id)
-                except Exception as error:
-                    revoke_error = error
-        if revoke_error is not None:
-            with suppress(Exception):
-                self.repository.append_event(
-                    run_id,
-                    "security.mcp_revoke_failed",
-                    {"error_type": type(revoke_error).__name__},
-                    visibility="internal",
-                )
-            target_status = AgentRunStatus.FAILED
-            transition_values = {
-                "error_code": "mcp_revoke_failed",
-                "error_message": "failed to revoke the run's MCP capability",
-            }
-        return self.repository.transition(run_id, target_status, **transition_values)
+                    return self.repository.transition(
+                        run_id,
+                        AgentRunStatus.CANCELED,
+                        **transition_values,
+                    )
+                except AgentIdentityConflictError:
+                    self._record_provider_identity_mismatch(run_id)
+                    return self.repository.transition(
+                        run_id,
+                        AgentRunStatus.FAILED,
+                        **self._provider_identity_failure(),
+                    )
+            if current.status.terminal:
+                return current
+            raise
+
+    def _record_provider_identity_mismatch(self, run_id: str) -> None:
+        self.repository.append_event(
+            run_id,
+            "security.provider_thread_mismatch",
+            {},
+            visibility="internal",
+        )
+
+    @staticmethod
+    def _provider_identity_failure() -> dict[str, str | None]:
+        return {
+            "error_code": "provider_thread_mismatch",
+            "error_message": "runtime changed provider thread identity during one run",
+        }
 
     def cancel(self, run_id: str) -> AgentRun:
         run = self.repository.request_cancel(run_id)
@@ -182,8 +275,11 @@ class AgentSupervisor:
             token = self._tokens.get(run_id)
         if token is not None:
             token.cancel()
-        self.runtime.interrupt(run_id)
+        self.runtime_registry.runtime(run.runtime).interrupt(run_id)
         return run
+
+    def runtime_definitions(self) -> tuple[AgentRuntimeDefinition, ...]:
+        return self.runtime_registry.definitions()
 
     def resume(self, run_id: str, *, reasoning_effort: str | None = None) -> AgentRun:
         self.prepare_resume(run_id)
@@ -201,11 +297,16 @@ class AgentSupervisor:
         return approval
 
     def _record_event(self, run_id: str, event: RuntimeEvent) -> None:
-        self.repository.append_event(
+        thread_id = event.payload.get("thread_id") if event.event_type == "thread.started" else None
+        turn_id = event.payload.get("turn_id") if event.event_type == "turn.started" else None
+        identity_event = event.event_type in {"thread.started", "turn.started"}
+        self.repository.record_runtime_event(
             run_id,
             event.event_type,
             event.payload,
-            visibility=event.visibility,
+            visibility="internal" if identity_event else event.visibility,
+            provider_thread_id=thread_id if isinstance(thread_id, str) else None,
+            provider_turn_id=turn_id if isinstance(turn_id, str) else None,
         )
 
     def _request_approval(

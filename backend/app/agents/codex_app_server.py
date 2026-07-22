@@ -10,7 +10,6 @@ from enum import StrEnum
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from urllib.parse import urlparse
 
 from app.platform.processes import (
     CancellationToken,
@@ -32,6 +31,7 @@ from .runtime import (
     RuntimeOutcome,
     RuntimeOutcomeStatus,
     RuntimeRequest,
+    validate_runtime_mcp_credentials,
 )
 
 
@@ -138,7 +138,7 @@ class _ActiveSession:
 class CodexAppServerRuntime:
     """Codex App Server JSONL client; deliberately does not parse the terminal UI."""
 
-    name = "codex-app-server"
+    name = "codex"
 
     def __init__(
         self,
@@ -200,7 +200,10 @@ class CodexAppServerRuntime:
         process_environment: dict[str, str] = {}
         secret_values: tuple[str, ...] = ()
         if request.mcp is not None:
-            _validate_mcp_credentials(request.mcp.url, request.mcp.token_environment_variable)
+            try:
+                validate_runtime_mcp_credentials(request.mcp)
+            except ValueError as error:
+                raise CodexProtocolError(str(error)) from error
             process_environment[request.mcp.token_environment_variable] = request.mcp.bearer_token
             secret_values = (request.mcp.bearer_token,)
         spec = ProcessSpec(
@@ -297,6 +300,13 @@ class CodexAppServerRuntime:
             state.thread_id = _nested_string(thread_result, "thread", "id")
             if not state.thread_id:
                 raise CodexProtocolError("thread response did not contain a thread id")
+            emit(
+                RuntimeEvent(
+                    "thread.started",
+                    {"thread_id": state.thread_id},
+                    visibility="internal",
+                )
+            )
             turn_params: dict[str, Any] = {
                 "threadId": state.thread_id,
                 "input": [{"type": "text", "text": request.prompt}],
@@ -674,7 +684,6 @@ def normalize_codex_event(method: str, params: dict[str, Any]) -> RuntimeEvent |
             visibility="internal",
         )
     mapping = {
-        "thread/started": "thread.started",
         "turn/started": "turn.started",
         "turn/completed": "turn.completed",
         "item/agentMessage/delta": "agent.message.delta",
@@ -734,7 +743,11 @@ def normalize_codex_event(method: str, params: dict[str, Any]) -> RuntimeEvent |
     if method == "thread/tokenUsage/updated":
         return RuntimeEvent(event_type, {"usage": params.get("tokenUsage", {})})
     if method == "turn/started":
-        return RuntimeEvent(event_type, {"turn_id": _nested_string(params, "turn", "id")})
+        return RuntimeEvent(
+            event_type,
+            {"turn_id": _nested_string(params, "turn", "id")},
+            visibility="internal",
+        )
     return RuntimeEvent(event_type, {})
 
 
@@ -847,9 +860,7 @@ def _isolated_mcp_server_config(
     request: RuntimeRequest,
     disabled_servers: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    config: dict[str, Any] = {
-        name: dict(server) for name, server in disabled_servers.items()
-    }
+    config: dict[str, Any] = {name: dict(server) for name, server in disabled_servers.items()}
     if request.mcp is not None:
         config[_RESERVED_MCP_SERVER_NAME] = {
             "url": request.mcp.url,
@@ -860,20 +871,3 @@ def _isolated_mcp_server_config(
             "default_tools_approval_mode": "approve",
         }
     return config
-
-
-def _validate_mcp_credentials(url: str, environment_variable: str) -> None:
-    if environment_variable != "HXAXD_MCP_TOKEN":
-        raise CodexProtocolError("the MCP token must use the dedicated HXAXD_MCP_TOKEN variable")
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or parsed.hostname not in {
-        "127.0.0.1",
-        "::1",
-        "localhost",
-    }:
-        raise CodexProtocolError("the scoped MCP server must use a loopback HTTP endpoint")
-
-
-# ACP can be added later as another AgentRuntime implementation. Keeping that
-# protocol behind AgentRuntime prevents ACP transport choices from leaking into
-# the job, prompt, approval, or persistence models above.

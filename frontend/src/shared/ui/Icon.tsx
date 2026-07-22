@@ -22,6 +22,7 @@ export type IconName =
   | "library"
   | "maximize"
   | "menu"
+  | "monitor"
   | "moon"
   | "note"
   | "panel-left"
@@ -86,6 +87,7 @@ const paths: Record<IconName, React.ReactNode> = {
   library: <><path d="M4 19.5V4.7A1.7 1.7 0 0 1 5.7 3H8v18H5.5A1.5 1.5 0 0 1 4 19.5Z" /><path d="M8 3h5v18H8" /><path d="m13 4 4.4-1 3.6 16-4.4 1z" /></>,
   maximize: <><path d="M8 3H3v5" /><path d="M16 3h5v5" /><path d="M8 21H3v-5" /><path d="M16 21h5v-5" /></>,
   menu: <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></>,
+  monitor: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></>,
   moon: <path d="M20.7 14.3A8.5 8.5 0 0 1 9.7 3.3 8.5 8.5 0 1 0 20.7 14.3Z" />,
   note: <><path d="M5 3h14a2 2 0 0 1 2 2v10l-6 6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M14 21v-5a1 1 0 0 1 1-1h6" /><path d="M7 8h10" /><path d="M7 12h7" /></>,
   "panel-left": <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></>,

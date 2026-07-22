@@ -102,6 +102,10 @@ def test_candidate_review_is_atomic_and_exposes_source_evidence(client) -> None:
     assert workspace["contract_version"] == "4.0"
     assert workspace["counts"]["works"] == 1
     assert workspace["counts"]["attachments"] == 0
+    embedded_agent = workspace["capabilities"]["embedded_agent"]
+    assert "能力检查失败" not in embedded_agent["message"]
+    assert embedded_agent["details"]["registered_runtime_count"] == 4
+    assert 0 <= embedded_agent["details"]["ready_runtime_count"] <= 4
 
     assert client.get("/api/items/missing/history").status_code == 404
 
@@ -125,7 +129,9 @@ def test_public_contract_has_no_legacy_paper_or_prompt_context_surface(client) -
         "project_id",
         "item_id",
         "zotero_preview_id",
+        "runtime",
     }
+    assert "/api/agent-runtimes" in paths
     public_run = contract["components"]["schemas"]["PublicAgentRun"]["properties"]
     for internal in ("prompt", "cwd", "context_hash", "provider_thread_id"):
         assert internal not in public_run
@@ -135,6 +141,18 @@ def test_public_contract_has_no_legacy_paper_or_prompt_context_surface(client) -
     assert not {"blob_id", "source_url", "storage_key"} & public_attachment.keys()
     public_tool = contract["components"]["schemas"]["PublicManagedTool"]["properties"]
     assert not {"executable_path", "install_path"} & public_tool.keys()
+
+
+def test_agent_runtime_catalog_has_stable_ids_and_flash_model_contract(client) -> None:
+    response = client.get("/api/agent-runtimes")
+
+    assert response.status_code == 200
+    runtimes = {item["id"]: item for item in response.json()}
+    assert set(runtimes) == {"codex", "pi", "opencode", "claude-code"}
+    for runtime_id in ("pi", "opencode", "claude-code"):
+        assert runtimes[runtime_id]["model"] == "deepseek-v4-flash"
+        assert isinstance(runtimes[runtime_id]["ready"], bool)
+        assert runtimes[runtime_id]["message"]
 
 
 def test_frontend_contract_field_sets_match_openapi(client) -> None:

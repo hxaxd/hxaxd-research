@@ -45,9 +45,9 @@ def create_api_router(context) -> APIRouter:
     def snapshots(_: Request) -> SnapshotService:
         return context.snapshots
 
-    def agent_defaults() -> tuple[str | None, str | None]:
+    def agent_defaults() -> tuple[str | None, str | None, str | None]:
         configured = context.preferences.get().agent
-        return configured.model, configured.reasoning_effort
+        return configured.default_runtime, configured.model, configured.reasoning_effort
 
     def agent_task_definitions():
         return context.agent_prompt_context.task_definitions(
@@ -62,9 +62,7 @@ def create_api_router(context) -> APIRouter:
                 goal=payload.goal,
                 project_id=payload.project_id,
                 item_id=payload.item_id,
-                target_type=(
-                    "zotero_preview" if payload.zotero_preview_id is not None else None
-                ),
+                target_type=("zotero_preview" if payload.zotero_preview_id is not None else None),
                 target_id=payload.zotero_preview_id,
             )
         except (

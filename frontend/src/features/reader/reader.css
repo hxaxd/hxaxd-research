@@ -5,11 +5,11 @@
   justify-content: space-between;
   gap: 30px;
   margin: auto;
-  border: 1px dashed #3a4254;
+  border: 1px dashed var(--border);
   border-radius: var(--radius-lg);
   padding: 30px;
   background:
-    radial-gradient(circle at 0 0, rgb(139 141 246 / 10%), transparent 36%),
+    radial-gradient(circle at 0 0, var(--accent-soft), transparent 36%),
     var(--surface);
   box-shadow: var(--shadow-sm);
 }
@@ -66,7 +66,7 @@
   gap: 14px;
   padding: 9px 12px;
   border-bottom: 1px solid var(--border);
-  background: #121620;
+  background: var(--surface-inset);
   box-shadow: 0 6px 22px rgb(0 0 0 / 12%);
 }
 
@@ -91,7 +91,7 @@
   padding: 3px;
   border: 1px solid var(--border-soft);
   border-radius: 10px;
-  background: #0b0e14;
+  background: var(--input-bg);
 }
 
 .segmented {
@@ -114,11 +114,11 @@
 }
 
 .toolbar-group--versions .segmented.active {
-  color: #c8c9ff;
+  color: var(--accent);
 }
 
 .toolbar-group--reader-mode {
-  border-color: rgb(166 167 255 / 22%);
+  border-color: var(--accent-border);
 }
 
 .toolbar-group--reader-mode .segmented {
@@ -153,7 +153,7 @@
   outline: 0;
   background:
     radial-gradient(circle at 50% -10%, rgb(255 255 255 / 3%), transparent 34%),
-    #171b23;
+    #1c1b1a;
 }
 
 .pdf-scroll-container {
@@ -189,13 +189,13 @@
   mix-blend-mode: multiply;
 }
 
-.pdf-annotation-mark--question { background: rgb(205 107 244 / 30%); }
+.pdf-annotation-mark--question { background: color-mix(in srgb, var(--purple) 34%, transparent); }
 .pdf-annotation-mark--claim,
-.pdf-annotation-mark--result { background: rgb(74 222 128 / 30%); }
-.pdf-annotation-mark--method { background: rgb(96 165 250 / 30%); }
-.pdf-annotation-mark--limitation { background: rgb(248 113 113 / 30%); }
+.pdf-annotation-mark--result { background: color-mix(in srgb, var(--success) 34%, transparent); }
+.pdf-annotation-mark--method { background: color-mix(in srgb, var(--blue) 34%, transparent); }
+.pdf-annotation-mark--limitation { background: color-mix(in srgb, var(--danger) 34%, transparent); }
 .pdf-annotation-mark--excerpt,
-.pdf-annotation-mark--bibliographic_note { background: rgb(166 167 255 / 30%); }
+.pdf-annotation-mark--bibliographic_note { background: color-mix(in srgb, var(--accent) 34%, transparent); }
 
 .pdf-viewer--dark .pdfViewer .page {
   filter: invert(0.9) hue-rotate(180deg) brightness(0.88) contrast(0.92);
@@ -217,7 +217,7 @@
   border: 1px solid var(--border);
   border-radius: 13px;
   padding: 5px;
-  background: rgb(13 17 24 / 96%);
+  background: var(--overlay-bg);
   box-shadow: 0 14px 42px rgb(0 0 0 / 45%);
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
@@ -253,7 +253,7 @@
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 9px 12px;
-  background: rgb(13 17 24 / 94%);
+  background: var(--overlay-bg);
   color: var(--text-muted);
   box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
   font-size: 12px;
@@ -267,7 +267,7 @@
   gap: 5px;
   padding: 7px 12px;
   border-bottom: 1px solid var(--border-soft);
-  background: #10141c;
+  background: var(--surface-inset);
 }
 
 .pdf-findbar label {
@@ -324,7 +324,7 @@
   overflow: auto;
   border-left: 1px solid var(--border);
   padding: 14px 14px 70px;
-  background: rgb(12 15 22 / 98%);
+  background: var(--overlay-bg);
   box-shadow: -24px 0 60px rgb(0 0 0 / 40%);
 }
 
@@ -395,7 +395,7 @@
 }
 
 .pdf-viewer:focus-visible {
-  box-shadow: inset 0 0 0 2px rgb(166 167 255 / 40%);
+  box-shadow: inset 0 0 0 2px var(--accent-border);
 }
 
 .pdf-page-stage {
@@ -431,10 +431,10 @@
   right: 50%;
   margin: 0;
   transform: translateX(50%);
-  border: 1px solid #3b4353;
+  border: 1px solid var(--border);
   border-radius: 13px;
   padding: 7px;
-  background: rgb(13 16 23 / 91%);
+  background: var(--overlay-bg);
   box-shadow: 0 12px 38px rgb(0 0 0 / 44%);
   color: var(--text-muted);
   backdrop-filter: blur(18px) saturate(1.25);

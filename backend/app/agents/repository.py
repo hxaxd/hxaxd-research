@@ -28,6 +28,10 @@ class AgentConflictError(RuntimeError):
     pass
 
 
+class AgentIdentityConflictError(AgentConflictError):
+    pass
+
+
 REQUIRED_TABLE_COLUMNS = {
     "agent_runs": {
         "id",
@@ -190,6 +194,14 @@ class SqliteAgentRunRepository:
                 raise AgentConflictError(
                     f"agent run cannot transition from {current_status.value} to {status.value}"
                 )
+            if (
+                provider_thread_id is not None
+                and current["provider_thread_id"] is not None
+                and current["provider_thread_id"] != provider_thread_id
+            ):
+                raise AgentIdentityConflictError(
+                    "runtime outcome does not match the persisted provider thread"
+                )
             started_at = (
                 _iso(now)
                 if status in {AgentRunStatus.STARTING, AgentRunStatus.RUNNING}
@@ -221,6 +233,79 @@ class SqliteAgentRunRepository:
             self._append_event(connection, run_id, f"run.{status.value}", {})
             updated = self._require_run(connection, run_id)
         return self._run(updated)
+
+    def claim_execution(self, run_id: str) -> AgentRun:
+        """Atomically claims a created run so cancellation cannot split startup states."""
+
+        now = _now()
+        with self._transaction(immediate=True) as connection:
+            current = self._require_run(connection, run_id)
+            status = AgentRunStatus(current["status"])
+            if status is not AgentRunStatus.CREATED:
+                raise AgentConflictError(
+                    f"agent run cannot execute from {status.value}"
+                )
+            connection.execute(
+                """
+                UPDATE agent_runs SET status = 'running', updated_at = ?, started_at = ?
+                WHERE id = ?
+                """,
+                (_iso(now), _iso(now), run_id),
+            )
+            self._append_event(connection, run_id, "run.starting", {})
+            self._append_event(connection, run_id, "run.running", {})
+            updated = self._require_run(connection, run_id)
+        return self._run(updated)
+
+    def record_runtime_event(
+        self,
+        run_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        visibility: str = "public",
+        provider_thread_id: str | None = None,
+        provider_turn_id: str | None = None,
+    ) -> int:
+        """Atomically persists provider identity with the event that established it."""
+
+        if provider_thread_id is not None and not provider_thread_id.strip():
+            raise ValueError("provider thread id cannot be blank")
+        if provider_turn_id is not None and not provider_turn_id.strip():
+            raise ValueError("provider turn id cannot be blank")
+        with self._transaction(immediate=True) as connection:
+            current = self._require_run(connection, run_id)
+            if (
+                provider_thread_id is not None
+                and current["provider_thread_id"] is not None
+                and current["provider_thread_id"] != provider_thread_id
+            ):
+                raise AgentIdentityConflictError(
+                    "runtime attempted to replace the persisted provider thread"
+                )
+            if provider_thread_id is not None or provider_turn_id is not None:
+                connection.execute(
+                    """
+                    UPDATE agent_runs SET
+                        provider_thread_id = COALESCE(?, provider_thread_id),
+                        provider_turn_id = COALESCE(?, provider_turn_id),
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        provider_thread_id,
+                        provider_turn_id,
+                        _iso(_now()),
+                        run_id,
+                    ),
+                )
+            return self._append_event(
+                connection,
+                run_id,
+                event_type,
+                payload,
+                visibility=visibility,
+            )
 
     def prepare_resume(self, run_id: str) -> AgentRun:
         now = _now()

@@ -54,17 +54,14 @@ class GlossaryPreference(_PreferencesModel):
 class TranslationPreferences(_PreferencesModel):
     provider: str = Field(default="deepseek", min_length=1, max_length=80)
     model: str = Field(default="deepseek-v4-flash", min_length=1, max_length=160)
-    style: Literal["faithful_academic", "natural_academic", "concise"] = (
-        "faithful_academic"
-    )
-    batching: Literal["whole_with_fallback", "whole_only", "chapter"] = (
-        "whole_with_fallback"
-    )
+    style: Literal["faithful_academic", "natural_academic", "concise"] = "faithful_academic"
+    batching: Literal["whole_with_fallback", "whole_only", "chapter"] = "whole_with_fallback"
     glossary: list[GlossaryPreference] = Field(default_factory=list, max_length=500)
     retranslate_scope: Literal["changed", "document"] = "changed"
 
 
 class AgentPreferences(_PreferencesModel):
+    default_runtime: Literal["codex", "pi", "opencode", "claude-code"] = "codex"
     model: str | None = Field(default=None, max_length=160)
     reasoning_effort: Literal["low", "medium", "high", "xhigh"] = "high"
     enabled_capabilities: list[

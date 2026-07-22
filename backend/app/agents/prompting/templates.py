@@ -27,9 +27,7 @@ TASK_CONTEXT_CONSTRAINTS: dict[str, tuple[str, ...]] = {
     "resource_acquisition": (
         "资源获取只能提交候选 URL 与附件属性；下载必须等待用户批准后由任务系统执行。",
     ),
-    "conflict_resolution": (
-        "只能提出冲突处理建议；最终选择与执行必须由用户和确定性代码完成。",
-    ),
+    "conflict_resolution": ("只能提出冲突处理建议；最终选择与执行必须由用户和确定性代码完成。",),
 }
 
 

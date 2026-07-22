@@ -17,6 +17,7 @@ from app.agents.prompting import (
     STAGE_SCOPE,
     ZOTERO_CONFLICT_PROPOSE_SCOPE,
 )
+from app.agents.runtime import WEB_SEARCH_SCOPE
 from app.catalog.models import BibliographicItemDraft, BibliographicItemPatch
 from app.catalog.queries import CatalogQueries
 from app.changes import ChangeSetCreate, ChangeSetService
@@ -41,6 +42,7 @@ from app.screening.queries import ScreeningQueries
 from app.workspace.service import WorkspaceProjectionService
 
 from .capabilities import AgentCapabilityRegistry
+from .web_search import LiteratureWebSearch, WebSearchIntent
 
 
 class AgentToolPermissionError(PermissionError):
@@ -68,6 +70,7 @@ class AgentToolFacade:
         screening_commands: ScreeningCommands,
         changes: ChangeSetService,
         zotero: ZoteroTransferService,
+        web_search: LiteratureWebSearch | None = None,
     ) -> None:
         self.workspace = workspace
         self.catalog = catalog
@@ -75,6 +78,7 @@ class AgentToolFacade:
         self.screening_commands = screening_commands
         self.changes = changes
         self.zotero = zotero
+        self.web_search_service = web_search or LiteratureWebSearch()
 
     def workspace_summary(self, caller: _Caller) -> dict[str, Any]:
         self._require(caller, READ_SCOPE)
@@ -138,6 +142,25 @@ class AgentToolFacade:
             candidate.model_dump(mode="json")
             for candidate in page.items
         ]
+
+    def web_search(
+        self,
+        caller: _Caller,
+        query: str,
+        *,
+        limit: int = 8,
+        intent: WebSearchIntent = "academic",
+        from_year: int | None = None,
+        to_year: int | None = None,
+    ) -> dict[str, Any]:
+        self._require(caller, WEB_SEARCH_SCOPE)
+        return self.web_search_service.search(
+            query,
+            limit=limit,
+            intent=intent,
+            from_year=from_year,
+            to_year=to_year,
+        )
 
     def stage_candidate(
         self,
@@ -483,6 +506,36 @@ def create_agent_mcp_server(
         return facade.candidates(_caller(), project_id, state, limit, offset)
 
     @server.tool(
+        name="web_search",
+        description=(
+            "Search fixed scholarly web indexes for sourced literature metadata and open "
+            "resources. Returns titles, URLs, snippets, identifiers, authors, years, and "
+            "available PDF links."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=True,
+        ),
+    )
+    def web_search(
+        query: str,
+        limit: int = 8,
+        intent: WebSearchIntent = "academic",
+        from_year: int | None = None,
+        to_year: int | None = None,
+    ) -> dict[str, Any]:
+        return facade.web_search(
+            _caller(),
+            query,
+            limit=limit,
+            intent=intent,
+            from_year=from_year,
+            to_year=to_year,
+        )
+
+    @server.tool(
         name="stage_candidate",
         description=(
             "Stage a sourced bibliographic candidate for user review. This never includes, "
@@ -491,7 +544,7 @@ def create_agent_mcp_server(
         annotations=ToolAnnotations(
             readOnlyHint=False,
             destructiveHint=False,
-            idempotentHint=False,
+            idempotentHint=True,
             openWorldHint=False,
         ),
     )

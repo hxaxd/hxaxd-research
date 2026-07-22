@@ -16,16 +16,30 @@ from app.agents import (
     AgentPromptContextBuilder,
     AgentRun,
     AgentRunJobHandler,
+    AgentRuntimeDefinition,
+    AgentRuntimeRegistry,
     AgentSupervisor,
     PromptAssembler,
+    RegisteredAgentRuntime,
     RuntimeMcpCredentials,
     RuntimeOutcome,
     SqliteAgentRunRepository,
+)
+from app.agents.claude_code import (
+    ClaudeCodeRuntime,
+    discover_claude_deepseek_environment,
+    register_claude_code_executable,
 )
 from app.agents.codex_app_server import (
     CodexAppServerRuntime,
     register_codex_executable,
 )
+from app.agents.open_code_acp import (
+    OpenCodeAcpRuntime,
+    discover_opencode_deepseek_key,
+    register_opencode_executable,
+)
+from app.agents.pi_rpc import PiRpcRuntime, register_pi_executable
 from app.agents.runtime import RuntimeOutcomeStatus, RuntimeRequest
 from app.catalog import CatalogCommands, CatalogQueries
 from app.changes import ChangeSetRepository, ChangeSetService
@@ -74,10 +88,10 @@ from .config import Settings
 
 
 class _UnavailableAgentRuntime:
-    name = "codex-app-server"
     version = None
 
-    def __init__(self, reason: str) -> None:
+    def __init__(self, name: str, reason: str) -> None:
+        self.name = name
         self.reason = reason
 
     def run(self, request: RuntimeRequest, *_: Any) -> RuntimeOutcome:
@@ -210,7 +224,26 @@ def build_app_context(settings: Settings) -> AppContext:
     process_runner = ProcessRunner(
         executable_registry,
         allowed_environment=DEFAULT_ENVIRONMENT_ALLOWLIST
-        | frozenset({"PDF2ZH_DEEPSEEK_API_KEY", "HXAXD_MCP_TOKEN"}),
+        | frozenset(
+            {
+                "ANTHROPIC_API_KEY",
+                "ANTHROPIC_AUTH_TOKEN",
+                "ANTHROPIC_BASE_URL",
+                "ANTHROPIC_MODEL",
+                "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL",
+                "CLAUDE_CODE_SUBAGENT_MODEL",
+                "CLAUDE_CONFIG_DIR",
+                "DEEPSEEK_API_KEY",
+                "HXAXD_MCP_TOKEN",
+                "OPENCODE_CONFIG_CONTENT",
+                "PDF2ZH_DEEPSEEK_API_KEY",
+                "XDG_CACHE_HOME",
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+            }
+        ),
     )
     job_repository = SqliteJobRepository(settings.database_path)
     job_registry = JobRegistry()
@@ -274,21 +307,101 @@ def build_app_context(settings: Settings) -> AppContext:
         zotero_service,
     )
 
-    agent_runtime_ready = True
-    agent_runtime_message = "Codex 应用服务器已就绪"
-    try:
-        register_codex_executable(
-            executable_registry,
-            settings.codex_executable,
-        )
-        agent_runtime = CodexAppServerRuntime(
-            process_runner,
-            settings.agent_work_dir,
-        )
-    except (FileNotFoundError, OSError, ValueError) as error:
-        agent_runtime_ready = False
-        agent_runtime_message = "Codex 应用服务器不可用；请检查本机运行时配置"
-        agent_runtime = _UnavailableAgentRuntime(str(error))
+    registrations: list[RegisteredAgentRuntime] = []
+
+    def register_runtime(
+        runtime_id: str,
+        label: str,
+        transport: str,
+        factory,
+        *,
+        model: str | None = None,
+        model_aliases: frozenset[str] = frozenset(),
+    ) -> None:
+        try:
+            runtime = factory()
+            definition = AgentRuntimeDefinition(
+                id=runtime_id,
+                label=label,
+                transport=transport,
+                ready=True,
+                message=f"{label} 已就绪",
+                version=runtime.version,
+                model=model,
+                model_aliases=model_aliases,
+            )
+        except (FileNotFoundError, OSError, ValueError) as error:
+            reason = str(error)
+            runtime = _UnavailableAgentRuntime(runtime_id, reason)
+            definition = AgentRuntimeDefinition(
+                id=runtime_id,
+                label=label,
+                transport=transport,
+                ready=False,
+                message=f"{label} 不可用：{reason}",
+                model=model,
+                model_aliases=model_aliases,
+            )
+        registrations.append(RegisteredAgentRuntime(definition, runtime))
+
+    register_runtime(
+        "codex",
+        "Codex",
+        "app-server",
+        lambda: (
+            register_codex_executable(executable_registry, settings.codex_executable)
+            and CodexAppServerRuntime(process_runner, settings.agent_work_dir)
+        ),
+    )
+    register_runtime(
+        "pi",
+        "Pi",
+        "rpc",
+        lambda: (
+            register_pi_executable(executable_registry, settings.pi_executable)
+            and PiRpcRuntime(process_runner, settings.agent_work_dir)
+        ),
+        model="deepseek-v4-flash",
+        model_aliases=frozenset({"deepseek/deepseek-v4-flash"}),
+    )
+    register_runtime(
+        "opencode",
+        "OpenCode",
+        "acp",
+        lambda: (
+            register_opencode_executable(executable_registry, settings.opencode_executable)
+            and OpenCodeAcpRuntime(
+                process_runner,
+                settings.agent_work_dir,
+                deepseek_api_key=discover_opencode_deepseek_key(),
+            )
+        ),
+        model="deepseek-v4-flash",
+        model_aliases=frozenset({"deepseek/deepseek-v4-flash"}),
+    )
+    register_runtime(
+        "claude-code",
+        "Claude Code",
+        "stream-json",
+        lambda: (
+            register_claude_code_executable(executable_registry, settings.claude_code_executable)
+            and ClaudeCodeRuntime(
+                process_runner,
+                settings.agent_work_dir,
+                provider_environment=discover_claude_deepseek_environment(),
+            )
+        ),
+        model="deepseek-v4-flash",
+    )
+    agent_runtime_registry = AgentRuntimeRegistry(
+        tuple(registrations),
+        default_runtime="codex",
+    )
+    ready_runtimes = [item.definition.label for item in registrations if item.definition.ready]
+    agent_runtime_ready = bool(ready_runtimes)
+    agent_runtime_message = (
+        f"已就绪：{'、'.join(ready_runtimes)}" if ready_runtimes else "没有可用的内嵌智能体运行时"
+    )
 
     def tool_capability(name: ManagedToolName) -> RuntimeCapability:
         tool = operations.get_tool(name)
@@ -362,6 +475,10 @@ def build_app_context(settings: Settings) -> AppContext:
                 supported=True,
                 ready=agent_runtime_ready,
                 message=agent_runtime_message,
+                details={
+                    "registered_runtime_count": len(registrations),
+                    "ready_runtime_count": len(ready_runtimes),
+                },
             ),
             "zotero": lambda: _zotero_capability(zotero_service),
         },
@@ -410,7 +527,7 @@ def build_app_context(settings: Settings) -> AppContext:
 
     agent_supervisor = AgentSupervisor(
         agent_repository,
-        agent_runtime,
+        agent_runtime_registry,
         PromptAssembler(),
         settings.agent_work_dir,
         mcp_credentials=mcp_credentials,

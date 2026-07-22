@@ -3,7 +3,7 @@
 .resource-actions > header h2 { margin: 3px 0 0; }
 .resource-actions > header a,
 .resource-message a { display: inline-flex; min-height: 44px; align-items: center; color: var(--accent); font-size: 11px; }
-.resource-actions details { border: 1px solid var(--border-soft); border-radius: 9px; background: #0d1017; }
+.resource-actions details { border: 1px solid var(--border-soft); border-radius: 9px; background: var(--surface-inset); }
 .resource-actions summary { display: flex; min-height: 44px; align-items: center; gap: 7px; padding: 0 10px; color: var(--text-muted); cursor: pointer; font-size: 12px; }
 .resource-actions form { display: grid; gap: 7px; border-top: 1px solid var(--border-soft); padding: 9px; }
 .resource-actions input,

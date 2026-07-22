@@ -10,9 +10,7 @@ from .templates import PROMPT_VERSION, render_user_prompt
 class PromptAssembler:
     """Build a deterministic user message from a trusted context projection."""
 
-    def __init__(
-        self, *, version: str = PROMPT_VERSION, max_characters: int = 200_000
-    ) -> None:
+    def __init__(self, *, version: str = PROMPT_VERSION, max_characters: int = 200_000) -> None:
         self.version = version
         self.max_characters = max_characters
 

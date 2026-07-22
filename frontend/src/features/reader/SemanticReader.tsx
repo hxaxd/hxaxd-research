@@ -454,6 +454,7 @@ export function SemanticReader({
           retranslate_scope: "changed",
         },
         agent: preferences.data?.agent ?? {
+          default_runtime: "codex",
           model: null,
           reasoning_effort: "high",
           context_summary: "balanced",

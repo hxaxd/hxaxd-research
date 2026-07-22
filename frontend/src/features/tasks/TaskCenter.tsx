@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { agentRuntimeLabel } from "../agents/AgentRuntimePicker";
 import { ChangeSetReview } from "../changes/ChangeSetReview";
 import { api } from "../../shared/api/client";
 import type {
@@ -187,7 +188,7 @@ export function TaskCenter({
                     <span>
                       <strong>{run.goal}</strong>
                       <small>
-                        {agentTaskLabel(run.task_kind)} ·{" "}
+                        {agentRuntimeLabel(run.runtime)} · {agentTaskLabel(run.task_kind)} ·{" "}
                         {formatDateTime(run.created_at)}
                       </small>
                     </span>
@@ -277,6 +278,10 @@ function AgentSummary({
           {agentStatusLabel(run.status)}
         </span>
       </div>
+      <div className="task-runtime-summary">
+        <span><Icon name="terminal" size={14} />{agentRuntimeLabel(run.runtime)}</span>
+        <span>{run.model || "跟随运行环境"}</span>
+      </div>
       {run.final_message ? (
         <section className="task-result-card">
           <strong>运行结果</strong>
@@ -294,7 +299,7 @@ function AgentSummary({
           <dd>{run.task_kind}</dd>
           <dt>运行环境</dt>
           <dd>
-            {run.runtime}
+            {agentRuntimeLabel(run.runtime)}
             {run.runtime_version ? ` ${run.runtime_version}` : ""}
           </dd>
           <dt>模型</dt>

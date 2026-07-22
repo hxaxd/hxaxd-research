@@ -22,5 +22,5 @@ export function TasksPage() {
   if (!resource.data) return <AsyncMessage kind="empty">暂无任务记录</AsyncMessage>;
   const [jobs, runs, changeSets] = resource.data;
   const visibleJobs = jobs.filter((job) => job.kind !== "agent.run");
-  return <section className="workspace-page"><div className="workspace-content"><header className="page-header compact-page-header"><div><span className="eyebrow">任务与决策</span><h1>继续运行，审阅结果</h1><p>这里集中处理需要你决定的建议、智能体结果和后台执行；失败记录可以直接恢复。</p></div></header><TaskCenter jobs={visibleJobs} runs={runs} changeSets={changeSets.items} initialSelectedId={searchParams.get("job")} onChanged={resource.reload} onSelected={(id) => setSearchParams(id ? { job: id } : {}, { replace: true })} /></div></section>;
+  return <section className="tasks-page workspace-page"><div className="workspace-content"><header className="page-header compact-page-header"><div><span className="eyebrow">任务与决策</span><h1>继续运行，审阅结果</h1><p>这里集中处理需要你决定的建议、智能体结果和后台执行；失败记录可以直接恢复。</p></div></header><TaskCenter jobs={visibleJobs} runs={runs} changeSets={changeSets.items} initialSelectedId={searchParams.get("job")} onChanged={resource.reload} onSelected={(id) => setSearchParams(id ? { job: id } : {}, { replace: true })} /></div></section>;
 }

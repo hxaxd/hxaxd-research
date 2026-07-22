@@ -59,7 +59,7 @@ export function CandidateInbox({ candidates, deciding, onDecisions }: Props) {
   );
   const [selectedId, setSelectedId] = useState<string | null>(pending[0]?.id ?? null);
   const [inspectorOpen, setInspectorOpen] = useState(
-    () => !window.matchMedia("(max-width: 940px)").matches,
+    () => !window.matchMedia("(max-width: 720px)").matches,
   );
   const [batchSelection, setBatchSelection] = useState<Set<string>>(new Set());
   const [reasons, setReasons] = useState<Record<string, string>>({});
@@ -68,7 +68,7 @@ export function CandidateInbox({ candidates, deciding, onDecisions }: Props) {
   const busy = deciding !== null;
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 940px)");
+    const media = window.matchMedia("(max-width: 720px)");
     const syncInspector = () => setInspectorOpen(!media.matches);
     media.addEventListener("change", syncInspector);
     return () => media.removeEventListener("change", syncInspector);
@@ -160,28 +160,30 @@ export function CandidateInbox({ candidates, deciding, onDecisions }: Props) {
             <button className="primary-button" type="button" disabled={busy} onClick={() => void submitBatch("include")}>{deciding === "batch" ? "提交中…" : "批量收录"}</button>
           </div>
         </div> : null}
-        {pending.map((candidate) => (
-          <div
-            className={candidate.id === selected?.id ? "candidate-row candidate-row--selected" : "candidate-row"}
-            key={candidate.id}
-          >
-            <button
-              aria-label={`${batchSelection.has(candidate.id) ? "取消选择" : "选择"} ${candidate.item.title}`}
-              aria-pressed={batchSelection.has(candidate.id)}
-              className="candidate-batch-toggle"
-              type="button"
-              disabled={busy}
-              onClick={() => toggleBatch(candidate.id)}
-            ><Icon name="check" size={15} /></button>
-            <button className="candidate-row-main" type="button" onClick={() => selectCandidate(candidate.id)}>
-              <span className="candidate-rank" title="来源结果中的顺序；数字越小越靠前">
-                {candidateRankLabel(candidate.rank)}
-              </span>
-              <span className="candidate-row-copy"><strong>{candidate.item.translated_title || candidate.item.title}</strong><small>{candidate.item.title}</small><em>{candidateCreatorLine(candidate.item)} · {candidate.item.issued_year ?? "年份未知"}</em></span>
-              {candidate.matched_work_id ? <span className="match-badge">可能重复</span> : null}
-            </button>
-          </div>
-        ))}
+        <div className="candidate-list-scroll">
+          {pending.map((candidate) => (
+            <div
+              className={candidate.id === selected?.id ? "candidate-row candidate-row--selected" : "candidate-row"}
+              key={candidate.id}
+            >
+              <button
+                aria-label={`${batchSelection.has(candidate.id) ? "取消选择" : "选择"} ${candidate.item.title}`}
+                aria-pressed={batchSelection.has(candidate.id)}
+                className="candidate-batch-toggle"
+                type="button"
+                disabled={busy}
+                onClick={() => toggleBatch(candidate.id)}
+              ><Icon name="check" size={15} /></button>
+              <button className="candidate-row-main" type="button" onClick={() => selectCandidate(candidate.id)}>
+                <span className="candidate-rank" title="来源结果中的顺序；数字越小越靠前">
+                  {candidateRankLabel(candidate.rank)}
+                </span>
+                <span className="candidate-row-copy"><strong>{candidate.item.translated_title || candidate.item.title}</strong><small>{candidate.item.title}</small><em>{candidateCreatorLine(candidate.item)} · {candidate.item.issued_year ?? "年份未知"}</em></span>
+                {candidate.matched_work_id ? <span className="match-badge">可能重复</span> : null}
+              </button>
+            </div>
+          ))}
+        </div>
       </section>
       {selected ? <CandidateInspector
         key={selected.id}

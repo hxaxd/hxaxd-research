@@ -132,6 +132,17 @@ class PublicAgentTaskDefinition(BaseModel):
     missing_reason: str | None = None
 
 
+class PublicAgentRuntimeDefinition(BaseModel):
+    id: str
+    label: str
+    transport: str
+    ready: bool
+    message: str
+    version: str | None = None
+    model: str | None = None
+    supports_resume: bool = True
+
+
 class AgentEvent(BaseModel):
     id: int
     run_id: str

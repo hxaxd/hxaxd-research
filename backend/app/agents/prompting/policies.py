@@ -25,12 +25,8 @@ _CAPABILITY_SCOPES = {
 
 _REQUIRED_CAPABILITIES: dict[str, frozenset[str]] = {
     "literature_search": frozenset({"catalog_read", "candidate_propose", "web_search"}),
-    "metadata_enrichment": frozenset(
-        {"catalog_read", "metadata_propose", "web_search"}
-    ),
-    "resource_acquisition": frozenset(
-        {"catalog_read", "resource_propose", "web_search"}
-    ),
+    "metadata_enrichment": frozenset({"catalog_read", "metadata_propose", "web_search"}),
+    "resource_acquisition": frozenset({"catalog_read", "resource_propose", "web_search"}),
     "conflict_resolution": frozenset({"catalog_read", "zotero_conflict_propose"}),
 }
 
@@ -143,6 +139,8 @@ class AgentTaskPolicyRegistry:
                     "list_candidates",
                 )
             )
+        if WEB_SEARCH_SCOPE in scopes:
+            tools.append("web_search")
         if STAGE_SCOPE in scopes:
             tools.append("stage_candidate")
         if METADATA_PROPOSE_SCOPE in scopes:
@@ -152,9 +150,7 @@ class AgentTaskPolicyRegistry:
         if PROJECT_INSIGHTS_PROPOSE_SCOPE in scopes:
             tools.append("propose_project_insights")
         if ZOTERO_CONFLICT_PROPOSE_SCOPE in scopes:
-            tools.extend(
-                ("get_zotero_transfer_preview", "propose_zotero_conflict_resolution")
-            )
+            tools.extend(("get_zotero_transfer_preview", "propose_zotero_conflict_resolution"))
         return tuple(tools)
 
     @staticmethod
@@ -168,9 +164,7 @@ class AgentTaskPolicyRegistry:
         enabled = set(enabled_capabilities)
         missing = _REQUIRED_CAPABILITIES.get(policy.name, frozenset()) - enabled
         if missing:
-            raise ValueError(
-                "当前智能体设置关闭了任务必需能力：" + ", ".join(sorted(missing))
-            )
+            raise ValueError("当前智能体设置关闭了任务必需能力：" + ", ".join(sorted(missing)))
         enabled_scopes = {
             scope for capability, scope in _CAPABILITY_SCOPES.items() if capability in enabled
         }

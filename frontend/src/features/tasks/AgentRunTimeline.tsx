@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentRun, Approval } from "../../shared/api/contracts";
 import { formatDateTime } from "../../shared/lib/format";
 import { Icon } from "../../shared/ui/Icon";
+import { agentRuntimeLabel } from "../agents/AgentRuntimePicker";
 import { ApprovalCard } from "./ApprovalCard";
 
 interface Props {
@@ -22,7 +23,7 @@ export function AgentRunTimeline({ run, events, approvals, streamState, busyAppr
     <header><div><span className="eyebrow">智能体任务</span><h2>{run.goal}</h2></div><span className={`run-status run-status--${run.status}`}><i />{runStatusLabel(run.status)}</span></header>
     {run.final_message ? <section className="run-final-message run-final-message--primary"><Icon name="check" size={18} /><div><strong>运行结果</strong><p>{run.final_message}</p></div></section> : null}
     {run.error_message ? <div className="run-error"><Icon name="close" size={16} /><div><strong>运行未完成</strong><p>{run.error_message}</p></div></div> : null}
-    <div className="timeline-meta"><span>{taskLabel(run.task_kind)}</span><span>{run.model || "跟随运行环境"}</span><span className={`stream-state stream-state--${streamState}`}>{streamStateLabel(streamState)}</span><details><summary>系统诊断</summary><p>{run.runtime}{run.runtime_version ? ` ${run.runtime_version}` : ""} · 推理强度 {run.reasoning_effort || "默认"}</p></details></div>
+    <div className="timeline-meta"><span className="timeline-runtime"><Icon name="terminal" size={13} />{agentRuntimeLabel(run.runtime)}</span><span>{taskLabel(run.task_kind)}</span><span>{run.model || "跟随运行环境"}</span><span className={`stream-state stream-state--${streamState}`}>{streamStateLabel(streamState)}</span><details><summary>系统诊断</summary><p>{agentRuntimeLabel(run.runtime)}{run.runtime_version ? ` ${run.runtime_version}` : ""} · 推理强度 {run.reasoning_effort || "默认"}</p></details></div>
     <div className="timeline-events">
       {pendingApprovals.map((approval) => <ApprovalCard key={approval.id} approval={approval} busy={busyApproval === approval.id} onApprove={() => onApproval(approval, "approve")} onReject={() => onApproval(approval, "reject")} />)}
       {visibleEvents.map((event) => <article className="timeline-event" key={event.id}><span className="timeline-marker"><Icon name={eventIcon(event.event_type)} size={14} /></span><div><div><strong>{eventLabel(event.event_type)}</strong><time>{formatDateTime(event.created_at)}</time></div><EventPayload event={event} /></div></article>)}

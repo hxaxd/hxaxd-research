@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
+import { AgentRuntimePicker } from "../agents/AgentRuntimePicker";
 import { api } from "../../shared/api/client";
 import type {
   AgentPreferences,
+  AgentRuntimeDefinition,
   BilingualPreferences,
   PdfPreferences,
   ReaderPreferences,
@@ -36,6 +38,7 @@ const capabilityLabels: Record<AgentPreferences["enabled_capabilities"][number],
 
 export function WorkspacePreferencesSettings() {
   const resource = useApiResource(() => api.userPreferences(), []);
+  const runtimes = useApiResource(() => api.agentRuntimes(), []);
   const [draft, setDraft] = useState<UserPreferences | null>(null);
   const [section, setSection] = useState<Section>("reader");
   const [glossaryText, setGlossaryText] = useState("");
@@ -112,7 +115,7 @@ export function WorkspacePreferencesSettings() {
         {section === "bilingual" ? <BilingualFields value={draft.bilingual} onChange={(value) => patch("bilingual", value)} /> : null}
         {section === "pdf" ? <PdfFields value={draft.pdf} onChange={(value) => patch("pdf", value)} /> : null}
         {section === "translation" ? <TranslationFields value={draft.translation} glossaryText={glossaryText} onGlossaryText={setGlossaryText} onChange={(value) => patch("translation", value)} /> : null}
-        {section === "agent" ? <AgentFields value={draft.agent} onChange={(value) => patch("agent", value)} /> : null}
+        {section === "agent" ? <AgentFields error={runtimes.error} loading={runtimes.loading} runtimes={runtimes.data ?? []} value={draft.agent} onChange={(value) => patch("agent", value)} /> : null}
         {section === "tasks" ? <TaskFields value={draft.tasks} onChange={(value) => patch("tasks", value)} /> : null}
       </div>
       <footer className="preferences-actions"><p>{feedback || "保存后，新任务使用最新配置；正在运行的任务继续使用创建时的配置快照。"}</p><button className="primary-button" disabled={busy} type="button" onClick={() => void save()}><Icon name="check" size={15} />{busy ? "保存中…" : "保存全部设置"}</button></footer>
@@ -167,15 +170,17 @@ function TranslationFields({ value, glossaryText, onGlossaryText, onChange }: { 
   </div></fieldset>;
 }
 
-function AgentFields({ value, onChange }: { value: AgentPreferences; onChange: (value: AgentPreferences) => void }) {
+function AgentFields({ value, runtimes, loading, error, onChange }: { value: AgentPreferences; runtimes: AgentRuntimeDefinition[]; loading: boolean; error: string | null; onChange: (value: AgentPreferences) => void }) {
   function toggle(capability: AgentPreferences["enabled_capabilities"][number], checked: boolean) {
     onChange({ ...value, enabled_capabilities: checked ? [...value.enabled_capabilities, capability] : value.enabled_capabilities.filter((item) => item !== capability) });
   }
-  return <fieldset><legend>智能体运行默认值与能力边界</legend><div className="preferences-fields">
-    <TextField label="默认模型（留空跟随运行时）" value={value.model ?? ""} onChange={(model) => onChange({ ...value, model: model.trim() || null })} />
+  return <fieldset><legend>智能体运行默认值与能力边界</legend>
+    <AgentRuntimePicker codexModel={value.model} error={error} loading={loading} runtimes={runtimes} value={value.default_runtime} onChange={(default_runtime) => onChange({ ...value, default_runtime })} />
+    <div className="preferences-fields">
+    <TextField label="Codex 默认模型（仅 Codex 使用）" value={value.model ?? ""} onChange={(model) => onChange({ ...value, model: model.trim() || null })} />
     <Select label="推理强度" value={value.reasoning_effort} onChange={(reasoning_effort) => onChange({ ...value, reasoning_effort: reasoning_effort as AgentPreferences["reasoning_effort"] })} options={[['low','低'],['medium','中'],['high','高'],['xhigh','很高']]} />
     <Select label="上下文摘要" value={value.context_summary} onChange={(context_summary) => onChange({ ...value, context_summary: context_summary as AgentPreferences["context_summary"] })} options={[['compact','紧凑'],['balanced','均衡'],['detailed','详细']]} />
-  </div><div className="preferences-capabilities">{Object.entries(capabilityLabels).map(([id, label]) => <label key={id}><input checked={value.enabled_capabilities.includes(id as AgentPreferences["enabled_capabilities"][number])} type="checkbox" onChange={(event) => toggle(id as AgentPreferences["enabled_capabilities"][number], event.target.checked)} />{label}</label>)}</div><p className="preferences-help">任务自身的最小作用域仍由后端策略决定；关闭能力只会进一步收窄，不会扩大权限。</p></fieldset>;
+  </div><div className="preferences-capabilities">{Object.entries(capabilityLabels).map(([id, label]) => <label key={id}><input checked={value.enabled_capabilities.includes(id as AgentPreferences["enabled_capabilities"][number])} type="checkbox" onChange={(event) => toggle(id as AgentPreferences["enabled_capabilities"][number], event.target.checked)} />{label}</label>)}</div><p className="preferences-help">Pi、OpenCode 与 Claude Code 固定使用 DeepSeek V4 Flash，上方的 Codex 模型字段不会覆盖它们。任务自身的最小作用域仍由后端策略决定；关闭能力只会进一步收窄，不会扩大权限。</p></fieldset>;
 }
 
 function TaskFields({ value, onChange }: { value: TaskPreferences; onChange: (value: TaskPreferences) => void }) {

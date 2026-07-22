@@ -124,6 +124,7 @@ describe("domain API client", () => {
       task_kind: "literature_search",
       goal: "Find recent memory papers",
       project_id: "project-1",
+      runtime: "pi",
     });
 
     expect(fetch).toHaveBeenCalledWith("/api/agent-runs", expect.objectContaining({ method: "POST" }));
@@ -132,7 +133,26 @@ describe("domain API client", () => {
       task_kind: "literature_search",
       goal: "Find recent memory papers",
       project_id: "project-1",
+      runtime: "pi",
     });
+  });
+
+  it("loads the advertised agent runtime status", async () => {
+    const payload = [{
+      id: "opencode",
+      label: "OpenCode",
+      transport: "acp",
+      ready: true,
+      message: "OpenCode ACP 已就绪。",
+      version: "1.2.3",
+      model: "deepseek-v4-flash",
+      supports_resume: true,
+    }];
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(api.agentRuntimes()).resolves.toEqual(payload);
+    expect(fetch.mock.calls[0]?.[0]).toBe("/api/agent-runtimes");
   });
 
   it("uploads attachments as multipart data without forcing a JSON content type", async () => {
@@ -274,7 +294,7 @@ describe("domain API client", () => {
       bilingual: { layout: "side_by_side", highlight_terms: true, synchronize_blocks: true },
       pdf: { color_mode: "original", default_zoom: "page_width", toolbar_density: "comfortable", restore_position: true },
       translation: { provider: "deepseek", model: "deepseek-v4-flash", style: "faithful_academic", batching: "whole_with_fallback", glossary: [], retranslate_scope: "changed" },
-      agent: { model: null, reasoning_effort: "high", enabled_capabilities: ["catalog_read"], context_summary: "balanced" },
+      agent: { default_runtime: "codex", model: null, reasoning_effort: "high", enabled_capabilities: ["catalog_read"], context_summary: "balanced" },
       tasks: { notify_on_success: true, notify_on_failure: true, auto_open_result: false, max_concurrent_jobs: 2 },
     });
 

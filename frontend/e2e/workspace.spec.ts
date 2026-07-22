@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import type { ChangeSet, Job, TransferPreview, TransferReceipt } from "../src/shared/api/contracts";
+import type { AgentRuntimeId, ChangeSet, Job, TransferPreview, TransferReceipt } from "../src/shared/api/contracts";
 
 const NOW = "2026-07-22T08:00:00Z";
 const PDF = "JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgKHB5cGRmKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvUGFnZXMKL0NvdW50IDEKL0tpZHMgWyA0IDAgUiBdCj4+CmVuZG9iagozIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyAyIDAgUgo+PgplbmRvYmoKNCAwIG9iago8PAovVHlwZSAvUGFnZQovUmVzb3VyY2VzIDw8Cj4+Ci9NZWRpYUJveCBbIDAuMCAwLjAgNjEyIDc5MiBdCi9QYXJlbnQgMiAwIFIKPj4KZW5kb2JqCnhyZWYKMCA1CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDU0IDAwMDAwIG4gCjAwMDAwMDAxMTMgMDAwMDAgbiAKMDAwMDAwMDE2MiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDUKL1Jvb3QgMyAwIFIKL0luZm8gMSAwIFIKPj4Kc3RhcnR4cmVmCjI1NgolJUVPRgo=";
@@ -13,6 +13,7 @@ interface MockState {
   projectItem: ReturnType<typeof projectItem>;
   attachments: ReturnType<typeof attachment>[];
   preferencesFailures: number;
+  preferenceUpdates: Array<Record<string, unknown>>;
   transfer: TransferPreview | null;
 }
 
@@ -90,12 +91,12 @@ function runningResourceJob(): Job {
   return { ...successfulResourceJob(), id: "job-direct", status: "running", result: null, finished_at: null };
 }
 
-function agentRun(id: string, taskKind: string, goal: string) {
+function agentRun(id: string, taskKind: string, goal: string, runtime: AgentRuntimeId = "codex") {
   return {
     id, task_kind: taskKind, status: "completed", goal, project_id: "project-1",
     item_id: taskKind === "literature_search" ? null : "item-1", target_type: null,
-    target_id: null, tool_scopes: [], runtime: "codex-app-server", runtime_version: "1",
-    model: "gpt-5.6-sol", reasoning_effort: "high", final_message: taskKind === "literature_search" ? "已暂存 1 条带来源证据的候选。" : "已提交资源获取变更建议。",
+    target_id: null, tool_scopes: [], runtime, runtime_version: "1",
+    model: runtime === "codex" ? "gpt-5.6-sol" : "deepseek-v4-flash", reasoning_effort: "high", final_message: taskKind === "literature_search" ? "已暂存 1 条带来源证据的候选。" : "已提交资源获取变更建议。",
     error_code: null, error_message: null, created_at: NOW, updated_at: NOW,
     started_at: NOW, finished_at: NOW, cancel_requested_at: null,
   } as const;
@@ -175,7 +176,7 @@ function preferences() {
     bilingual: { layout: "side_by_side", highlight_terms: true, synchronize_blocks: true },
     pdf: { color_mode: "original", default_zoom: "page_width", toolbar_density: "comfortable", restore_position: true },
     translation: { provider: "deepseek", model: "deepseek-v4-flash", style: "faithful_academic", batching: "whole_with_fallback", glossary: [{ source_term: "semantic block", translated_term: "语义块" }], retranslate_scope: "changed" },
-    agent: { model: null, reasoning_effort: "high", enabled_capabilities: ["catalog_read", "candidate_propose", "metadata_propose", "resource_propose", "zotero_conflict_propose", "web_search"], context_summary: "balanced" },
+    agent: { default_runtime: "codex", model: null, reasoning_effort: "high", enabled_capabilities: ["catalog_read", "candidate_propose", "metadata_propose", "resource_propose", "zotero_conflict_propose", "web_search"], context_summary: "balanced" },
     tasks: { notify_on_success: true, notify_on_failure: true, auto_open_result: false, max_concurrent_jobs: 2 }, updated_at: NOW,
   };
 }
@@ -282,16 +283,26 @@ async function handleApi(route: Route, state: MockState) {
     if (state.preferencesFailures > 0) { state.preferencesFailures -= 1; return json({ detail: "网络短暂断开，请重新读取" }, 503); }
     return json(preferences());
   }
-  if (path === "/api/user-preferences" && method === "PUT") return json({ ...preferences(), revision: 5 });
+  if (path === "/api/user-preferences" && method === "PUT") {
+    const body = request.postDataJSON() as Record<string, unknown>;
+    state.preferenceUpdates.push(body);
+    return json({ ...preferences(), ...body, revision: 5, updated_at: NOW });
+  }
   if (path === "/api/agent-task-definitions") return json([
     { id: "literature_search", label: "文献检索", description: "检索并把候选及来源证据放入项目。", scope_requirement: "project", web_search: true, scopes: ["catalog:read", "candidate:propose", "web:search"], tools: ["stage_candidate"], result_kind: "candidate", ready: true, missing_reason: null },
     { id: "metadata_enrichment", label: "元数据补全", description: "核验来源并提出字段级元数据修订。", scope_requirement: "item", web_search: true, scopes: ["catalog:read", "metadata:propose", "web:search"], tools: ["propose_metadata_patch"], result_kind: "change_set", ready: true, missing_reason: null },
     { id: "resource_acquisition", label: "资源获取", description: "查找资源并提出可审阅的 HTTPS 获取建议。", scope_requirement: "item", web_search: true, scopes: ["catalog:read", "resource:propose", "web:search"], tools: ["propose_resource_acquisition"], result_kind: "change_set", ready: true, missing_reason: null },
     { id: "conflict_resolution", label: "冲突分析", description: "分析固定 Zotero 预览中的冲突。", scope_requirement: "zotero_preview", web_search: false, scopes: ["zotero:conflict:propose"], tools: ["propose_zotero_conflict_resolution"], result_kind: "change_set", ready: true, missing_reason: null },
   ]);
+  if (path === "/api/agent-runtimes") return json([
+    { id: "codex", label: "Codex", transport: "app-server", ready: true, message: "Codex 应用服务已就绪。", version: "1", model: null, supports_resume: true },
+    { id: "pi", label: "Pi", transport: "rpc", ready: true, message: "Pi RPC 已就绪。", version: "1", model: "deepseek-v4-flash", supports_resume: true },
+    { id: "opencode", label: "OpenCode", transport: "acp", ready: true, message: "OpenCode ACP 已就绪。", version: "1", model: "deepseek-v4-flash", supports_resume: true },
+    { id: "claude-code", label: "Claude Code", transport: "stream-json", ready: false, message: "尚未安装 Claude Code。", version: null, model: "deepseek-v4-flash", supports_resume: true },
+  ]);
   if (path === "/api/agent-runs" && method === "POST") {
-    const body = request.postDataJSON() as { task_kind: string; goal: string };
-    const run = agentRun(`run-${state.runs.length + 1}`, body.task_kind, body.goal);
+    const body = request.postDataJSON() as { task_kind: string; goal: string; runtime?: AgentRuntimeId };
+    const run = agentRun(`run-${state.runs.length + 1}`, body.task_kind, body.goal, body.runtime ?? "codex");
     state.runs = [run, ...state.runs];
     if (body.task_kind === "literature_search") state.candidates = [candidate(0)];
     if (body.task_kind === "resource_acquisition") state.changes = [resourceChangeSet(run.id), ...state.changes];
@@ -391,7 +402,7 @@ function newState(count = 3): MockState {
   return {
     candidates: Array.from({ length: count }, (_, index) => candidate(index)),
     decisions: [], changes: [changeSet()], jobs: [job()], runs: [],
-    projectItem: projectItem(), attachments: [attachment()], preferencesFailures: 0,
+    projectItem: projectItem(), attachments: [attachment()], preferencesFailures: 0, preferenceUpdates: [],
     transfer: null,
   };
 }
@@ -459,6 +470,33 @@ test("complete touch workflow reaches a verified resource from discovery", async
   expect(state.runs.map((run) => run.task_kind)).toEqual(["resource_acquisition", "literature_search"]);
   expect(state.jobs.map((entry) => entry.id)).toEqual(["job-resource"]);
   await expectNoHorizontalOverflow(page);
+});
+
+test("agent runtime status, defaults and task launches stay explicit", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  const state = newState(0);
+  await mockApi(page, state);
+
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "智能体", exact: true }).tap();
+  const settingsPicker = page.locator(".preferences-panel .agent-runtime-picker");
+  await expect(settingsPicker.getByRole("radio", { name: /Codex/ })).toBeChecked();
+  await expect(settingsPicker.getByRole("radio", { name: /Claude Code/ })).toBeDisabled();
+  await expect(settingsPicker).toContainText("固定模型 · DeepSeek V4 Flash");
+  await settingsPicker.locator(".runtime-option").filter({ hasText: "OpenCode" }).tap();
+  await page.getByRole("button", { name: "保存全部设置" }).tap();
+  await expect.poll(() => state.preferenceUpdates.length).toBe(1);
+  expect(state.preferenceUpdates[0]?.agent).toEqual(expect.objectContaining({ default_runtime: "opencode" }));
+
+  await page.goto("/");
+  const launcher = page.locator(".agent-launcher").first();
+  await launcher.locator(".runtime-option").filter({ hasText: "Pi" }).tap();
+  await launcher.getByPlaceholder(/检索最近两年/).fill("用 Pi 检索可审计的文献来源。");
+  await launcher.getByRole("button", { name: "创建独立运行" }).tap();
+  await expect(page).toHaveURL(/\/agent-runs\/run-1$/);
+  expect(state.runs[0]?.runtime).toBe("pi");
+  await expect(page.locator(".timeline-runtime")).toContainText("Pi");
+  await expect(page.locator(".timeline-meta")).toContainText("deepseek-v4-flash");
 });
 
 test("item resource task refreshes attachments from its real event contract", async ({ page }) => {

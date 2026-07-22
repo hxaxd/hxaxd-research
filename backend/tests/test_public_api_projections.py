@@ -206,6 +206,9 @@ def test_agent_api_redacts_runtime_ids_approval_details_and_public_events(tmp_pa
         "web_search.started",
         {
             "id": "provider-item-private",
+            "provider_item_id": "provider-item-field-private",
+            "provider_tool_call_id": "provider-tool-call-private",
+            "providerCallId": "provider-call-private",
             "turn_id": "provider-turn-private",
             "url": f"https://search.example.test/results?q=paper&token={secret}",
             "action": {
@@ -278,6 +281,9 @@ def test_agent_api_redacts_runtime_ids_approval_details_and_public_events(tmp_pa
     assert secret not in stream.text
     assert "provider-turn-private" not in stream.text
     assert "provider-item-private" not in stream.text
+    assert "provider-item-field-private" not in stream.text
+    assert "provider-tool-call-private" not in stream.text
+    assert "provider-call-private" not in stream.text
     assert "provider-request-private" not in stream.text
     assert r"C:\private" not in stream.text
     assert "https://search.example.test/results?q=paper" in stream.text
