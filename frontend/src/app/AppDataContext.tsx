@@ -25,21 +25,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setConnection("connecting");
+    setConnection((current) => current === "disconnected" ? "connecting" : current);
     const [workspaceResult, projectsResult] = await Promise.allSettled([
       api.workspace(),
       api.projects(),
     ]);
     if (workspaceResult.status === "fulfilled") {
       setWorkspace(workspaceResult.value);
-      setConnection("connected");
-      setError(null);
-    } else {
-      setWorkspace(null);
-      setConnection("disconnected");
-      setError(workspaceResult.reason instanceof Error ? workspaceResult.reason.message : "后端不可用");
     }
     if (projectsResult.status === "fulfilled") setProjects(projectsResult.value);
+    const failures = [workspaceResult, projectsResult].flatMap((result) =>
+      result.status === "rejected"
+        ? [result.reason instanceof Error ? result.reason.message : "后端不可用"]
+        : [],
+    );
+    setConnection(failures.length ? "disconnected" : "connected");
+    setError(failures.length ? [...new Set(failures)].join("；") : null);
     setLoading(false);
   }, []);
 
@@ -54,6 +55,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    const refreshVisibleWorkspace = () => {
+      if (globalThis.document.visibilityState === "visible") void refresh();
+    };
+    globalThis.document.addEventListener("visibilitychange", refreshVisibleWorkspace);
+    return () => {
+      window.clearInterval(timer);
+      globalThis.document.removeEventListener("visibilitychange", refreshVisibleWorkspace);
+    };
   }, [refresh]);
 
   const value = useMemo(

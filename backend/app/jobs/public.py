@@ -15,6 +15,7 @@ def project_public_job(job: Job) -> PublicJob:
         subject_id=job.subject_id,
         status=job.status,
         priority=job.priority,
+        result=(sanitize_public_payload(job.result) if job.result is not None else None),
         error_code=job.error_code,
         error_message=sanitize_public_text(job.error_message),
         max_attempts=job.max_attempts,

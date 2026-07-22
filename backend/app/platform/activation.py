@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from enum import StrEnum
 from pathlib import Path
@@ -21,8 +21,6 @@ class ActivationError(RuntimeError):
 
 
 class ActivationOperation(StrEnum):
-    V2_MIGRATION = "v2_migration"
-    V3_MIGRATION = "v3_migration"
     SNAPSHOT_RESTORE = "snapshot_restore"
 
 
@@ -30,12 +28,6 @@ class ActivationPhase(StrEnum):
     PREPARED = "prepared"
     SOURCE_MOVED = "source_moved"
     ACTIVATED = "activated"
-
-
-@dataclass(frozen=True)
-class ActivationMove:
-    source: str
-    recovery: str
 
 
 @dataclass(frozen=True)
@@ -47,13 +39,11 @@ class ActivationRecord:
     active: str
     staged: str
     recovery: str
-    moves: tuple[ActivationMove, ...] = ()
 
     @classmethod
     def from_json(cls, payload: str) -> ActivationRecord:
         try:
             raw = json.loads(payload)
-            moves = tuple(ActivationMove(**item) for item in raw.get("moves", []))
             return cls(
                 version=raw["version"],
                 operation=raw["operation"],
@@ -62,7 +52,6 @@ class ActivationRecord:
                 active=raw["active"],
                 staged=raw["staged"],
                 recovery=raw["recovery"],
-                moves=moves,
             )
         except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             raise ActivationError("工作区激活日志损坏，拒绝猜测恢复") from error
@@ -118,98 +107,6 @@ def default_activation_journal(data_dir: Path) -> Path:
     return data_dir.resolve().parent / ".runtime" / ACTIVATION_JOURNAL_NAME
 
 
-def activate_v2_database(
-    active: Path,
-    staged: Path,
-    recovery: Path,
-    *,
-    journal_path: Path,
-    fault_injector: FaultInjector | None = None,
-) -> None:
-    _activate_database_migration(
-        active,
-        staged,
-        recovery,
-        operation=ActivationOperation.V2_MIGRATION,
-        journal_path=journal_path,
-        fault_injector=fault_injector,
-    )
-
-
-def activate_workspace_database(
-    active: Path,
-    staged: Path,
-    recovery: Path,
-    *,
-    journal_path: Path,
-    fault_injector: FaultInjector | None = None,
-) -> None:
-    _activate_database_migration(
-        active,
-        staged,
-        recovery,
-        operation=ActivationOperation.V3_MIGRATION,
-        journal_path=journal_path,
-        fault_injector=fault_injector,
-    )
-
-
-def _activate_database_migration(
-    active: Path,
-    staged: Path,
-    recovery: Path,
-    *,
-    operation: ActivationOperation,
-    journal_path: Path,
-    fault_injector: FaultInjector | None = None,
-) -> None:
-    active = active.resolve()
-    staged = staged.resolve()
-    recovery = recovery.resolve()
-    label = "v2" if operation is ActivationOperation.V2_MIGRATION else "v3"
-    moves = _database_moves(active, recovery)
-    record = ActivationRecord(
-        version=1,
-        operation=operation.value,
-        phase=ActivationPhase.PREPARED.value,
-        scope_root=str(active.parent),
-        active=str(active),
-        staged=str(staged),
-        recovery=str(recovery),
-        moves=tuple(
-            ActivationMove(source=str(source), recovery=str(destination))
-            for source, destination in moves
-        ),
-    )
-    _validate_record(record, expected_active=active)
-    journal = ActivationJournal(journal_path)
-    journal.begin(record)
-    try:
-        _inject(fault_injector, f"{label}.after_journal")
-        for source, destination in moves:
-            if source.exists():
-                if destination.exists():
-                    raise ActivationError(f"迁移备份目标已经存在: {destination.name}")
-                _replace_path(source, destination)
-                _inject(fault_injector, f"{label}.after_move.{source.name}")
-        record = journal.set_phase(record, ActivationPhase.SOURCE_MOVED)
-        _inject(fault_injector, f"{label}.after_source_moved")
-        _replace_path(staged, active)
-        record = journal.set_phase(record, ActivationPhase.ACTIVATED)
-        _inject(fault_injector, f"{label}.after_activated")
-        WorkspaceDatabase(active).verify()
-    except Exception:
-        try:
-            _rollback_database_migration(record, _migration_source_kind(operation), label)
-        except Exception as rollback_error:
-            raise ActivationError(
-                f"{label} 激活失败且自动回滚未完成；已保留激活日志供下次启动恢复"
-            ) from rollback_error
-        journal.clear()
-        raise
-    journal.clear()
-
-
 def activate_snapshot_directory(
     staged: Path,
     active: Path,
@@ -263,29 +160,14 @@ def recover_pending_activation(
     journal_path: Path,
     *,
     data_dir: Path,
-    database_path: Path,
 ) -> str | None:
     journal = ActivationJournal(journal_path)
     record = journal.load()
     if record is None:
         return None
     operation = _operation(record)
-    expected_active = (
-        database_path.resolve()
-        if operation in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}
-        else data_dir.resolve()
-    )
-    _validate_record(record, expected_active=expected_active)
-    if operation in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}:
-        label = "v2" if operation is ActivationOperation.V2_MIGRATION else "v3"
-        result = _recover_database_migration(
-            record,
-            journal,
-            source_kind=_migration_source_kind(operation),
-            label=label,
-        )
-    else:
-        result = _recover_snapshot(record, journal)
+    _validate_record(record, expected_active=data_dir.resolve())
+    result = _recover_snapshot(record, journal)
     return f"{operation.value}:{result}"
 
 
@@ -301,12 +183,7 @@ def ensure_no_activation_residue(
     if database_state.kind not in {DatabaseKind.MISSING, DatabaseKind.EMPTY}:
         return
     data_dir = data_dir.resolve()
-    database_path = database_path.resolve()
     residue = [
-        *database_path.parent.glob(f".{database_path.name}.v3-migrating-*"),
-        *database_path.parent.glob(f".{database_path.name}.v4-migrating-*"),
-        *database_path.parent.glob(f"{database_path.name}.v2-*.bak"),
-        *database_path.parent.glob(f"{database_path.name}.v3-*.bak"),
         *data_dir.parent.glob(".snapshot-restore-*"),
         *data_dir.parent.glob(f"{data_dir.name}.before-restore-*"),
     ]
@@ -314,40 +191,8 @@ def ensure_no_activation_residue(
     if existing:
         names = ", ".join(path.name for path in existing[:5])
         raise ActivationError(
-            f"活动数据库缺失，但发现无激活日志的迁移或恢复残留（{names}）；拒绝初始化空库"
+            f"活动数据库缺失，但发现无激活日志的快照恢复残留（{names}）；拒绝初始化空库"
         )
-
-
-def _recover_database_migration(
-    record: ActivationRecord,
-    journal: ActivationJournal,
-    *,
-    source_kind: DatabaseKind,
-    label: str,
-) -> str:
-    active = Path(record.active)
-    staged = Path(record.staged)
-    moves = [(Path(move.source), Path(move.recovery)) for move in record.moves]
-    if _verified_current(active) and not staged.exists():
-        journal.clear()
-        return "committed"
-    if _verified_current(staged):
-        active_kind = inspect_database(active).kind
-        if active_kind not in {source_kind, DatabaseKind.MISSING}:
-            raise ActivationError(f"{label} 激活日志与活动数据库状态冲突")
-        _complete_database_source_moves(moves, label)
-        record = journal.set_phase(record, ActivationPhase.SOURCE_MOVED)
-        _replace_path(staged, active)
-        journal.set_phase(record, ActivationPhase.ACTIVATED)
-        WorkspaceDatabase(active).verify()
-        journal.clear()
-        return "committed"
-    _rollback_database_migration(record, source_kind, label)
-    if inspect_database(active).kind is not source_kind:
-        raise ActivationError(f"无法从 {label} 备份恢复活动数据库")
-    staged.unlink(missing_ok=True)
-    journal.clear()
-    return "rolled_back"
 
 
 def _recover_snapshot(record: ActivationRecord, journal: ActivationJournal) -> str:
@@ -384,27 +229,6 @@ def _recover_snapshot(record: ActivationRecord, journal: ActivationJournal) -> s
     raise ActivationError("快照激活残留无法验证；拒绝初始化或覆盖工作区")
 
 
-def _rollback_database_migration(
-    record: ActivationRecord,
-    source_kind: DatabaseKind,
-    label: str,
-) -> None:
-    active = Path(record.active)
-    staged = Path(record.staged)
-    moves = [(Path(move.source), Path(move.recovery)) for move in record.moves]
-    if inspect_database(active).kind is DatabaseKind.V4 and not staged.exists():
-        _replace_path(active, staged)
-    for source, recovery in reversed(moves):
-        if source.exists() and recovery.exists():
-            raise ActivationError(f"{label} 回滚路径冲突: {source.name}")
-        if recovery.exists():
-            _replace_path(recovery, source)
-    if inspect_database(active).kind is not source_kind:
-        raise ActivationError(f"{label} 活动数据库没有恢复到可验证状态")
-    staged.unlink(missing_ok=True)
-    _sync_directory(staged.parent)
-
-
 def _rollback_snapshot(record: ActivationRecord) -> None:
     active = Path(record.active)
     staged = Path(record.staged)
@@ -418,23 +242,10 @@ def _rollback_snapshot(record: ActivationRecord) -> None:
         _replace_path(recovery, active)
 
 
-def _complete_database_source_moves(
-    moves: Iterable[tuple[Path, Path]],
-    label: str,
-) -> None:
-    for index, (source, recovery) in enumerate(moves):
-        if source.exists() and recovery.exists():
-            raise ActivationError(f"{label} 激活路径冲突: {source.name}")
-        if source.exists():
-            _replace_path(source, recovery)
-        elif index == 0 and not recovery.exists():
-            raise ActivationError(f"{label} 活动数据库及其备份同时缺失")
-
-
 def _validate_record(record: ActivationRecord, *, expected_active: Path) -> None:
     if record.version != 1:
         raise ActivationError("工作区激活日志版本不受支持")
-    operation = _operation(record)
+    _operation(record)
     try:
         ActivationPhase(record.phase)
     except ValueError as error:
@@ -449,34 +260,12 @@ def _validate_record(record: ActivationRecord, *, expected_active: Path) -> None
         raise ActivationError("工作区激活日志包含越界路径")
     if len({active, staged, recovery}) != 3:
         raise ActivationError("工作区激活日志路径发生重叠")
-    if operation in {ActivationOperation.V2_MIGRATION, ActivationOperation.V3_MIGRATION}:
-        label = "v2" if operation is ActivationOperation.V2_MIGRATION else "v3"
-        source_version = 2 if operation is ActivationOperation.V2_MIGRATION else 3
-        expected_moves = _database_moves(active, recovery)
-        actual_moves = [
-            (
-                _absolute_path(move.source, "move.source"),
-                _absolute_path(move.recovery, "move.recovery"),
-            )
-            for move in record.moves
-        ]
-        if staged.parent != root or not staged.name.startswith(f".{active.name}.v4-migrating-"):
-            raise ActivationError(f"{label} 激活日志的影子数据库路径无效")
-        if not recovery.name.startswith(
-            f"{active.name}.v{source_version}-"
-        ) or not recovery.name.endswith(".bak"):
-            raise ActivationError(f"{label} 激活日志的备份路径无效")
-        if actual_moves != expected_moves:
-            raise ActivationError(f"{label} 激活日志的文件移动集合无效")
-    else:
-        if record.moves:
-            raise ActivationError("快照激活日志包含非预期文件移动")
-        if not staged.is_relative_to(root) or staged.name != "data":
-            raise ActivationError("快照激活日志的暂存目录路径无效")
-        if not staged.parent.name.startswith(".snapshot-restore-"):
-            raise ActivationError("快照激活日志的暂存目录名称无效")
-        if not recovery.name.startswith(f"{active.name}.before-restore-"):
-            raise ActivationError("快照激活日志的恢复目录路径无效")
+    if not staged.is_relative_to(root) or staged.name != "data":
+        raise ActivationError("快照激活日志的暂存目录路径无效")
+    if not staged.parent.name.startswith(".snapshot-restore-"):
+        raise ActivationError("快照激活日志的暂存目录名称无效")
+    if not recovery.name.startswith(f"{active.name}.before-restore-"):
+        raise ActivationError("快照激活日志的恢复目录路径无效")
 
 
 def _operation(record: ActivationRecord) -> ActivationOperation:
@@ -491,28 +280,6 @@ def _absolute_path(value: str, field: str) -> Path:
     if not path.is_absolute():
         raise ActivationError(f"工作区激活日志字段 {field} 不是绝对路径")
     return path.resolve()
-
-
-def _database_moves(active: Path, recovery: Path) -> list[tuple[Path, Path]]:
-    return [
-        (active, recovery),
-        (
-            active.with_name(f"{active.name}-wal"),
-            recovery.with_name(f"{recovery.name}-wal"),
-        ),
-        (
-            active.with_name(f"{active.name}-shm"),
-            recovery.with_name(f"{recovery.name}-shm"),
-        ),
-    ]
-
-
-def _migration_source_kind(operation: ActivationOperation) -> DatabaseKind:
-    if operation is ActivationOperation.V2_MIGRATION:
-        return DatabaseKind.LEGACY_V2
-    if operation is ActivationOperation.V3_MIGRATION:
-        return DatabaseKind.LEGACY_V3
-    raise ActivationError("工作区激活操作不是数据库迁移")
 
 
 def _verified_current(path: Path) -> bool:

@@ -59,7 +59,7 @@ def get_transfer_preview(
     service: Annotated[ZoteroApplicationService, Depends(get_zotero_service)],
 ) -> PublicTransferPreview:
     try:
-        return PublicTransferPreview.from_internal(service.get_preview(preview_id))
+        return service.get_public_preview(preview_id)
     except TransferNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -80,6 +80,8 @@ def resolve_transfer_conflict(
         return service.resolve_conflict(preview_id, payload)
     except TransferNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+    except (StaleTransferPreviewError, TransferAlreadyExecutingError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.post("/transfers/{preview_id}/execute", response_model=TransferReceipt)

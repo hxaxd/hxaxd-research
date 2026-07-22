@@ -102,7 +102,7 @@ export function WorkspacePreferencesSettings() {
   }
 
   return <section className="settings-operation-section preferences-settings">
-    <header><div><span className="eyebrow">WORKSPACE PREFERENCES</span><h2>工作台偏好</h2><p>可迁移偏好统一保存在后端；抽屉开合等瞬时界面状态只留在当前设备。</p></div><span className="preferences-revision">修订 {draft?.revision ?? 0}</span></header>
+    <header><div><span className="eyebrow">日常使用偏好</span><h2>阅读、翻译与任务</h2><p>这些选择会跟随工作区；临时打开的面板仍只保留在当前设备。</p></div><span className="preferences-revision">修订 {draft?.revision ?? 0}</span></header>
     {resource.error && !draft ? <div className="settings-inline-error"><p>{resource.error}</p><button className="toolbar-button" type="button" onClick={() => void resource.retry()}><Icon name="refresh" size={14} />重新读取</button></div> : resource.loading || !draft ? <p className="settings-empty">正在读取设置…</p> : <>
       <nav aria-label="设置分区" className="preferences-tabs">
         {sections.map((entry) => <button aria-pressed={section === entry.id} className={section === entry.id ? "active" : ""} key={entry.id} type="button" onClick={() => setSection(entry.id)}>{entry.label}</button>)}

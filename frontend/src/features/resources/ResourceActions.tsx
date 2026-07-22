@@ -143,32 +143,10 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
     }
   }
 
-  async function translate(attachment: Attachment) {
-    setBusy(attachment.id);
-    setError(null);
-    setMessage(null);
-    try {
-      const job = await api.translateAttachment(attachment.id, 4, 4, projectId);
-      track(job, `翻译 ${attachment.filename}`);
-      setMessage(`PDF 翻译任务已创建：${job.id}`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "无法创建翻译任务");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const sourceArchives = attachments.filter(
     (attachment) =>
       attachment.attachment_type === "source_archive" && attachment.format === "tex",
   );
-  const originals = attachments.filter(
-    (attachment) =>
-      attachment.attachment_type === "fulltext" &&
-      attachment.format === "pdf" &&
-      attachment.language_mode === "original",
-  );
-
   return (
     <section className="resource-actions">
       <header><div><span className="eyebrow">RESOURCES</span><h2>资源动作</h2></div><Link to="/tasks">查看任务</Link></header>
@@ -202,7 +180,6 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
         </form>
       </details>
       {sourceArchives.length ? <div className="resource-operation"><label><span>TeX 主文件（可选）</span><input placeholder="例如 main.tex" value={mainTex} onChange={(event) => setMainTex(event.target.value)} /></label>{sourceArchives.map((attachment) => <button className="toolbar-button" disabled={busy !== null} key={attachment.id} type="button" onClick={() => void compile(attachment)}><Icon name="terminal" size={14} />编译 {attachment.filename}</button>)}</div> : null}
-      {originals.length ? <div className="resource-operation resource-operation--translate"><p>翻译只会在你点击后创建任务，不会自动触发。</p>{originals.map((attachment) => <button className="primary-button" disabled={busy !== null} key={attachment.id} type="button" onClick={() => void translate(attachment)}><Icon name="languages" size={14} />翻译原文 {attachment.filename}</button>)}</div> : null}
       {message ? <p className="resource-message"><Icon name="check" size={13} />{message}<Link to="/tasks">打开任务中心</Link></p> : null}
       {error ? <p className="resource-error">{error}</p> : null}
       {trackedJobs.length ? <div className="resource-job-list" aria-label="本页资源任务">
@@ -228,6 +205,7 @@ function ResourceJobTracker({
   ) => Promise<void>;
 }) {
   const reported = useRef(false);
+  const [pollError, setPollError] = useState<string | null>(null);
   const stream = useEventStream<JobEvent>(
     tracked.outcome === "running" ? api.jobEventsUrl(tracked.job.id) : null,
   );
@@ -246,10 +224,41 @@ function ResourceJobTracker({
     void onTerminal(tracked.job.id, outcome, terminal);
   }, [onTerminal, terminal, tracked.job.id]);
 
+  useEffect(() => {
+    if (tracked.outcome !== "running") return;
+    let stopped = false;
+    async function poll() {
+      try {
+        const job = await api.job(tracked.job.id);
+        if (stopped) return;
+        setPollError(null);
+        if (!["succeeded", "failed", "canceled"].includes(job.status) || reported.current) return;
+        reported.current = true;
+        await onTerminal(
+          job.id,
+          job.status as "succeeded" | "failed" | "canceled",
+          {
+            id: -Date.now(),
+            job_id: job.id,
+            event_type: `job.${job.status}`,
+            level: job.status === "failed" ? "error" : "info",
+            payload: { message: job.error_message },
+            created_at: job.updated_at,
+          },
+        );
+      } catch (reason) {
+        if (!stopped) setPollError(reason instanceof Error ? reason.message : "无法轮询任务状态");
+      }
+    }
+    void poll();
+    const timer = window.setInterval(() => void poll(), 5_000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [onTerminal, tracked.job.id, tracked.outcome]);
+
   return <article className={`resource-job resource-job--${tracked.outcome}`} role="status">
     <span>{tracked.label}</span>
-    <strong>{tracked.outcome === "running"
-      ? stream.state === "error" ? "事件连接中断" : "执行中"
+    <strong title={pollError ?? undefined}>{tracked.outcome === "running"
+      ? pollError ? "状态更新失败" : stream.state === "error" ? "实时连接重试中" : "执行中"
       : tracked.outcome === "succeeded" ? "已完成"
       : tracked.outcome === "canceled" ? "已取消" : "失败"}</strong>
     <Link to={`/tasks?job=${tracked.job.id}`}>查看任务</Link>

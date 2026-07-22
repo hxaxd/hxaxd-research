@@ -37,7 +37,7 @@
 }
 
 .brand-copy { display: grid; min-width: 0; }
-.brand-copy small { color: var(--accent); font-size: 8px; font-weight: 750; letter-spacing: 0.14em; }
+.brand-copy small { color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: 0.12em; }
 .brand-copy strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 
 .sidebar-toggle {
@@ -78,7 +78,7 @@
   gap: 7px;
   padding: 17px 20px 8px;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -103,7 +103,7 @@
   padding: 2px 6px;
   background: var(--warning-soft);
   color: var(--warning);
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
   text-align: center;
 }
@@ -116,7 +116,7 @@
   border-top: 1px solid var(--border-soft);
   padding: 0 20px;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 11px;
 }
 .service-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
 .sidebar-footer--connected .service-indicator { background: var(--success); box-shadow: 0 0 10px var(--success); }

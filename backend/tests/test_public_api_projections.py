@@ -108,6 +108,7 @@ def test_job_api_projects_state_and_redacts_event_payloads(tmp_path) -> None:
         "subject_id",
         "status",
         "priority",
+        "result",
         "error_code",
         "error_message",
         "max_attempts",
@@ -118,6 +119,7 @@ def test_job_api_projects_state_and_redacts_event_payloads(tmp_path) -> None:
         "cancel_requested_at",
     }
     assert public_job["status"] == "succeeded"
+    assert public_job["result"] == {"download_url": "/api/download"}
     assert secret not in client.get("/api/jobs").text
 
     stream = client.get(f"/api/jobs/{job.id}/events")
@@ -144,7 +146,6 @@ def test_job_api_projects_state_and_redacts_event_payloads(tmp_path) -> None:
     properties = contract["components"]["schemas"]["PublicJob"]["properties"]
     for private in (
         "input",
-        "result",
         "idempotency_key",
         "concurrency_key",
         "lease_owner",
@@ -296,10 +297,10 @@ def test_openapi_uses_public_job_projection_for_every_job_response(client) -> No
     single_job_responses = (
         ("/api/jobs/{job_id}", "get", "200"),
         ("/api/jobs/{job_id}/cancel", "post", "202"),
+        ("/api/jobs/{job_id}/resume", "post", "202"),
         ("/api/tools/{name}/install", "post", "202"),
         ("/api/items/{item_id}/attachments/download", "post", "202"),
         ("/api/attachments/{attachment_id}/compile", "post", "202"),
-        ("/api/attachments/{attachment_id}/translate", "post", "202"),
         ("/api/snapshots", "post", "202"),
         ("/api/snapshots/{filename}/restore", "post", "202"),
     )
@@ -310,15 +311,15 @@ def test_openapi_uses_public_job_projection_for_every_job_response(client) -> No
     list_schema = paths["/api/jobs"]["get"]["responses"]["200"]["content"]["application/json"][
         "schema"
     ]
-    assert list_schema["items"] == {"$ref": "#/components/schemas/PublicJob"}
+    assert list_schema == {"$ref": "#/components/schemas/PublicJobPage"}
 
     public_properties = contract["components"]["schemas"]["PublicJob"]["properties"]
     assert not {
         "input",
-        "result",
         "idempotency_key",
         "concurrency_key",
         "lease_owner",
         "lease_expires_at",
         "heartbeat_at",
     }.intersection(public_properties)
+    assert "result" in public_properties

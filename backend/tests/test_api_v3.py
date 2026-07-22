@@ -75,32 +75,57 @@ def test_candidate_review_is_atomic_and_exposes_source_evidence(client) -> None:
     assert result["project_item"]["status"] == "included"
 
     items = client.get(f"/api/projects/{project['id']}/items").json()
-    assert len(items) == 1
-    assert items[0]["relevance"] == "Directly relevant to the project scope."
+    assert items["total"] == 1
+    assert items["items"][0]["relevance"] == "Directly relevant to the project scope."
+
+    item_id = items["items"][0]["preferred_item_id"]
+    history = client.get(f"/api/items/{item_id}/history")
+    assert history.status_code == 200, history.text
+    history_payload = history.json()
+    assert history_payload["item_id"] == item_id
+    assert history_payload["revisions"][0]["revision"] == 1
+    assert history_payload["field_sources"]
+    assert all(
+        "?" not in (source["source_url"] or "")
+        for source in history_payload["field_sources"]
+    )
+
+    audit_page = client.get(
+        "/api/audit-events",
+        params={"limit": 1},
+    )
+    assert audit_page.status_code == 200, audit_page.text
+    assert audit_page.json()["total"] >= 1
+    assert audit_page.json()["limit"] == 1
 
     workspace = client.get("/api/workspace").json()
     assert workspace["contract_version"] == "4.0"
     assert workspace["counts"]["works"] == 1
     assert workspace["counts"]["attachments"] == 0
 
+    assert client.get("/api/items/missing/history").status_code == 404
+
 
 def test_public_contract_has_no_legacy_paper_or_prompt_context_surface(client) -> None:
     contract = client.get("/openapi.json").json()
     paths = contract["paths"]
     assert "/api/projects/{project_id}/items" in paths
+    assert "/api/projects/{project_id}/works" not in paths
+    assert "delete" not in paths["/api/projects/{project_id}"]
+    assert not any(path.endswith(("/promote", "/dismiss")) for path in paths)
     assert "/api/projects/{project_id}/candidate-decisions" in paths
     assert not any("/papers" in path for path in paths)
     assert "post" not in paths["/api/jobs"]
-    assert "/api/jobs/{job_id}/resume" not in paths
+    assert "/api/jobs/{job_id}/resume" in paths
 
     create_schema = contract["components"]["schemas"]["CreateAgentRunRequest"]
     assert set(create_schema["properties"]) == {
         "task_kind",
         "goal",
-            "project_id",
-            "item_id",
-            "zotero_preview_id",
-        }
+        "project_id",
+        "item_id",
+        "zotero_preview_id",
+    }
     public_run = contract["components"]["schemas"]["PublicAgentRun"]["properties"]
     for internal in ("prompt", "cwd", "context_hash", "provider_thread_id"):
         assert internal not in public_run
@@ -129,6 +154,7 @@ def test_frontend_contract_field_sets_match_openapi(client) -> None:
         "Project": "ProjectView",
         "ProjectCreate": "ProjectCreate",
         "ProjectItem": "ProjectWorkView",
+        "ProjectItemPage": "ProjectWorkPage",
         "Creator": "CreatorView",
         "Identifier": "IdentifierView",
         "BibliographicLink": "LinkView",
@@ -136,12 +162,20 @@ def test_frontend_contract_field_sets_match_openapi(client) -> None:
         "BibliographicItem": "BibliographicItemView",
         "CandidateEvidence": "CandidateEvidence",
         "Candidate": "CandidateView",
+        "CandidatePage": "CandidatePage",
         "CandidateDecision": "CandidateDecision",
         "CandidateDecisionResult": "CandidateDecisionResult",
         "Attachment": "PublicAttachment",
         "SemanticDocument": "Document",
         "DocumentBlock": "DocumentBlockView",
         "DocumentBlocksPage": "DocumentBlocksPage",
+        "DocumentGlossaryEntry": "DocumentGlossaryEntryView",
+        "AuditEvent": "AuditEventView",
+        "AuditEventPage": "AuditEventPage",
+        "ItemRevision": "ItemRevisionView",
+        "ItemFieldSource": "ItemFieldSourceView",
+        "AttachmentRelation": "AttachmentRelationView",
+        "ItemHistory": "ItemHistoryView",
         "BlockTranslation": "BlockTranslation",
         "Annotation": "Annotation",
         "AnnotationCreate": "AnnotationCreate",
@@ -160,16 +194,18 @@ def test_frontend_contract_field_sets_match_openapi(client) -> None:
         "PairingCreate": "PairingCreate",
         "PairingTicket": "PairingTicket",
         "Job": "PublicJob",
+        "JobPage": "PublicJobPage",
         "AgentRun": "PublicAgentRun",
+        "AgentRunPage": "PublicAgentRunPage",
         "AgentTaskDefinition": "PublicAgentTaskDefinition",
         "AgentRunCreate": "CreateAgentRunRequest",
         "AgentRunLaunch": "AgentRunLaunch",
-            "Approval": "PublicApproval",
-            "ChangeEvidence": "EvidenceReference",
-            "ChangeItem": "ChangeItemView",
-            "ChangeSet": "ChangeSetView",
-            "ChangeSetList": "ChangeSetList",
-            "ChangeReviewDecision": "ChangeReviewDecision",
+        "Approval": "PublicApproval",
+        "ChangeEvidence": "EvidenceReference",
+        "ChangeItem": "ChangeItemView",
+        "ChangeSet": "ChangeSetView",
+        "ChangeSetList": "ChangeSetList",
+        "ChangeReviewDecision": "ChangeReviewDecision",
         "TransferDifference": "FieldDifference",
         "TransferConflict": "TransferConflict",
         "TransferConflictResolution": "ConflictResolution",
@@ -200,8 +236,18 @@ def test_frontend_contract_field_sets_match_openapi(client) -> None:
 
 
 def test_task_lists_start_empty(client) -> None:
-    assert client.get("/api/jobs").json() == []
-    assert client.get("/api/agent-runs").json() == []
+    assert client.get("/api/jobs").json() == {
+        "items": [],
+        "total": 0,
+        "limit": 200,
+        "offset": 0,
+    }
+    assert client.get("/api/agent-runs").json() == {
+        "items": [],
+        "total": 0,
+        "limit": 200,
+        "offset": 0,
+    }
 
 
 def test_zotero_integration_is_wired_into_the_application(client) -> None:
@@ -219,7 +265,7 @@ def test_literature_search_requires_a_real_project_scope(client) -> None:
         json={"task_kind": "literature_search", "goal": "查找来源可靠的候选"},
     )
     assert missing_scope.status_code == 422
-    assert client.get("/api/agent-runs").json() == []
+    assert client.get("/api/agent-runs").json()["total"] == 0
 
     missing_project = client.post(
         "/api/agent-runs",
@@ -230,7 +276,7 @@ def test_literature_search_requires_a_real_project_scope(client) -> None:
         },
     )
     assert missing_project.status_code == 404
-    assert client.get("/api/agent-runs").json() == []
+    assert client.get("/api/agent-runs").json()["total"] == 0
 
 
 def test_resource_download_requires_the_items_real_project_scope(client) -> None:
@@ -265,75 +311,7 @@ def test_resource_download_requires_the_items_real_project_scope(client) -> None
 
     assert response.status_code == 422
     assert response.json()["detail"] == "资源任务的文献不属于所选项目"
-    assert client.get("/api/jobs").json() == []
-
-
-def test_confirmed_project_delete_can_prune_only_an_unattached_orphan_work(client) -> None:
-    project = client.post(
-        "/api/projects", json={"name": "Disposable", "description": "exact confirmation"}
-    ).json()
-    candidate = client.post(
-        f"/api/projects/{project['id']}/candidates",
-        json=_candidate("Disposable work"),
-    ).json()
-    decision = client.post(
-        f"/api/projects/{project['id']}/candidate-decisions",
-        json={
-            "decisions": [
-                {
-                    "candidate_id": candidate["id"],
-                    "decision": "include",
-                    "reason": "delete command test",
-                }
-            ]
-        },
-    ).json()[0]
-    work_id = decision["project_item"]["work_id"]
-    confirmation = {
-        "expected_name": project["name"],
-        "expected_updated_at": project["updated_at"],
-        "orphan_work_ids": [work_id],
-    }
-
-    refused = client.request(
-        "DELETE",
-        f"/api/projects/{project['id']}",
-        json={**confirmation, "expected_name": "wrong name"},
-    )
-    assert refused.status_code == 409
-    assert client.get(f"/api/projects/{project['id']}").status_code == 200
-    incomplete = client.request(
-        "DELETE",
-        f"/api/projects/{project['id']}",
-        json={**confirmation, "orphan_work_ids": []},
-    )
-    assert incomplete.status_code == 409
-    assert client.get(f"/api/projects/{project['id']}").status_code == 200
-
-    deleted = client.request(
-        "DELETE", f"/api/projects/{project['id']}", json=confirmation
-    )
-
-    assert deleted.status_code == 200, deleted.text
-    assert deleted.json() == {
-        "project_id": project["id"],
-        "deleted_orphan_work_ids": [work_id],
-    }
-    assert client.get(f"/api/projects/{project['id']}").status_code == 404
-    assert client.get(f"/api/works/{work_id}").status_code == 404
-    with client.app.state.context.database.read() as connection:
-        assert connection.execute(
-            "SELECT 1 FROM source_records WHERE id = ?", (candidate["source_record_id"],)
-        ).fetchone() is None
-        audit = connection.execute(
-            """
-            SELECT action FROM audit_events
-            WHERE entity_type = 'project' AND entity_id = ?
-            ORDER BY occurred_at DESC LIMIT 1
-            """,
-            (project["id"],),
-        ).fetchone()
-    assert audit["action"] == "screening.project_deleted"
+    assert client.get("/api/jobs").json()["total"] == 0
 
 
 def test_snapshot_maintenance_blocks_writes_but_keeps_reads_available(client) -> None:

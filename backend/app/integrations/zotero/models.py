@@ -111,6 +111,7 @@ class TransferAction(StrEnum):
 class TransferStatus(StrEnum):
     PREVIEW_READY = "preview_ready"
     APPLYING = "applying"
+    RECOVERABLE = "recoverable"
     SUCCEEDED = "succeeded"
     PARTIAL = "partial"
     FAILED = "failed"
@@ -236,7 +237,7 @@ class TransferPreviewRequest(ZoteroModel):
     direction: TransferDirection
     library: ZoteroLibraryRef
     project_id: str = Field(min_length=1)
-    ttl_seconds: int = Field(default=900, ge=30, le=86_400)
+    ttl_seconds: int = Field(default=86_400, ge=30, le=604_800)
 
 
 class TransferPlanRequest(TransferPreviewRequest):
@@ -265,6 +266,7 @@ class TransferPreview(ZoteroModel):
 
 class PublicTransferPlanItem(ZoteroModel):
     item_id: str
+    display_title: str
     action: TransferAction
     differences: list[FieldDifference] = Field(default_factory=list)
     conflicts: list[TransferConflict] = Field(default_factory=list)
@@ -274,22 +276,37 @@ class PublicTransferPlanItem(ZoteroModel):
 class PublicTransferPreview(ZoteroModel):
     id: str
     direction: TransferDirection
+    library: ZoteroLibraryRef
+    project_id: str
     created_at: datetime
     expires_at: datetime
     items: list[PublicTransferPlanItem]
     summary: TransferSummary
     preview_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    state: TransferStatus = TransferStatus.PREVIEW_READY
+    resolutions: list[ConflictResolution] = Field(default_factory=list)
+    receipt: TransferReceipt | None = None
 
     @classmethod
-    def from_internal(cls, preview: TransferPreview) -> PublicTransferPreview:
+    def from_internal(
+        cls,
+        preview: TransferPreview,
+        *,
+        state: TransferStatus = TransferStatus.PREVIEW_READY,
+        resolutions: list[ConflictResolution] | None = None,
+        receipt: TransferReceipt | None = None,
+    ) -> PublicTransferPreview:
         return cls(
             id=preview.id,
             direction=preview.direction,
+            library=preview.library,
+            project_id=preview.project_id,
             created_at=preview.created_at,
             expires_at=preview.expires_at,
             items=[
                 PublicTransferPlanItem(
                     item_id=item.item_id,
+                    display_title=item.source.title,
                     action=item.action,
                     differences=item.differences,
                     conflicts=item.conflicts,
@@ -299,6 +316,9 @@ class PublicTransferPreview(ZoteroModel):
             ],
             summary=preview.summary,
             preview_hash=preview.preview_hash,
+            state=state,
+            resolutions=resolutions or [],
+            receipt=receipt,
         )
 
 
@@ -310,7 +330,9 @@ class TransferExecuteRequest(ZoteroModel):
 class TransferItemReceipt(ZoteroModel):
     item_id: str
     planned_action: TransferAction
-    outcome: Literal["created", "updated", "unchanged", "skipped", "failed"]
+    outcome: Literal[
+        "applying", "created", "updated", "unchanged", "skipped", "failed"
+    ]
     external_key: str | None = None
     external_version: int | None = Field(default=None, ge=0)
     message: str | None = None
@@ -322,7 +344,7 @@ class TransferReceipt(ZoteroModel):
     preview_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: TransferStatus
     started_at: datetime
-    finished_at: datetime
+    finished_at: datetime | None = None
     items: list[TransferItemReceipt]
 
 

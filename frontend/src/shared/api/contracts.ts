@@ -41,6 +41,7 @@ export interface Project {
   name: string;
   description: string;
   work_count: number;
+  candidate_count: number;
   status_counts: Record<string, number>;
   created_at: string;
   updated_at: string;
@@ -72,6 +73,13 @@ export interface ProjectItem {
   decided_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectItemPage {
+  items: ProjectItem[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface ProjectItemUpdate {
@@ -191,6 +199,13 @@ export interface Candidate {
   resolved_at: string | null;
 }
 
+export interface CandidatePage {
+  items: Candidate[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CandidateDecision {
   candidate_id: string;
   decision: "include" | "exclude";
@@ -299,6 +314,77 @@ export interface DocumentBlocksPage {
   limit: number;
   total: number;
   items: DocumentBlock[];
+}
+
+export interface DocumentGlossaryEntry {
+  id: string;
+  document_id: string;
+  target_language: string;
+  source_term: string;
+  translated_term: string;
+  note: string | null;
+  batch_id: string;
+  created_at: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  occurred_at: string;
+  actor_type: string;
+  actor_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  correlation_id: string | null;
+  before: Record<string, JsonValue> | null;
+  after: Record<string, JsonValue> | null;
+  metadata: Record<string, JsonValue>;
+}
+
+export interface AuditEventPage {
+  items: AuditEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ItemRevision {
+  id: string;
+  revision: number;
+  actor_type: string;
+  actor_id: string | null;
+  change_set_id: string | null;
+  changes: Record<string, JsonValue>;
+  evidence: Array<Record<string, JsonValue>>;
+  created_at: string;
+}
+
+export interface ItemFieldSource {
+  field_path: string;
+  source_record_id: string;
+  provider: string;
+  external_key: string | null;
+  source_url: string | null;
+  retrieved_at: string;
+  selected_at: string;
+}
+
+export interface AttachmentRelation {
+  parent_attachment_id: string;
+  parent_filename: string;
+  child_attachment_id: string;
+  child_filename: string;
+  relation_type: string;
+  job_id: string | null;
+  created_at: string;
+}
+
+export interface ItemHistory {
+  item_id: string;
+  revisions: ItemRevision[];
+  field_sources: ItemFieldSource[];
+  attachment_relations: AttachmentRelation[];
+  audit_events: AuditEvent[];
 }
 
 export type AnnotationKind =
@@ -515,6 +601,7 @@ export interface Job {
   subject_id: string | null;
   status: JobStatus;
   priority: number;
+  result: Record<string, JsonValue> | null;
   error_code: string | null;
   error_message: string | null;
   max_attempts: number;
@@ -523,6 +610,13 @@ export interface Job {
   started_at: string | null;
   finished_at: string | null;
   cancel_requested_at: string | null;
+}
+
+export interface JobPage {
+  items: Job[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface JobEvent {
@@ -579,6 +673,13 @@ export interface AgentRun {
   started_at: string | null;
   finished_at: string | null;
   cancel_requested_at: string | null;
+}
+
+export interface AgentRunPage {
+  items: AgentRun[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface AgentRunCreate {
@@ -696,6 +797,13 @@ export interface Approval {
 }
 
 export type TransferAction = "new" | "update" | "unchanged" | "conflict" | "blocked";
+export type TransferStatus =
+  | "preview_ready"
+  | "applying"
+  | "recoverable"
+  | "succeeded"
+  | "partial"
+  | "failed";
 
 export interface TransferDifference {
   field: string;
@@ -720,6 +828,7 @@ export interface TransferConflictResolution {
 
 export interface TransferPlanItem {
   item_id: string;
+  display_title: string;
   action: TransferAction;
   differences: TransferDifference[];
   conflicts: TransferConflict[];
@@ -729,11 +838,16 @@ export interface TransferPlanItem {
 export interface TransferPreview {
   id: string;
   direction: "import" | "export";
+  library: { kind: "users" | "groups"; id: string };
+  project_id: string;
   created_at: string;
   expires_at: string;
   items: TransferPlanItem[];
   summary: Record<TransferAction | "total", number>;
   preview_hash: string;
+  state: TransferStatus;
+  resolutions: TransferConflictResolution[];
+  receipt: TransferReceipt | null;
 }
 
 export interface TransferPreviewRequest {
@@ -747,13 +861,15 @@ export interface TransferReceipt {
   id: string;
   preview_id: string;
   preview_hash: string;
-  status: "succeeded" | "partial" | "failed";
+  status: TransferStatus;
   started_at: string;
-  finished_at: string;
+  finished_at: string | null;
   items: Array<{
     item_id: string;
     planned_action: TransferAction;
-    outcome: "created" | "updated" | "unchanged" | "skipped" | "failed";
+    outcome: "applying" | "created" | "updated" | "unchanged" | "skipped" | "failed";
+    external_key: string | null;
+    external_version: number | null;
     message: string | null;
   }>;
 }

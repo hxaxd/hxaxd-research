@@ -17,19 +17,21 @@ from app.integrations.zotero.models import (
     TransferItemReceipt,
     TransferPlanRequest,
     TransferPreviewRequest,
+    TransferStatus,
     ZoteroEndpointStatus,
     ZoteroIntegrationStatus,
     ZoteroLibraryKind,
     ZoteroLibraryRef,
 )
 from app.integrations.zotero.planner import ZoteroDiffPlanner, fingerprint
-from app.integrations.zotero.repository import InMemoryZoteroTransferRepository
+from app.integrations.zotero.repository import SqliteZoteroTransferRepository
 from app.integrations.zotero.service import (
     StaleTransferPreviewError,
     TransferConfirmationRequiredError,
     UnresolvedTransferConflictError,
     ZoteroTransferService,
 )
+from app.platform.db import WorkspaceDatabase
 
 NOW = datetime(2026, 7, 21, 8, 0, tzinfo=UTC)
 LIBRARY = ZoteroLibraryRef(kind=ZoteroLibraryKind.USER, id="123")
@@ -160,8 +162,14 @@ def _service_request() -> TransferPreviewRequest:
     )
 
 
-def test_execute_requires_confirmation_matching_hash_and_current_fingerprints():
-    repository = InMemoryZoteroTransferRepository()
+def _repository(tmp_path) -> SqliteZoteroTransferRepository:
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
+    database.initialize()
+    return SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+
+
+def test_execute_requires_confirmation_matching_hash_and_current_fingerprints(tmp_path):
+    repository = _repository(tmp_path)
     executor = FakeExecutor()
     service = ZoteroTransferService(
         repository,
@@ -195,8 +203,8 @@ def test_execute_requires_confirmation_matching_hash_and_current_fingerprints():
         )
 
 
-def test_conflict_must_be_resolved_before_an_explicit_execution():
-    repository = InMemoryZoteroTransferRepository()
+def test_conflict_must_be_resolved_before_an_explicit_execution(tmp_path):
+    repository = _repository(tmp_path)
     executor = FakeExecutor(conflict=True)
     service = ZoteroTransferService(
         repository,
@@ -215,6 +223,10 @@ def test_conflict_must_be_resolved_before_an_explicit_execution():
         preview.id,
         ConflictResolution(conflict_id=conflict.id, choice=ConflictChoice.SOURCE),
     )
+    prepared = service.get_public_preview(preview.id)
+    assert prepared.state == TransferStatus.PREVIEW_READY
+    assert prepared.resolutions[0].conflict_id == conflict.id
+    assert prepared.receipt is None
     receipt = service.execute(preview.id, execute)
 
     assert receipt.status == "succeeded"
@@ -225,9 +237,9 @@ def test_conflict_must_be_resolved_before_an_explicit_execution():
     assert executor.applied == ["item"]
 
 
-def test_expired_preview_is_rejected():
+def test_expired_preview_is_rejected(tmp_path):
     current = NOW
-    repository = InMemoryZoteroTransferRepository()
+    repository = _repository(tmp_path)
     executor = FakeExecutor()
     service = ZoteroTransferService(
         repository,
@@ -236,10 +248,115 @@ def test_expired_preview_is_rejected():
         clock=lambda: current,
     )
     preview = service.create_preview(_service_request())
-    current = NOW + timedelta(hours=1)
+    current = NOW + timedelta(days=2)
 
     with pytest.raises(StaleTransferPreviewError):
         service.execute(
             preview.id,
             TransferExecuteRequest(confirmed=True, expected_preview_hash=preview.preview_hash),
         )
+
+
+class SimulatedProcessExit(BaseException):
+    pass
+
+
+class RecoverableExecutor(FakeExecutor):
+    def __init__(self, *, fail_normally: bool = False):
+        super().__init__()
+        self.fail_normally = fail_normally
+        self.effects: set[str] = set()
+        self.calls: dict[str, int] = {}
+
+    def build_candidates(self, request):
+        del request
+        return [
+            TransferCandidate(item_id="first", source=_draft("First")),
+            TransferCandidate(item_id="second", source=_draft("Second")),
+        ]
+
+    def apply(self, preview, item, resolutions):
+        del preview, resolutions
+        self.calls[item.item_id] = self.calls.get(item.item_id, 0) + 1
+        if item.item_id == "second" and self.calls[item.item_id] == 1:
+            if self.fail_normally:
+                raise RuntimeError("remote write failed")
+            self.effects.add(item.item_id)
+            raise SimulatedProcessExit()
+        self.effects.add(item.item_id)
+        return TransferItemReceipt(
+            item_id=item.item_id,
+            planned_action=item.action,
+            outcome="created",
+        )
+
+    def recover(self, preview, item, resolutions):
+        del preview, resolutions
+        if item.item_id not in self.effects:
+            return None
+        return TransferItemReceipt(
+            item_id=item.item_id,
+            planned_action=item.action,
+            outcome="created",
+            message="recovered",
+        )
+
+
+def test_interrupted_execution_resumes_from_item_checkpoints_after_restart(tmp_path):
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
+    database.initialize()
+    repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+    executor = RecoverableExecutor()
+    service = ZoteroTransferService(
+        repository,
+        executor,
+        planner=ZoteroDiffPlanner(clock=lambda: NOW),
+        clock=lambda: NOW,
+    )
+    preview = service.create_preview(_service_request())
+    execute = TransferExecuteRequest(confirmed=True, expected_preview_hash=preview.preview_hash)
+
+    with pytest.raises(SimulatedProcessExit):
+        service.execute(preview.id, execute)
+
+    progress = service.get_public_preview(preview.id)
+    assert progress.state == TransferStatus.APPLYING
+    assert progress.receipt is not None
+    assert [item.outcome for item in progress.receipt.items] == ["created", "applying"]
+
+    restarted_repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+    restarted = ZoteroTransferService(
+        restarted_repository,
+        executor,
+        planner=ZoteroDiffPlanner(clock=lambda: NOW),
+        clock=lambda: NOW,
+    )
+    assert restarted.reconcile_interrupted() == 1
+    assert restarted.get_public_preview(preview.id).state == TransferStatus.RECOVERABLE
+
+    receipt = restarted.execute(preview.id, execute)
+    assert receipt.status == TransferStatus.SUCCEEDED
+    assert [item.outcome for item in receipt.items] == ["created", "created"]
+    assert executor.calls == {"first": 1, "second": 1}
+    assert restarted.execute(preview.id, execute) == receipt
+    assert executor.calls == {"first": 1, "second": 1}
+
+
+def test_regular_item_failure_finishes_with_a_stable_partial_receipt(tmp_path):
+    repository = _repository(tmp_path)
+    executor = RecoverableExecutor(fail_normally=True)
+    service = ZoteroTransferService(
+        repository,
+        executor,
+        planner=ZoteroDiffPlanner(clock=lambda: NOW),
+        clock=lambda: NOW,
+    )
+    preview = service.create_preview(_service_request())
+    execute = TransferExecuteRequest(confirmed=True, expected_preview_hash=preview.preview_hash)
+
+    receipt = service.execute(preview.id, execute)
+
+    assert receipt.status == TransferStatus.PARTIAL
+    assert [item.outcome for item in receipt.items] == ["created", "failed"]
+    assert service.execute(preview.id, execute) == receipt
+    assert executor.calls == {"first": 1, "second": 1}

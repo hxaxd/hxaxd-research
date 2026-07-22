@@ -27,6 +27,72 @@ describe("domain API client", () => {
     expect(JSON.parse(String(init.body))).toEqual({ decisions: [{ candidate_id: "candidate-1", decision: "include", reason: "relevant" }] });
   });
 
+  it("loads every project item page and filters pending candidate states on the server", async () => {
+    const fetch = vi.fn().mockImplementation((path: string) => {
+      const url = new URL(path, "https://local.test");
+      if (url.pathname.endsWith("/items")) {
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        const count = offset === 0 ? 500 : 1;
+        return Promise.resolve(new Response(JSON.stringify({
+          items: Array.from({ length: count }, (_, index) => ({ id: `item-${offset + index}` })),
+          total: 501,
+          limit: 500,
+          offset,
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }
+      const state = url.searchParams.get("state");
+      return Promise.resolve(new Response(JSON.stringify({
+        items: [{
+          id: `candidate-${state}`,
+          rank: state === "staged" ? 2 : 1,
+          created_at: state === "staged" ? "2026-01-02" : "2026-01-01",
+        }],
+        total: 1,
+        limit: 500,
+        offset: 0,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const items = await api.projectItems("project-1", "included");
+    const candidates = await api.candidates("project-1", ["staged", "matched"]);
+
+    expect(items).toHaveLength(501);
+    expect(candidates.map((entry) => entry.id)).toEqual(["candidate-matched", "candidate-staged"]);
+    expect(fetch.mock.calls.map(([path]) => String(path))).toContain(
+      "/api/projects/project-1/items?status=included&limit=500&offset=500",
+    );
+    expect(fetch.mock.calls.map(([path]) => String(path))).toEqual(expect.arrayContaining([
+      "/api/projects/project-1/candidates?state=staged&limit=500",
+      "/api/projects/project-1/candidates?state=matched&limit=500",
+    ]));
+  });
+
+  it("loads the complete durable job and agent run histories", async () => {
+    const fetch = vi.fn().mockImplementation((path: string) => {
+      const url = new URL(path, "https://local.test");
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      const count = offset === 0 ? 500 : 1;
+      const prefix = url.pathname.endsWith("/jobs") ? "job" : "run";
+      return Promise.resolve(new Response(JSON.stringify({
+        items: Array.from({ length: count }, (_, index) => ({ id: `${prefix}-${offset + index}` })),
+        total: 501,
+        limit: 500,
+        offset,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const [jobs, runs] = await Promise.all([api.jobs(), api.agentRuns()]);
+
+    expect(jobs).toHaveLength(501);
+    expect(runs).toHaveLength(501);
+    expect(fetch.mock.calls.map(([path]) => String(path))).toEqual(expect.arrayContaining([
+      "/api/jobs?limit=500&offset=500",
+      "/api/agent-runs?limit=500&offset=500",
+    ]));
+  });
+
   it("always binds Zotero execution to an explicitly confirmed preview hash", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response('{"id":"receipt"}', { status: 200, headers: { "Content-Type": "application/json" } }));
     vi.stubGlobal("fetch", fetch);
@@ -42,9 +108,12 @@ describe("domain API client", () => {
     expect(api.agentEventsUrl("run-1", 4)).toBe("/api/agent-runs/run-1/events?after=4");
   });
 
-  it("does not expose generic job creation or resume commands", () => {
+  it("does not expose generic job creation but can resume an audited job", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 202, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
     expect(Object.hasOwn(api, "createJob")).toBe(false);
-    expect(Object.hasOwn(api, "resumeJob")).toBe(false);
+    await api.resumeJob("job-1");
+    expect(fetch).toHaveBeenCalledWith("/api/jobs/job-1/resume", expect.objectContaining({ method: "POST" }));
   });
 
   it("sends the selected project with a literature search run", async () => {
@@ -99,17 +168,17 @@ describe("domain API client", () => {
       preferred_for: ["reading"],
     }, "project-1");
     await api.compileAttachment("source-1", "src/main.tex", "project-1");
-    await api.translateAttachment("pdf-1", 6, 3, "project-1");
+    await api.setAttachmentPreference("item-1", "reading", "pdf-1");
     await api.installTool("tex");
 
     expect(fetch.mock.calls.map(([path]) => path)).toEqual([
       "/api/items/item-1/attachments/download?project_id=project-1",
       "/api/attachments/source-1/compile?project_id=project-1",
-      "/api/attachments/pdf-1/translate?project_id=project-1",
+      "/api/items/item-1/attachment-preferences",
       "/api/tools/tex/install",
     ]);
     expect(JSON.parse(String((fetch.mock.calls[1]![1] as RequestInit).body))).toEqual({ main_tex: "src/main.tex" });
-    expect(JSON.parse(String((fetch.mock.calls[2]![1] as RequestInit).body))).toEqual({ qps: 6, workers: 3 });
+    expect(JSON.parse(String((fetch.mock.calls[2]![1] as RequestInit).body))).toEqual({ purpose: "reading", attachment_id: "pdf-1" });
   });
 
   it("routes semantic extraction and whole-document translation through document commands", async () => {

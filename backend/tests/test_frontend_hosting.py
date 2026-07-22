@@ -6,7 +6,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.__main__ import _is_loopback, _tls_files, _validate_agent_url
+from app.__main__ import (
+    _is_loopback,
+    _resolve_agent_url,
+    _tls_files,
+    _validate_agent_url,
+)
 from app.core.frontend import mount_frontend
 
 
@@ -51,3 +56,22 @@ def test_https_arguments_require_a_complete_existing_certificate_pair(tmp_path) 
         _tls_files(Namespace(ssl_certfile=str(certificate), ssl_keyfile=None))
     with pytest.raises(SystemExit, match="必须是纯"):
         _validate_agent_url("https://workspace.test/private")
+
+
+def test_embedded_agent_url_is_always_a_loopback_listener() -> None:
+    assert (
+        _resolve_agent_url(
+            None, scheme="https", port=8443, internal_port=49152
+        )
+        == "http://127.0.0.1:49152"
+    )
+    with pytest.raises(ValueError, match="internal agent listener"):
+        _resolve_agent_url(None, scheme="https", port=8443)
+    assert (
+        _resolve_agent_url("http://localhost:49153/", scheme="https", port=8443)
+        == "http://localhost:49153"
+    )
+    with pytest.raises(SystemExit, match="回环地址"):
+        _resolve_agent_url(
+            "https://192.168.1.42:8443", scheme="https", port=8443
+        )

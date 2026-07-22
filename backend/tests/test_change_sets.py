@@ -8,9 +8,9 @@ def _indexed_item(client):
     project = client.post("/api/projects", json={"name": "Changes"}).json()
     candidate = client.post(f"/api/projects/{project['id']}/candidates", json=_candidate()).json()
     membership = client.post(
-        f"/api/projects/{project['id']}/candidates/{candidate['id']}/promote",
-        json={},
-    ).json()
+        f"/api/projects/{project['id']}/candidate-decisions",
+        json={"decisions": [{"candidate_id": candidate["id"], "decision": "include"}]},
+    ).json()[0]["project_item"]
     item = client.get(f"/api/items/{membership['preferred_item_id']}").json()
     return project, membership, item
 
@@ -21,9 +21,9 @@ def _add_indexed_item(client, project_id: str, title: str, suffix: str):
     payload["source_external_key"] = f"10.0000/{suffix}"
     candidate = client.post(f"/api/projects/{project_id}/candidates", json=payload).json()
     membership = client.post(
-        f"/api/projects/{project_id}/candidates/{candidate['id']}/promote",
-        json={},
-    ).json()
+        f"/api/projects/{project_id}/candidate-decisions",
+        json={"decisions": [{"candidate_id": candidate["id"], "decision": "include"}]},
+    ).json()[0]["project_item"]
     return client.get(f"/api/items/{membership['preferred_item_id']}").json()
 
 
@@ -188,8 +188,8 @@ def test_project_insight_change_cannot_modify_screening_status(client):
     reviewed = _approve(client, proposed.json())
     applied = _apply(client, reviewed)
     assert applied.status_code == 200, applied.text
-    current = client.get(f"/api/projects/{project['id']}/works?limit=10").json()[0]
-    assert current["status"] == "discovered"
+    current = client.get(f"/api/projects/{project['id']}/items?limit=10").json()["items"][0]
+    assert current["status"] == membership["status"]
     assert current["summary"] == "A concise project-specific summary."
     assert current["roles"] == ["method"]
 
@@ -232,7 +232,8 @@ def test_approved_resource_proposal_enqueues_one_idempotent_job(client):
     applied = _apply(client, reviewed)
     assert applied.status_code == 200, applied.text
     result = applied.json()
-    assert result["status"] == "applied"
+    assert result["status"] == "submitted"
+    assert result["items"][0]["status"] == "approved"
     job_id = result["items"][0]["result"]["job_id"]
     assert result["items"][0]["result"]["job_status"] == "queued"
 
@@ -244,6 +245,44 @@ def test_approved_resource_proposal_enqueues_one_idempotent_job(client):
             (f"change-item:{result['items'][0]['id']}",),
         ).fetchall()
     assert [row["id"] for row in jobs] == [job_id]
+
+    assert client.post(f"/api/jobs/{job_id}/cancel").status_code == 202
+    canceled = client.get(f"/api/change-sets/{result['id']}").json()
+    assert canceled["status"] == "failed"
+    assert canceled["items"][0]["status"] == "failed"
+    assert canceled["items"][0]["result"]["job_status"] == "canceled"
+
+    assert client.post(f"/api/jobs/{job_id}/resume").status_code == 202
+    resumed = client.get(f"/api/change-sets/{result['id']}").json()
+    assert resumed["status"] == "submitted"
+    assert resumed["items"][0]["status"] == "approved"
+
+    repository = client.app.state.context.job_repository
+    claimed = repository.claim_next("resource-failure-worker")
+    assert claimed is not None and claimed.job.id == job_id
+    repository.fail(
+        claimed,
+        code="download_failed",
+        message="publisher unavailable",
+        retryable=False,
+    )
+    failed = client.get(f"/api/change-sets/{result['id']}").json()
+    assert failed["status"] == "failed"
+    assert failed["items"][0]["error_code"] == "download_failed"
+
+    assert client.post(f"/api/jobs/{job_id}/resume").status_code == 202
+    claimed = repository.claim_next("resource-success-worker")
+    assert claimed is not None and claimed.job.id == job_id
+    repository.complete(
+        claimed,
+        {"attachment_ids": [], "item_id": item["id"], "project_id": project["id"]},
+        [],
+        commit_point_reached=True,
+    )
+    completed = client.get(f"/api/change-sets/{result['id']}").json()
+    assert completed["status"] == "applied"
+    assert completed["items"][0]["status"] == "applied"
+    assert completed["items"][0]["result"]["job_status"] == "succeeded"
 
 
 def test_resource_enqueue_failure_remains_reviewable_and_explainable(client, monkeypatch):

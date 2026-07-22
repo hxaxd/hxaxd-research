@@ -130,7 +130,7 @@ export function AgentTaskLauncher({ projects = [], fixedItemScope }: Props) {
     <form className={fixedItemScope ? "agent-launcher agent-launcher--item" : "agent-launcher"} onSubmit={(event) => void submit(event)}>
       <div className="launcher-heading">
         <span className="launcher-icon"><Icon name="sparkles" size={20} /></span>
-        <div><span className="eyebrow">NEW AGENT TASK</span><h2>{fixedItemScope ? "补全当前文献" : "告诉工作台你要完成什么"}</h2></div>
+        <div><span className="eyebrow">创建独立任务</span><h2>{fixedItemScope ? "补全当前文献" : "告诉工作台你要完成什么"}</h2></div>
       </div>
       <textarea
         value={goal}

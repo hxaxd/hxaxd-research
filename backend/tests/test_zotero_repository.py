@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from fastapi.testclient import TestClient
+
 from app.integrations.zotero.models import (
     BibliographicDraft,
     ConflictChoice,
@@ -19,6 +21,7 @@ from app.integrations.zotero.models import (
 )
 from app.integrations.zotero.planner import ZoteroDiffPlanner
 from app.integrations.zotero.repository import SqliteZoteroTransferRepository
+from app.main import create_app
 from app.platform.db import WorkspaceDatabase
 
 NOW = datetime(2026, 7, 21, 8, 0, tzinfo=UTC)
@@ -83,6 +86,111 @@ def test_sqlite_repository_persists_preview_resolution_receipt_and_claim(tmp_pat
     assert reopened.get_preview(repeated.id) == repeated
     assert reopened.list_resolutions(preview.id)[0].choice == ConflictChoice.SKIP
     assert reopened.get_receipt(preview.id) == receipt
+
+
+def test_sqlite_repository_persists_item_progress_and_releases_interrupted_claim(tmp_path):
+    database = WorkspaceDatabase(tmp_path / "research.sqlite3")
+    database.initialize()
+    repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+    preview = ZoteroDiffPlanner(clock=lambda: NOW).plan(
+        TransferPlanRequest(
+            direction=TransferDirection.IMPORT,
+            library=LIBRARY,
+            project_id="project-1",
+            items=[
+                TransferCandidate(
+                    item_id="remote-1",
+                    source=BibliographicDraft(item_type="journalArticle", title="Paper"),
+                )
+            ],
+        )
+    )
+    repository.save_preview(preview)
+    assert repository.claim_execution(preview.id, NOW) is True
+    progress = TransferReceipt(
+        id="receipt-progress",
+        preview_id=preview.id,
+        preview_hash=preview.preview_hash,
+        status=TransferStatus.APPLYING,
+        started_at=NOW,
+        finished_at=None,
+        items=[
+            TransferItemReceipt(
+                item_id="remote-1",
+                planned_action=TransferAction.NEW,
+                outcome="applying",
+            )
+        ],
+    )
+    repository.save_progress(progress)
+
+    reopened = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+    assert reopened.get_receipt(preview.id) == progress
+    assert reopened.get_execution_state(preview.id) == TransferStatus.APPLYING
+    assert reopened.reconcile_interrupted() == 1
+    assert reopened.get_execution_state(preview.id) == TransferStatus.RECOVERABLE
+    assert reopened.claim_execution(preview.id, NOW) is True
+
+    completed = progress.model_copy(
+        update={
+            "status": TransferStatus.SUCCEEDED,
+            "finished_at": NOW,
+            "items": [
+                TransferItemReceipt(
+                    item_id="remote-1",
+                    planned_action=TransferAction.NEW,
+                    outcome="created",
+                )
+            ],
+        }
+    )
+    reopened.save_receipt(completed)
+    assert reopened.get_execution_state(preview.id) == TransferStatus.SUCCEEDED
+
+
+def test_application_startup_marks_an_interrupted_transfer_recoverable(app_settings):
+    database = WorkspaceDatabase(app_settings.database_path)
+    database.initialize()
+    repository = SqliteZoteroTransferRepository(database, clock=lambda: NOW)
+    preview = ZoteroDiffPlanner(clock=lambda: NOW).plan(
+        TransferPlanRequest(
+            direction=TransferDirection.IMPORT,
+            library=LIBRARY,
+            project_id="project-1",
+            items=[
+                TransferCandidate(
+                    item_id="remote-1",
+                    source=BibliographicDraft(item_type="journalArticle", title="Paper"),
+                )
+            ],
+        )
+    )
+    repository.save_preview(preview)
+    assert repository.claim_execution(preview.id, NOW) is True
+    repository.save_progress(
+        TransferReceipt(
+            id="startup-progress",
+            preview_id=preview.id,
+            preview_hash=preview.preview_hash,
+            status=TransferStatus.APPLYING,
+            started_at=NOW,
+            items=[
+                TransferItemReceipt(
+                    item_id="remote-1",
+                    planned_action=TransferAction.NEW,
+                    outcome="applying",
+                )
+            ],
+        )
+    )
+
+    application = create_app(app_settings)
+    with TestClient(application):
+        restored = application.state.context.zotero_service.get_public_preview(preview.id)
+
+    assert restored.state == TransferStatus.RECOVERABLE
+    assert restored.receipt is not None
+    assert restored.receipt.items[0].outcome == "applying"
 
 
 def test_sqlite_binding_can_follow_an_immutable_local_item_version(tmp_path):

@@ -448,7 +448,8 @@ def test_agent_router_launches_and_cancels_a_durable_job(tmp_path):
     assert jobs.get(payload["job_id"]).status is JobStatus.QUEUED
     listed = client.get("/api/agent-runs")
     assert listed.status_code == 200
-    assert [item["id"] for item in listed.json()] == [run_id]
+    assert [item["id"] for item in listed.json()["items"]] == [run_id]
+    assert listed.json()["total"] == 1
     canceled = client.post(f"/api/agent-runs/{run_id}/interrupt")
     assert canceled.status_code == 202
     assert jobs.get(payload["job_id"]).status is JobStatus.CANCELED
@@ -498,6 +499,11 @@ def test_agent_approval_routes_expose_only_public_fields(tmp_path):
     resolved = client.post(f"/api/approvals/{public_approval['id']}/approve")
     assert resolved.status_code == 200
     assert resolved.json()["decision"] == "approve"
+    history = client.get(f"/api/agent-runs/{run_id}/approvals").json()
+    assert history == [resolved.json()]
+    assert client.get(
+        f"/api/agent-runs/{run_id}/approvals?status=pending"
+    ).json() == []
     thread.join(timeout=3)
     assert results[0].status is AgentRunStatus.COMPLETED
 

@@ -13,6 +13,7 @@ from .models import (
     JobStatus,
     PublicJob,
     PublicJobEvent,
+    PublicJobPage,
 )
 from .repository import JobConflictError, JobNotFoundError, JobSchemaError, SqliteJobRepository
 from .scheduler import JobExecutionContext, JobRegistry, JobScheduler, JobWorker
@@ -36,6 +37,7 @@ __all__ = [
     "JobStatus",
     "JobWorker",
     "PublicJob",
+    "PublicJobPage",
     "PublicJobEvent",
     "SqliteJobRepository",
 ]

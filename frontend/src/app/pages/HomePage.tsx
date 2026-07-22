@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppData } from "../AppDataContext";
@@ -14,23 +14,22 @@ export function HomePage() {
   const { projects, workspace, loading, connection, error, refresh } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
   const activity = useApiResource(() => Promise.all([api.jobs(), api.agentRuns()]), []);
+  useEffect(() => {
+    const timer = window.setInterval(() => void activity.reload(), 5_000);
+    return () => window.clearInterval(timer);
+  }, [activity.reload]);
   if (loading) return <AsyncMessage kind="loading">正在整理工作台…</AsyncMessage>;
 
   const totalWorks = projects.reduce((sum, project) => sum + project.work_count, 0);
-  const pending = projects.reduce(
-    (sum, project) => sum + (project.status_counts.discovered ?? 0),
-    0,
-  );
-  const pendingProject = projects.find(
-    (project) => (project.status_counts.discovered ?? 0) > 0,
-  );
+  const pending = projects.reduce((sum, project) => sum + project.candidate_count, 0);
+  const pendingProject = projects.find((project) => project.candidate_count > 0);
   const jobs = activity.data?.[0] ?? [];
   const runs = activity.data?.[1] ?? [];
   const active = [
     ...runs.filter((run) =>
       ["created", "starting", "running", "waiting_approval"].includes(run.status),
     ),
-    ...jobs.filter((job) =>
+    ...jobs.filter((job) => job.kind !== "agent.run" &&
       ["queued", "running", "cancellation_requested"].includes(job.status),
     ),
   ];
@@ -48,13 +47,13 @@ export function HomePage() {
       <div className="workspace-content">
         <header className="dashboard-hero">
           <div>
-            <span className="eyebrow">LITERATURE INDEX</span>
+            <span className="eyebrow">今天从这里继续</span>
             <h1>从候选到阅读，保持每一步清晰</h1>
             <p>检索结果先进入收件箱；你的判断、智能体行动和后台任务都有独立记录。</p>
           </div>
           <div className={`connection-card connection-card--${connection}`}>
             <span><i />{connection === "connected" ? "后端已连接" : connection === "connecting" ? "正在连接" : "后端未连接"}</span>
-            <small>{workspace ? `契约 ${workspace.contract_version} · Schema ${workspace.schema_version}` : error || "等待工作区响应"}</small>
+            <small>{workspace ? `工作区已于 ${formatDateTime(workspace.generated_at)} 响应` : error || "等待工作区响应"}</small>
             {connection === "disconnected" ? <button type="button" onClick={() => void refresh()}><Icon name="refresh" size={14} />重新连接</button> : null}
           </div>
         </header>
@@ -68,12 +67,14 @@ export function HomePage() {
           <Link to="/tasks"><span>活跃任务</span><strong>{active.length}</strong><small>运行、等待与审批</small></Link>
         </div>
 
+        {activity.error ? <div className="page-error" role="alert">任务动态读取失败：{activity.error} <button type="button" onClick={() => void activity.retry()}>重新读取</button></div> : null}
+
         <AgentTaskLauncher projects={projects} />
 
         <div className="dashboard-grid">
           <section className="dashboard-section">
             <header>
-              <div><span className="eyebrow">PROJECTS</span><h2>项目入口</h2></div>
+              <div><span className="eyebrow">按主题进入</span><h2>项目</h2></div>
               <button className="project-create-button" type="button" onClick={() => setCreatingProject(!creatingProject)}>
                 <Icon name={creatingProject ? "close" : "plus"} size={14} />
                 {creatingProject ? "取消" : "创建项目"}
@@ -85,7 +86,7 @@ export function HomePage() {
                 <Link key={project.id} to={`/projects/${project.id}`}>
                   <span className="project-list-icon"><Icon name="folder" size={18} /></span>
                   <span><strong>{project.name}</strong><small>{project.description || "尚未填写项目范围"}</small></span>
-                  <em>{project.status_counts.discovered ? `${project.status_counts.discovered} 待判断` : `${project.work_count} 篇`}</em>
+                  <em>{project.candidate_count ? `${project.candidate_count} 待判断` : `${project.work_count} 篇`}</em>
                   <Icon name="arrow-right" size={16} />
                 </Link>
               ))}
@@ -98,17 +99,17 @@ export function HomePage() {
           </section>
 
           <section className="dashboard-section">
-            <header><div><span className="eyebrow">ACTIVITY</span><h2>正在进行</h2></div><Link to="/tasks">全部任务</Link></header>
+            <header><div><span className="eyebrow">需要留意</span><h2>正在进行</h2></div><Link to="/tasks">全部任务</Link></header>
             <div className="activity-list">
               {active.slice(0, 6).map((entry) => "goal" in entry ? (
                 <Link key={entry.id} to={`/agent-runs/${entry.id}`}>
                   <span className={`task-dot task-dot--${entry.status}`} />
-                  <span><strong>{entry.goal}</strong><small>{entry.status} · {formatDateTime(entry.updated_at)}</small></span>
+                  <span><strong>{entry.goal}</strong><small>{activityStatusLabel(entry.status)} · {formatDateTime(entry.updated_at)}</small></span>
                 </Link>
               ) : (
-                <Link key={entry.id} to="/tasks">
+                <Link key={entry.id} to={`/tasks?job=${entry.id}`}>
                   <span className={`task-dot task-dot--${entry.status}`} />
-                  <span><strong>{entry.kind}</strong><small>{entry.status} · {formatDateTime(entry.updated_at)}</small></span>
+                  <span><strong>{jobActivityLabel(entry.kind)}</strong><small>{activityStatusLabel(entry.status)} · {formatDateTime(entry.updated_at)}</small></span>
                 </Link>
               ))}
               {!active.length ? <div className="activity-empty"><Icon name="check" size={18} />当前没有运行中的任务</div> : null}
@@ -118,6 +119,14 @@ export function HomePage() {
       </div>
     </section>
   );
+}
+
+function activityStatusLabel(status: string) {
+  return ({ created: "已创建", starting: "正在启动", queued: "等待执行", running: "执行中", waiting_approval: "等待批准", cancellation_requested: "正在取消" } as Record<string, string>)[status] ?? "正在更新";
+}
+
+function jobActivityLabel(kind: string) {
+  return ({ "attachment.download": "获取文献资源", "attachment.compile": "编译 TeX 源码", "document.extract": "提取论文结构", "document.translate": "整篇语义翻译", "snapshot.create": "创建工作区快照", "snapshot.restore": "恢复工作区快照", "tool.install.pdf2zh": "安装论文结构工具", "tool.install.tex": "安装 TeX 工具" } as Record<string, string>)[kind] ?? "后台任务";
 }
 
 function ProjectCreator() {

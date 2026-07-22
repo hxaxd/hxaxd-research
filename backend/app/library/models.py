@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class AttachmentType(StrEnum):
@@ -76,11 +76,6 @@ class PublicAttachment(BaseModel):
                 exclude={"blob_id", "source_url", "storage_key"},
             )
         )
-
-
-class AttachmentPatch(BaseModel):
-    source_url: HttpUrl | None = None
-    origin: AttachmentOrigin | None = None
 
 
 class AttachmentPreferenceCommand(BaseModel):

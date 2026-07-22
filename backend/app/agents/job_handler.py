@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.jobs import JobExecutionContext, JobExecutionResult, JobFailure
 
 from .models import AgentRunStatus
@@ -11,8 +13,14 @@ AGENT_RUN_JOB_KIND = "agent.run"
 class AgentRunJobHandler:
     """Bridges durable jobs to the synchronous AgentSupervisor execution boundary."""
 
-    def __init__(self, supervisor: AgentSupervisor) -> None:
+    def __init__(
+        self,
+        supervisor: AgentSupervisor,
+        *,
+        finish_discovery_sessions: Callable[[str, str], int] | None = None,
+    ) -> None:
         self.supervisor = supervisor
+        self.finish_discovery_sessions = finish_discovery_sessions
 
     def __call__(self, context: JobExecutionContext) -> JobExecutionResult:
         run_id = context.claimed.job.input.get("run_id")
@@ -31,6 +39,13 @@ class AgentRunJobHandler:
             reasoning_effort=persisted.reasoning_effort,
             cancellation=context.cancellation,
         )
+        if self.finish_discovery_sessions is not None:
+            session_status = {
+                AgentRunStatus.COMPLETED: "succeeded",
+                AgentRunStatus.CANCELED: "cancelled",
+                AgentRunStatus.FAILED: "failed",
+            }[run.status]
+            self.finish_discovery_sessions(run.id, session_status)
         if run.status is AgentRunStatus.FAILED:
             raise JobFailure(
                 run.error_code or "agent_run_failed",

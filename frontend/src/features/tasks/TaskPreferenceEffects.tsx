@@ -34,9 +34,10 @@ export function TaskPreferenceEffects() {
           const effects = taskEffects(previous.current, jobs, preferences.tasks);
           for (const effect of effects) {
             const title = effect.outcome === "succeeded" ? "任务已完成" : "任务执行失败";
+            const jobLabel = taskEffectLabel(effect.job.kind);
             const message = effect.outcome === "succeeded"
-              ? `${effect.job.kind} 已产生可查看的结果。`
-              : `${effect.job.kind}：${effect.job.error_message || "请打开任务中心查看原因。"}`;
+              ? `${jobLabel}已产生可查看的结果。`
+              : `${jobLabel}：${effect.job.error_message || "请打开任务中心查看原因。"}`;
             if (effect.notify) {
               showSystemNotification(title, message, effect.job.id);
               setToast({ jobId: effect.job.id, title, message });
@@ -68,6 +69,19 @@ export function TaskPreferenceEffects() {
   return toast ? <button className="task-effect-toast" type="button" onClick={() => { navigate(`/tasks?job=${toast.jobId}`); setToast(null); }}>
     <Icon name="activity" size={18} /><span><strong>{toast.title}</strong><small>{toast.message}</small></span><Icon name="chevron-right" size={16} />
   </button> : null;
+}
+
+function taskEffectLabel(kind: string) {
+  return ({
+    "attachment.download": "文献资源获取",
+    "attachment.compile": "TeX 编译",
+    "document.extract": "论文结构识别",
+    "document.translate": "整篇语义翻译",
+    "snapshot.create": "工作区快照创建",
+    "snapshot.restore": "工作区快照恢复",
+    "tool.install.pdf2zh": "论文结构工具安装",
+    "tool.install.tex": "TeX 工具安装",
+  } as Record<string, string>)[kind] ?? "后台任务";
 }
 
 function showSystemNotification(title: string, body: string, jobId: string) {

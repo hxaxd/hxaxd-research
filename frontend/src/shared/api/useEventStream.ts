@@ -36,21 +36,28 @@ async function runWithReconnect<T extends { id: number }>(
   setState: (state: StreamState) => void,
   onEvent: (event: T) => void,
 ) {
-  for (let attempt = 0; attempt < 4 && !signal.aborted; attempt += 1) {
+  let attempt = 0;
+  while (!signal.aborted) {
     try {
-      await consumeSse<T>(url, signal, latestId.current, onEvent);
+      await consumeSse<T>(url, signal, latestId.current, (event) => {
+        attempt = 0;
+        onEvent(event);
+      });
       if (!signal.aborted) setState("closed");
       return;
     } catch {
       if (signal.aborted) return;
-      if (attempt === 3) {
-        setState("error");
-        return;
-      }
+      setState("error");
+      await abortableDelay(reconnectDelay(attempt), signal);
+      if (signal.aborted) return;
+      attempt += 1;
       setState("connecting");
-      await abortableDelay(400 * 2 ** attempt, signal);
     }
   }
+}
+
+export function reconnectDelay(attempt: number) {
+  return Math.min(15_000, 500 * 2 ** Math.min(Math.max(attempt, 0), 5));
 }
 
 async function consumeSse<T>(

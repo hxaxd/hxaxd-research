@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -10,11 +11,13 @@ from app.agents import WEB_SEARCH_SCOPE, AgentPromptContextBuilder
 from app.agents.prompting import READ_SCOPE
 from app.documents.models import BlockKind, ExtractedBlock, ExtractedDocument
 from app.integrations.zotero.models import (
+    BibliographicDraft,
+    TransferCandidate,
     TransferDirection,
-    TransferPreview,
-    TransferSummary,
+    TransferPlanRequest,
     ZoteroLibraryRef,
 )
+from app.integrations.zotero.planner import ZoteroDiffPlanner
 from tests.sample_data import PDF
 from tests.test_api_v3 import _candidate
 
@@ -138,16 +141,27 @@ def test_all_four_agent_task_types_have_explicit_tools_and_context_requirements(
 
 def test_conflict_task_context_contains_the_bound_immutable_preview() -> None:
     now = datetime.now(UTC)
-    preview = TransferPreview(
-        id="preview-1",
-        direction=TransferDirection.IMPORT,
-        library=ZoteroLibraryRef(kind="users", id="1"),
-        project_id="project-1",
-        created_at=now,
-        expires_at=now + timedelta(minutes=15),
-        items=[],
-        summary=TransferSummary(total=0),
-        preview_hash="a" * 64,
+    preview = ZoteroDiffPlanner(clock=lambda: now).plan(
+        TransferPlanRequest(
+            direction=TransferDirection.IMPORT,
+            library=ZoteroLibraryRef(kind="users", id="1"),
+            project_id="project-1",
+            ttl_seconds=int(timedelta(minutes=15).total_seconds()),
+            items=[
+                TransferCandidate(
+                    item_id="item-1",
+                    source=BibliographicDraft(
+                        item_type="journalArticle",
+                        title="Source title",
+                        raw={"api_key": "must-not-leak"},
+                    ),
+                    target=BibliographicDraft(
+                        item_type="journalArticle",
+                        title="Target title",
+                    ),
+                )
+            ],
+        )
     )
 
     class _Zotero:
@@ -171,7 +185,17 @@ def test_conflict_task_context_contains_the_bound_immutable_preview() -> None:
     injected = resolved.task_data["zotero_transfer_preview"]
     assert injected["id"] == preview.id
     assert injected["preview_hash"] == preview.preview_hash
-    assert "library" not in injected
+    assert injected["library"] == {"kind": "users", "id": "1"}
+    assert injected["project_id"] == "project-1"
+    assert injected["items"][0]["display_title"] == "Source title"
+    assert not {
+        "source",
+        "target",
+        "source_fingerprint",
+        "target_fingerprint",
+        "attachments",
+    } & injected["items"][0].keys()
+    assert "must-not-leak" not in json.dumps(injected)
 
 
 def test_streamable_http_mcp_authenticates_and_calls_domain_tool(client) -> None:
@@ -239,9 +263,9 @@ def test_bound_agent_can_only_submit_an_idempotent_metadata_proposal(client) -> 
         f"/api/projects/{project['id']}/candidates", json=_candidate()
     ).json()
     membership = client.post(
-        f"/api/projects/{project['id']}/candidates/{candidate['id']}/promote",
-        json={},
-    ).json()
+        f"/api/projects/{project['id']}/candidate-decisions",
+        json={"decisions": [{"candidate_id": candidate["id"], "decision": "include"}]},
+    ).json()[0]["project_item"]
     item_id = membership["preferred_item_id"]
     item = client.get(f"/api/items/{item_id}").json()
     context = client.app.state.context

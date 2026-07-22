@@ -19,7 +19,7 @@
 }
 .task-effect-toast span { display: grid; gap: 3px; min-width: 0; }
 .task-effect-toast strong { font-size: 11px; }
-.task-effect-toast small { overflow: hidden; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.task-effect-toast small { overflow: hidden; color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 720px) {
   .task-effect-toast { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 24px); min-height: 68px; }

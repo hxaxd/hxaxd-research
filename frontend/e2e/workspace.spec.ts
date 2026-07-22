@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import type { ChangeSet, Job } from "../src/shared/api/contracts";
+import type { ChangeSet, Job, TransferPreview, TransferReceipt } from "../src/shared/api/contracts";
 
 const NOW = "2026-07-22T08:00:00Z";
 const PDF = "JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgKHB5cGRmKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvUGFnZXMKL0NvdW50IDEKL0tpZHMgWyA0IDAgUiBdCj4+CmVuZG9iagozIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyAyIDAgUgo+PgplbmRvYmoKNCAwIG9iago8PAovVHlwZSAvUGFnZQovUmVzb3VyY2VzIDw8Cj4+Ci9NZWRpYUJveCBbIDAuMCAwLjAgNjEyIDc5MiBdCi9QYXJlbnQgMiAwIFIKPj4KZW5kb2JqCnhyZWYKMCA1CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDU0IDAwMDAwIG4gCjAwMDAwMDAxMTMgMDAwMDAgbiAKMDAwMDAwMDE2MiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDUKL1Jvb3QgMyAwIFIKL0luZm8gMSAwIFIKPj4Kc3RhcnR4cmVmCjI1NgolJUVPRgo=";
@@ -13,6 +13,7 @@ interface MockState {
   projectItem: ReturnType<typeof projectItem>;
   attachments: ReturnType<typeof attachment>[];
   preferencesFailures: number;
+  transfer: TransferPreview | null;
 }
 
 function creator(name = "Ada Example") {
@@ -70,7 +71,7 @@ function candidate(index: number) {
       identifiers: [{ scheme: "doi", value: `10.2000/candidate.${index + 1}`, is_primary: true }],
     },
     dedupe_key: `doi:${index}`, matched_work_id: matched ? "work-1" : null,
-    matched_item: matched ? item() : null, rank: 0.99 - index / 1000,
+    matched_item: matched ? item() : null, rank: index + 1,
     rationale: "与当前项目的问题和方法范围直接相关。",
     evidence: [{ id: `evidence-${index}`, provider: "Crossref", external_key: `key-${index}`, url: "https://example.test/source", captured_at: NOW, summary: "出版者元数据与摘要", fields: { doi: `10.2000/candidate.${index + 1}` } }],
     created_at: NOW, resolved_at: null,
@@ -78,15 +79,15 @@ function candidate(index: number) {
 }
 
 function job(): Job {
-  return { id: "job-1", kind: "document.translate", subject_type: "document", subject_id: "document-1", status: "failed", priority: 0, error_code: "provider_unavailable", error_message: "翻译服务暂时不可用", max_attempts: 3, created_at: NOW, updated_at: NOW, started_at: NOW, finished_at: NOW, cancel_requested_at: null };
+  return { id: "job-1", kind: "document.translate", subject_type: "document", subject_id: "document-1", status: "failed", priority: 0, result: null, error_code: "provider_unavailable", error_message: "翻译服务暂时不可用", max_attempts: 3, created_at: NOW, updated_at: NOW, started_at: NOW, finished_at: NOW, cancel_requested_at: null };
 }
 
 function successfulResourceJob(): Job {
-  return { id: "job-resource", kind: "attachment.download", subject_type: "item", subject_id: "item-1", status: "succeeded", priority: 0, error_code: null, error_message: null, max_attempts: 3, created_at: NOW, updated_at: NOW, started_at: NOW, finished_at: NOW, cancel_requested_at: null };
+  return { id: "job-resource", kind: "attachment.download", subject_type: "item", subject_id: "item-1", status: "succeeded", priority: 0, result: { project_id: "project-1", item_id: "item-1", attachment_ids: ["attachment-2"] }, error_code: null, error_message: null, max_attempts: 3, created_at: NOW, updated_at: NOW, started_at: NOW, finished_at: NOW, cancel_requested_at: null };
 }
 
 function runningResourceJob(): Job {
-  return { ...successfulResourceJob(), id: "job-direct", status: "running", finished_at: null };
+  return { ...successfulResourceJob(), id: "job-direct", status: "running", result: null, finished_at: null };
 }
 
 function agentRun(id: string, taskKind: string, goal: string) {
@@ -135,6 +136,38 @@ function resourceChangeSet(runId: string): ChangeSet {
   };
 }
 
+function recoverableTransfer(): TransferPreview {
+  return {
+    id: "transfer-1",
+    direction: "import",
+    library: { kind: "groups", id: "42" },
+    project_id: "project-1",
+    created_at: NOW,
+    expires_at: "2026-07-23T08:00:00Z",
+    preview_hash: "d".repeat(64),
+    state: "recoverable",
+    summary: { total: 1, new: 0, update: 0, unchanged: 0, conflict: 1, blocked: 0 },
+    resolutions: [{ conflict_id: "zotero-conflict-1", choice: "target", manual_changes: null, resolved_at: NOW }],
+    items: [{
+      item_id: "item-1",
+      display_title: "Semantic Reading for Long Scientific Papers",
+      action: "conflict",
+      differences: [{ field: "title", source: "Zotero title", target: item().title }],
+      conflicts: [{ id: "zotero-conflict-1", item_id: "item-1", kind: "field_conflict", message: "标题在两边都发生了变化", fields: ["title"] }],
+      blocked_reason: null,
+    }],
+    receipt: {
+      id: "receipt-1",
+      preview_id: "transfer-1",
+      preview_hash: "d".repeat(64),
+      status: "applying",
+      started_at: NOW,
+      finished_at: null,
+      items: [{ item_id: "item-1", planned_action: "conflict", outcome: "applying", external_key: "ABCD1234", external_version: 7, message: null }],
+    },
+  };
+}
+
 function preferences() {
   return {
     revision: 4,
@@ -175,18 +208,30 @@ async function handleApi(route: Route, state: MockState) {
   const path = url.pathname;
   const method = request.method();
   const json = (value: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
+  const page = (items: unknown[], defaultLimit = 200) => {
+    const limit = Number(url.searchParams.get("limit") ?? defaultLimit);
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    return { items: items.slice(offset, offset + limit), total: items.length, limit, offset };
+  };
   if (path === "/api/device-access/status") return json({ lan_enabled: false, local_request: true, authenticated: true, cookie_secure: false, session: null });
   if (path === "/api/workspace") return json({ generated_at: NOW, contract_version: "4.0", schema_version: 4, counts: { works: 1, attachments: state.attachments.length }, projects: [{ id: "project-1", name: "语义阅读研究", description: "平板文献工作流", item_count: 1, candidate_count: state.candidates.length, status_counts: { discovered: state.candidates.length, included: 1 }, updated_at: NOW }], capabilities: {} });
-  if (path === "/api/projects" && method === "GET") return json([{ id: "project-1", name: "语义阅读研究", description: "平板文献工作流", work_count: 1, status_counts: { discovered: state.candidates.length, included: 1 }, created_at: NOW, updated_at: NOW }]);
-  if (path === "/api/projects/project-1") return json({ id: "project-1", name: "语义阅读研究", description: "平板文献工作流", work_count: 1, status_counts: { discovered: state.candidates.length, included: 1 }, created_at: NOW, updated_at: NOW });
-  if (path === "/api/projects/project-1/candidates") return json(state.candidates);
+  if (path === "/api/projects" && method === "GET") return json([{ id: "project-1", name: "语义阅读研究", description: "平板文献工作流", work_count: 1, candidate_count: state.candidates.length, status_counts: { discovered: 0, included: 1 }, created_at: NOW, updated_at: NOW }]);
+  if (path === "/api/projects/project-1") return json({ id: "project-1", name: "语义阅读研究", description: "平板文献工作流", work_count: 1, candidate_count: state.candidates.length, status_counts: { discovered: 0, included: 1 }, created_at: NOW, updated_at: NOW });
+  if (path === "/api/projects/project-1/candidates") {
+    const matches = url.searchParams.get("state")
+      ? state.candidates.filter((entry) => entry.state === url.searchParams.get("state"))
+      : state.candidates;
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? 100);
+    return json({ items: matches.slice(offset, offset + limit), total: matches.length, limit, offset });
+  }
   if (path === "/api/projects/project-1/candidate-decisions" && method === "POST") {
     const body = request.postDataJSON() as { decisions: Array<{ candidate_id: string; decision: string; reason: string | null }> };
     state.decisions.push(...body.decisions);
     state.candidates = state.candidates.filter((entry) => !body.decisions.some((decision) => decision.candidate_id === entry.id));
     return json(body.decisions.map((decision) => ({ candidate: { ...candidate(Number(decision.candidate_id.split("-")[1])), state: decision.decision === "include" ? "promoted" : "dismissed", resolved_at: NOW }, project_item: decision.decision === "include" ? state.projectItem : null })));
   }
-  if (path === "/api/projects/project-1/items") return json([state.projectItem]);
+  if (path === "/api/projects/project-1/items") return json({ items: [state.projectItem], total: 1, limit: Number(url.searchParams.get("limit") ?? 100), offset: Number(url.searchParams.get("offset") ?? 0) });
   if (path === "/api/projects/project-1/works/work-1" && method === "PATCH") {
     const body = request.postDataJSON() as Partial<ReturnType<typeof projectItem>>;
     state.projectItem = { ...state.projectItem, ...body, updated_at: NOW };
@@ -194,9 +239,27 @@ async function handleApi(route: Route, state: MockState) {
   }
   if (path === "/api/items/item-1") return json(item());
   if (path === "/api/items/item-1/attachments") return json(state.attachments);
+  if (path === "/api/items/item-1/history") return json({
+    item_id: "item-1",
+    revisions: [],
+    field_sources: [],
+    attachment_relations: [],
+    audit_events: [],
+  });
+  if (path === "/api/audit-events") return json({
+    items: [
+      { id: "audit-1", occurred_at: NOW, actor_type: "system", actor_id: null, action: "legacy.imported", entity_type: "workspace", entity_id: "local", correlation_id: null, before: null, after: null, metadata: {} },
+      { id: "audit-2", occurred_at: NOW, actor_type: "user", actor_id: null, action: "catalog.work_created", entity_type: "work", entity_id: "work-1", correlation_id: null, before: null, after: null, metadata: {} },
+      { id: "audit-3", occurred_at: NOW, actor_type: "user", actor_id: null, action: "screening.project_deleted", entity_type: "project", entity_id: "project-1", correlation_id: null, before: null, after: null, metadata: {} },
+    ],
+    total: 3,
+    limit: Number(url.searchParams.get("limit") ?? 20),
+    offset: Number(url.searchParams.get("offset") ?? 0),
+  });
   if (/^\/api\/attachments\/attachment-[12]\/content$/.test(path)) return route.fulfill({ status: 200, contentType: "application/pdf", body: Buffer.from(PDF, "base64") });
   if (path === "/api/items/item-1/documents") return json([{ id: "document-1", item_id: "item-1", source_attachment_id: "attachment-1", source_sha256: "b".repeat(64), extractor: "babeldoc+tex-structure", extractor_version: "1.0", structure_version: "v1", status: "ready", language: "en", page_count: 24, block_count: 240, structure_hash: "c".repeat(64), created_by_job_id: "job-extract", created_at: NOW, completed_at: NOW }]);
   if (path === "/api/documents/document-1/blocks") return json(documentBlocks());
+  if (path === "/api/documents/document-1/glossary") return json([{ id: "glossary-1", document_id: "document-1", target_language: "zh-CN", source_term: "semantic block", translated_term: "语义块", note: null, batch_id: "job-success", created_at: NOW }]);
   if (path === "/api/projects/project-1/items/item-1/annotations") return json([{
     id: "annotation-stale",
     project_id: "project-1",
@@ -234,12 +297,19 @@ async function handleApi(route: Route, state: MockState) {
     if (body.task_kind === "resource_acquisition") state.changes = [resourceChangeSet(run.id), ...state.changes];
     return json({ run, job_id: `agent-job-${run.id}` });
   }
-  if (path === "/api/jobs") return json(state.jobs);
-  if (path === "/api/agent-runs") return json(state.runs);
+  if (path === "/api/jobs") return json(page(state.jobs));
+  const jobMatch = path.match(/^\/api\/jobs\/([^/]+)$/);
+  if (jobMatch) return json(state.jobs.find((entry) => entry.id === jobMatch[1]));
+  const resumeMatch = path.match(/^\/api\/jobs\/([^/]+)\/resume$/);
+  if (resumeMatch && method === "POST") {
+    state.jobs = state.jobs.map((entry) => entry.id === resumeMatch[1] ? { ...entry, status: "queued", error_code: null, error_message: null, finished_at: null } : entry);
+    return json(state.jobs.find((entry) => entry.id === resumeMatch[1]), 202);
+  }
+  if (path === "/api/agent-runs") return json(page(state.runs));
   const runMatch = path.match(/^\/api\/agent-runs\/([^/]+)$/);
   if (runMatch) return json(state.runs.find((entry) => entry.id === runMatch[1]));
   if (/^\/api\/agent-runs\/[^/]+\/approvals$/.test(path)) return json([]);
-  if (/^\/api\/agent-runs\/[^/]+\/events$/.test(path)) return route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ id: 1, run_id: path.split("/")[3], event_type: "run.completed", level: "info", payload: { message: "领域结果已经提交到工作台。" }, created_at: NOW })}\n\n` });
+  if (/^\/api\/agent-runs\/[^/]+\/events$/.test(path)) return route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ id: 1, run_id: path.split("/")[3], event_type: "run.completed", visibility: "public", payload: { message: "领域结果已经提交到工作台。" }, created_at: NOW })}\n\n` });
   if (path === "/api/change-sets") return json({ items: state.changes, total: state.changes.length });
   const reviewMatch = path.match(/^\/api\/change-sets\/([^/]+)\/review$/);
   if (reviewMatch && method === "POST") {
@@ -281,8 +351,30 @@ async function handleApi(route: Route, state: MockState) {
     state.jobs = state.jobs.map((entry) => entry.id === "job-direct" ? { ...entry, status: "succeeded", finished_at: NOW } : entry);
     return route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ id: 3, job_id: "job-direct", event_type: "job.succeeded", level: "info", payload: { summary: "原文已经验证并登记", products: [{ type: "attachment", id: "attachment-direct", role: "output", href: "/projects/project-1/items/item-1/read/attachment-direct?panel=pdf" }] }, created_at: NOW })}\n\n` });
   }
+  if (path === "/api/zotero/status") return json({
+    local: { available: true, read_only: true, message: "本机 Zotero 可读取" },
+    web: { available: true, read_only: false, message: "Web API 可读写" },
+    import_available: true,
+    export_available: true,
+  });
+  if (path === "/api/zotero/transfers/transfer-1" && method === "GET") {
+    return json(state.transfer);
+  }
+  if (path === "/api/zotero/transfers/transfer-1/execute" && method === "POST") {
+    const receipt: TransferReceipt = {
+      id: "receipt-1",
+      preview_id: "transfer-1",
+      preview_hash: "d".repeat(64),
+      status: "succeeded",
+      started_at: NOW,
+      finished_at: NOW,
+      items: [{ item_id: "item-1", planned_action: "conflict", outcome: "updated", external_key: "ABCD1234", external_version: 8, message: null }],
+    };
+    if (state.transfer) state.transfer = { ...state.transfer, state: "succeeded", receipt };
+    return json(receipt);
+  }
   if (path === "/api/device-access/sessions") return json([]);
-  if (path === "/api/tools") return json([{ name: "pdf2zh", label: "PDF2zh / BabelDOC", description: "结构提取、OCR 与兼容 PDF 输出", status: "ready", version: "2.6.8", message: "固定版本已验证", job_id: null, updated_at: NOW }, { name: "tex", label: "TeX Live", description: "编译论文源码", status: "ready", version: "2026", message: "可用", job_id: null, updated_at: NOW }]);
+  if (path === "/api/tools") return json([{ name: "pdf2zh", label: "PDF2zh / BabelDOC", description: "结构提取、OCR 与兼容 PDF 输出", status: "ready", version: "2.9.0", message: "固定版本已验证", job_id: null, updated_at: NOW }, { name: "tex", label: "TeX Live", description: "编译论文源码", status: "ready", version: "2026", message: "可用", job_id: null, updated_at: NOW }]);
   if (path === "/api/snapshots") return json({
     snapshots: [{
       filename: "workspace-20260722-080000.zip",
@@ -300,6 +392,7 @@ function newState(count = 3): MockState {
     candidates: Array.from({ length: count }, (_, index) => candidate(index)),
     decisions: [], changes: [changeSet()], jobs: [job()], runs: [],
     projectItem: projectItem(), attachments: [attachment()], preferencesFailures: 0,
+    transfer: null,
   };
 }
 
@@ -323,7 +416,7 @@ test("complete touch workflow reaches a verified resource from discovery", async
   await expect(page.getByText("已暂存 1 条带来源证据的候选。")).toBeVisible();
 
   await page.getByRole("button", { name: "打开导航" }).tap();
-  await page.getByRole("link", { name: "语义阅读研究" }).tap();
+  await page.locator(".project-link").filter({ hasText: "语义阅读研究" }).tap();
   await expect(page.getByRole("heading", { name: "等待你的判断" })).toBeVisible();
   await page.locator(".candidate-row-main").filter({ hasText: "Traceable candidate 001" }).tap();
   await page.getByPlaceholder("记录收录或排除的理由").fill("来源可核验，直接回答当前项目问题。");
@@ -331,6 +424,8 @@ test("complete touch workflow reaches a verified resource from discovery", async
   await expect(page).toHaveURL(/\/projects\/project-1\/items\/item-1\/read\/attachment-1$/);
 
   await page.getByRole("button", { name: "信息" }).tap();
+  await page.getByText("来源与修改历史").tap();
+  await expect(page.getByText("这条文献尚无独立字段来源记录。")).toBeVisible();
   await page.getByLabel("项目摘要").fill("用于验证完整的结构化阅读工作流。");
   await page.getByLabel("相关性").fill("与项目目标直接相关。");
   await page.getByLabel("主要贡献").fill("稳定语义块\n触屏阅读节奏");
@@ -372,6 +467,25 @@ test("item resource task refreshes attachments from its real event contract", as
   await mockApi(page, state);
   await page.goto("/projects/project-1/items/item-1/read/attachment-1?panel=pdf");
 
+  await expect(page.getByRole("link", { name: "下载 PDF" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "全屏阅读" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "PDF 批注，共 1 条" })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const compactVersionTargets = await page
+    .locator(".toolbar-group--versions button")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      }),
+    );
+  expect(
+    compactVersionTargets.every(
+      ({ width, height }) => width >= 44 && height >= 44,
+    ),
+  ).toBe(true);
+  await expectNoHorizontalOverflow(page);
+  await page.setViewportSize({ width: 768, height: 1024 });
   await page.getByRole("button", { name: "信息" }).tap();
   await page.getByText("从 HTTPS 获取", { exact: true }).tap();
   await page.getByPlaceholder("https://…").fill("https://example.test/event-refreshed.pdf");
@@ -437,10 +551,13 @@ test("change approval and exhausted job failure remain actionable on touch lands
   await expect(page.getByRole("button", { name: "应用 1 项" })).toBeVisible();
   await page.getByRole("button", { name: "应用 1 项" }).tap();
   await page.getByRole("button", { name: /后台任务/ }).tap();
-  await expect(page.getByText("自动重试已用尽，可以重新发起")).toBeVisible();
-  await expect(page.getByText("网络或临时服务", { exact: true })).toBeVisible();
+  await expect(page.getByText("自动重试已用尽，可以恢复任务")).toBeVisible();
+  await expect(page.locator(".job-retry-guidance > span")).toHaveText("网络或临时服务");
   await expectNoHorizontalOverflow(page);
   await expect(page).toHaveScreenshot("task-recovery-tablet-landscape.png");
+  await page.getByRole("button", { name: "从失败点恢复" }).tap();
+  await expect(page.locator(".task-detail-heading .run-status")).toHaveText("等待执行");
+  expect(state.jobs.find((entry) => entry.id === "job-1")?.status).toBe("queued");
 });
 
 test("long semantic paper remains searchable and usable above a virtual keyboard", async ({ page }) => {
@@ -458,11 +575,10 @@ test("long semantic paper remains searchable and usable above a virtual keyboard
   await page.getByRole("button", { name: "分屏" }).tap();
   await expect(page.getByRole("region", { name: "PDF 版面" })).toBeVisible();
   await expect(page.getByRole("region", { name: "结构化双语内容" })).toBeVisible();
-  await page.getByRole("button", { name: "60/40" }).tap();
-  const divider = page.getByRole("separator", { name: "调整分屏比例，当前 PDF 60%" });
+  const divider = page.getByRole("separator", { name: "调整分屏比例，当前 PDF 50%" });
   await expect(divider).toBeVisible();
   await divider.press("ArrowLeft");
-  await expect(page.getByRole("separator", { name: "调整分屏比例，当前 PDF 55%" })).toBeVisible();
+  await expect(page.getByRole("separator", { name: "调整分屏比例，当前 PDF 45%" })).toBeVisible();
   await page.getByRole("button", { name: "结构阅读" }).tap();
   await page.setViewportSize({ width: 768, height: 1024 });
   const search = page.getByLabel("全文搜索");
@@ -504,6 +620,9 @@ test("destructive snapshot controls keep tablet-sized touch targets", async ({ p
   await page.setViewportSize({ width: 768, height: 1024 });
   await mockApi(page, newState());
   await page.goto("/settings");
+  await expect(page.getByText("导入旧工作区")).toBeVisible();
+  await expect(page.getByText("文献入库")).toBeVisible();
+  await expect(page.getByText("删除筛选项目")).toBeVisible();
   const restore = page.locator(".snapshot-restore");
   await expect(restore).toBeVisible();
   await restore.scrollIntoViewIfNeeded();
@@ -512,5 +631,63 @@ test("destructive snapshot controls keep tablet-sized touch targets", async ({ p
     return { width: box.width, height: box.height };
   }));
   expect(touchTargets.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+  await expectNoHorizontalOverflow(page);
+});
+
+test("phone-width navigation and user workflows remain usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const state = newState(0);
+  await mockApi(page, state);
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "从候选到阅读，保持每一步清晰" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "打开导航" }).tap();
+  const navigationTargets = await page.locator(".primary-nav-link").evaluateAll((links) => links.map((link) => {
+    const box = link.getBoundingClientRect();
+    return { width: box.width, height: box.height };
+  }));
+  expect(navigationTargets.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+  await page.locator(".project-link").filter({ hasText: "语义阅读研究" }).tap();
+
+  await expect(page.locator(".page-tabs button.active")).toContainText("项目文献");
+  await expect(page.getByText("Semantic Reading for Long Scientific Papers")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/tasks");
+  await expect(page.getByRole("heading", { name: "继续运行，审阅结果" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/route-that-does-not-exist");
+  await expect(page.getByRole("heading", { name: "这里没有可打开的内容" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "返回工作台" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("Zotero transfer scope and checkpoint survive a page refresh", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  const state = newState();
+  state.transfer = recoverableTransfer();
+  await mockApi(page, state);
+  await page.goto("/integrations?transfer=transfer-1");
+
+  await expect(page.getByTitle("已连接 Zotero Desktop 本机接口")).toBeVisible();
+  await expect(
+    page.getByTitle("Zotero Web API 已配置，可用于导入与导出"),
+  ).toBeVisible();
+  await expect(page.locator(".transfer-state")).toHaveText("可从断点继续");
+  await expect(page.getByLabel("库类型")).toHaveValue("groups");
+  await expect(page.getByLabel("库 ID")).toHaveValue("42");
+  await expect(page.locator(".zotero-fields label").filter({ hasText: "项目" }).locator("select")).toHaveValue("project-1");
+  await expect(page.getByText("已保留当前项目版本")).toBeVisible();
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/integrations\?transfer=transfer-1$/);
+  await expect(page.locator(".transfer-state")).toHaveText("可从断点继续");
+  await expect(page.getByText("已保留当前项目版本")).toBeVisible();
+  await page.getByLabel(/上次执行已中断/).check();
+  await page.getByRole("button", { name: "从断点继续迁移" }).tap();
+  await expect(page.locator(".transfer-state")).toHaveText("迁移完成");
+  expect(state.transfer?.state).toBe("succeeded");
   await expectNoHorizontalOverflow(page);
 });

@@ -1,16 +1,20 @@
 import type {
   AgentRun,
+  AgentRunPage,
   AgentRunCreate,
   AgentRunLaunch,
   AgentTaskDefinition,
   Annotation,
   AnnotationCreate,
   AnnotationUpdate,
+  AuditEventPage,
   Approval,
   Attachment,
   AttachmentDownloadRequest,
   BibliographicItem,
   Candidate,
+  CandidatePage,
+  CandidateState,
   CandidateDecision,
   CandidateDecisionResult,
   ChangeReviewDecision,
@@ -18,14 +22,18 @@ import type {
   ChangeSetList,
   ChangeSetStatus,
   DocumentBlocksPage,
+  DocumentGlossaryEntry,
   DeviceAccessStatus,
   DeviceSession,
   Job,
+  JobPage,
+  ItemHistory,
   ManagedTool,
   ManagedToolName,
   Project,
   ProjectCreate,
   ProjectItem,
+  ProjectItemPage,
   ProjectItemStatus,
   ProjectItemUpdate,
   PairedDevice,
@@ -68,13 +76,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
-      detail?: string | { message?: string };
+      detail?: unknown;
       message?: string;
       code?: string;
       details?: unknown;
     } | null;
-    const detail =
-      typeof payload?.detail === "string" ? payload.detail : payload?.detail?.message;
+    const detail = apiDetail(payload?.detail);
     throw new ApiError(
       payload?.message ?? detail ?? `请求失败：${response.status}`,
       response.status,
@@ -86,6 +93,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+function apiDetail(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const message = (value as { message?: unknown }).message;
+    return typeof message === "string" ? message : undefined;
+  }
+  if (Array.isArray(value)) {
+    const messages = value.flatMap((entry) => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
+      const detail = entry as { msg?: unknown; loc?: unknown };
+      if (typeof detail.msg !== "string") return [];
+      const location = Array.isArray(detail.loc)
+        ? detail.loc.filter((part) => typeof part === "string" || typeof part === "number").join(".")
+        : "";
+      return [`${location ? `${location}：` : ""}${detail.msg}`];
+    });
+    return messages.length ? messages.join("；") : undefined;
+  }
+  return undefined;
+}
+
 function query(values: Record<string, string | number | null | undefined>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {
@@ -95,23 +123,77 @@ function query(values: Record<string, string | number | null | undefined>): stri
   return encoded ? `?${encoded}` : "";
 }
 
+async function collectPages<T>(load: (offset: number, limit: number) => Promise<{
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}>): Promise<T[]> {
+  const pageSize = 500;
+  const items: T[] = [];
+  while (true) {
+    const page = await load(items.length, pageSize);
+    if (page.offset !== items.length) throw new Error("分页响应与请求位置不一致");
+    items.push(...page.items);
+    if (items.length >= page.total) return items;
+    if (!page.items.length) throw new Error("分页响应提前结束");
+  }
+}
+
+function compareCandidatePriority(left: Candidate, right: Candidate): number {
+  const leftRank = typeof left.rank === "number" && Number.isFinite(left.rank) ? left.rank : null;
+  const rightRank = typeof right.rank === "number" && Number.isFinite(right.rank) ? right.rank : null;
+  if (leftRank === null && rightRank !== null) return 1;
+  if (leftRank !== null && rightRank === null) return -1;
+  if (leftRank !== null && rightRank !== null && leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+  const newestFirst = right.created_at.localeCompare(left.created_at);
+  return newestFirst || right.id.localeCompare(left.id);
+}
+
 export const api = {
   workspace: () => request<Workspace>("/workspace"),
   projects: () => request<Project[]>("/projects"),
   createProject: (payload: ProjectCreate) =>
     request<Project>("/projects", { method: "POST", body: JSON.stringify(payload) }),
   project: (projectId: string) => request<Project>(`/projects/${projectId}`),
-  projectItems: (projectId: string, status?: ProjectItemStatus | "all") =>
-    request<ProjectItem[]>(
-      `/projects/${projectId}/items${query({ status: status === "all" ? null : status })}`,
-    ),
+  projectItemsPage: (
+    projectId: string,
+    status: ProjectItemStatus | "all" = "all",
+    limit = 100,
+    offset = 0,
+  ) => request<ProjectItemPage>(
+    `/projects/${projectId}/items${query({
+      status: status === "all" ? null : status,
+      limit,
+      offset: offset || null,
+    })}`,
+  ),
+  projectItems: (projectId: string, status: ProjectItemStatus | "all" = "all") =>
+    collectPages((offset, limit) => api.projectItemsPage(projectId, status, limit, offset)),
   updateProjectItem: (projectId: string, workId: string, payload: ProjectItemUpdate) =>
     request<ProjectItem>(`/projects/${projectId}/works/${workId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  candidates: (projectId: string) =>
-    request<Candidate[]>(`/projects/${projectId}/candidates`),
+  candidatesPage: (
+    projectId: string,
+    state?: CandidateState,
+    limit = 100,
+    offset = 0,
+  ) => request<CandidatePage>(
+    `/projects/${projectId}/candidates${query({ state, limit, offset: offset || null })}`,
+  ),
+  candidates: async (projectId: string, states?: CandidateState[]) => {
+    if (!states?.length) {
+      return collectPages((offset, limit) => api.candidatesPage(projectId, undefined, limit, offset));
+    }
+    const pages = await Promise.all(states.map((state) =>
+      collectPages((offset, limit) => api.candidatesPage(projectId, state, limit, offset)),
+    ));
+    return pages.flat().toSorted(compareCandidatePriority);
+  },
   decideCandidates: (projectId: string, decisions: CandidateDecision[]) =>
     request<CandidateDecisionResult[]>(`/projects/${projectId}/candidate-decisions`, {
       method: "POST",
@@ -148,15 +230,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  setAttachmentPreference: (itemId: string, purpose: string, attachmentId: string) =>
+    request<Attachment>(`/items/${itemId}/attachment-preferences`, {
+      method: "PUT",
+      body: JSON.stringify({ purpose, attachment_id: attachmentId }),
+    }),
   compileAttachment: (attachmentId: string, mainTex: string | null, projectId: string) =>
     request<Job>(`/attachments/${attachmentId}/compile${query({ project_id: projectId })}`, {
       method: "POST",
       body: JSON.stringify({ main_tex: mainTex || null }),
-    }),
-  translateAttachment: (attachmentId: string, qps: number, workers: number, projectId: string) =>
-    request<Job>(`/attachments/${attachmentId}/translate${query({ project_id: projectId })}`, {
-      method: "POST",
-      body: JSON.stringify({ qps, workers }),
     }),
   attachmentUrl: (attachmentId: string, sha256?: string) =>
     `/api/attachments/${attachmentId}/content${sha256 ? `?v=${sha256}` : ""}`,
@@ -165,8 +247,14 @@ export const api = {
 
   documents: (itemId: string) =>
     request<SemanticDocument[]>(`/items/${itemId}/documents`),
-  document: (documentId: string) =>
-    request<SemanticDocument>(`/documents/${documentId}`),
+  auditEvents: (limit = 20, offset = 0) =>
+    request<AuditEventPage>(`/audit-events${query({ limit, offset: offset || null })}`),
+  itemHistory: (itemId: string) =>
+    request<ItemHistory>(`/items/${itemId}/history`),
+  documentGlossary: (documentId: string, targetLanguage?: string | null) =>
+    request<DocumentGlossaryEntry[]>(
+      `/documents/${documentId}/glossary${query({ target_language: targetLanguage })}`,
+    ),
   documentBlocks: async (documentId: string, targetLanguage?: string | null) => {
     const pageSize = 1000;
     const items: DocumentBlocksPage["items"] = [];
@@ -275,9 +363,12 @@ export const api = {
   revokeDeviceSession: (sessionId: string) =>
     request<DeviceSession>(`/device-access/sessions/${sessionId}`, { method: "DELETE" }),
 
-  jobs: () => request<Job[]>("/jobs"),
+  jobsPage: (limit = 200, offset = 0) =>
+    request<JobPage>(`/jobs${query({ limit, offset: offset || null })}`),
+  jobs: () => collectPages((offset, limit) => api.jobsPage(limit, offset)),
   job: (jobId: string) => request<Job>(`/jobs/${jobId}`),
   cancelJob: (jobId: string) => request<Job>(`/jobs/${jobId}/cancel`, { method: "POST" }),
+  resumeJob: (jobId: string) => request<Job>(`/jobs/${jobId}/resume`, { method: "POST" }),
   jobEventsUrl: (jobId: string, after = 0) => `/api/jobs/${jobId}/events${query({ after })}`,
 
   tools: () => request<ManagedTool[]>("/tools"),
@@ -292,7 +383,9 @@ export const api = {
       body: JSON.stringify({ confirmation }),
     }),
 
-  agentRuns: () => request<AgentRun[]>("/agent-runs"),
+  agentRunsPage: (limit = 200, offset = 0) =>
+    request<AgentRunPage>(`/agent-runs${query({ limit, offset: offset || null })}`),
+  agentRuns: () => collectPages((offset, limit) => api.agentRunsPage(limit, offset)),
   agentTaskDefinitions: () =>
     request<AgentTaskDefinition[]>("/agent-task-definitions"),
   agentRun: (runId: string) => request<AgentRun>(`/agent-runs/${runId}`),
@@ -307,7 +400,8 @@ export const api = {
     request<AgentRunLaunch>(`/agent-runs/${runId}/resume`, { method: "POST" }),
   agentEventsUrl: (runId: string, after = 0) =>
     `/api/agent-runs/${runId}/events${query({ after })}`,
-  approvals: (runId: string) => request<Approval[]>(`/agent-runs/${runId}/approvals`),
+  approvals: (runId: string, status?: Approval["status"]) =>
+    request<Approval[]>(`/agent-runs/${runId}/approvals${query({ status })}`),
   approve: (approvalId: string) =>
     request<Approval>(`/approvals/${approvalId}/approve`, { method: "POST" }),
   reject: (approvalId: string) =>
@@ -348,6 +442,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  zoteroTransfer: (previewId: string) =>
+    request<TransferPreview>(`/zotero/transfers/${previewId}`),
   executeZoteroTransfer: (previewId: string, expectedPreviewHash: string) =>
     request<TransferReceipt>(`/zotero/transfers/${previewId}/execute`, {
       method: "POST",

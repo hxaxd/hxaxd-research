@@ -139,7 +139,7 @@ export function CandidateInbox({ candidates, deciding, onDecisions }: Props) {
     >
       <section className="candidate-list" aria-label="待判断候选">
         <header>
-          <div><span className="eyebrow">CANDIDATE INBOX</span><h2>等待你的判断</h2></div>
+          <div><span className="eyebrow">候选收件箱</span><h2>等待你的判断</h2></div>
           <div className="candidate-list-summary">
             <button
               type="button"
@@ -174,7 +174,9 @@ export function CandidateInbox({ candidates, deciding, onDecisions }: Props) {
               onClick={() => toggleBatch(candidate.id)}
             ><Icon name="check" size={15} /></button>
             <button className="candidate-row-main" type="button" onClick={() => selectCandidate(candidate.id)}>
-              <span className="candidate-rank">{candidate.rank === null ? "—" : Math.round(candidate.rank * 100)}</span>
+              <span className="candidate-rank" title="来源结果中的顺序；数字越小越靠前">
+                {candidateRankLabel(candidate.rank)}
+              </span>
               <span className="candidate-row-copy"><strong>{candidate.item.translated_title || candidate.item.title}</strong><small>{candidate.item.title}</small><em>{candidateCreatorLine(candidate.item)} · {candidate.item.issued_year ?? "年份未知"}</em></span>
               {candidate.matched_work_id ? <span className="match-badge">可能重复</span> : null}
             </button>
@@ -209,7 +211,7 @@ function CandidateInspector({ candidate, open, busy, reason, onReason, onDecisio
     <aside aria-hidden={!open} className={open ? "candidate-inspector candidate-inspector--open" : "candidate-inspector"}>
       <button aria-label="关闭候选详情" className="candidate-inspector-close" type="button" onClick={onClose}><Icon name="close" size={17} /></button>
       <div className="candidate-inspector-scroll">
-        <span className="eyebrow">REVIEW</span>
+        <span className="eyebrow">逐项判断</span>
         <h2>{candidate.item.translated_title || candidate.item.title}</h2>
         {candidate.item.translated_title ? <p className="candidate-original-title">{candidate.item.title}</p> : null}
         <div className="candidate-facts"><span>{candidate.item.item_type}</span><span>{candidate.item.issued_year ?? "年份未知"}</span><span>{candidate.item.container_title || "来源未知"}</span>{candidate.item.identifiers.map((identifier) => <span key={`${identifier.scheme}:${identifier.value}`}>{identifier.scheme.toUpperCase()} {identifier.value}</span>)}</div>
@@ -255,6 +257,11 @@ function difference(label: string, proposed: string, existing: string): Candidat
 
 function text(value: string | number | null | undefined) {
   return value === null || value === undefined || value === "" ? "—" : String(value);
+}
+
+function candidateRankLabel(rank: number | null) {
+  if (rank === null) return "—";
+  return `#${Math.max(1, Math.round(rank))}`;
 }
 
 function normalize(value: string) {

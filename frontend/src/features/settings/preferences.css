@@ -1,6 +1,6 @@
 .preferences-settings { overflow: hidden; }
 .preferences-settings > header { align-items: center; }
-.preferences-revision { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px; padding: 7px 11px; color: var(--text-faint); font-size: 10px; }
+.preferences-revision { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px; padding: 7px 11px; color: var(--text-faint); font-size: 12px; }
 .preferences-tabs { display: flex; overflow-x: auto; gap: 5px; border-bottom: 1px solid var(--border-soft); padding: 10px 14px; scrollbar-width: thin; }
 .preferences-tabs button { min-width: 74px; min-height: 44px; border: 0; border-radius: 10px; padding: 0 14px; background: transparent; color: var(--text-muted); }
 .preferences-tabs button.active { background: var(--surface-active); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
@@ -8,22 +8,22 @@
 .preferences-panel fieldset { display: grid; gap: 18px; margin: 0; border: 0; padding: 0; }
 .preferences-panel legend { margin-bottom: 15px; color: var(--text); font-size: 16px; font-weight: 700; }
 .preferences-fields { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 13px; }
-.preferences-field { display: grid; min-width: 0; gap: 7px; color: var(--text-faint); font-size: 10px; }
+.preferences-field { display: grid; min-width: 0; gap: 7px; color: var(--text-faint); font-size: 12px; }
 .preferences-field--wide { grid-column: 1 / -1; }
 .preferences-field input,
 .preferences-field select,
 .preferences-field textarea { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; outline: 0; background: var(--bg); color: var(--text); }
 .preferences-field textarea { min-height: 112px; padding-block: 11px; line-height: 1.55; resize: vertical; }
 .preferences-field small,
-.preferences-help { margin: 0; color: var(--text-faint); font-size: 9px; line-height: 1.55; }
+.preferences-help { margin: 0; color: var(--text-faint); font-size: 11px; line-height: 1.55; }
 .preferences-toggles,
 .preferences-capabilities { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 9px; }
 .preferences-toggles label,
-.preferences-capabilities label { display: flex; min-height: 44px; align-items: center; gap: 9px; border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 11px; background: var(--surface); color: var(--text-muted); font-size: 10px; }
+.preferences-capabilities label { display: flex; min-height: 44px; align-items: center; gap: 9px; border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 11px; background: var(--surface); color: var(--text-muted); font-size: 12px; }
 .preferences-toggles input,
 .preferences-capabilities input { width: 18px; height: 18px; accent-color: var(--accent); }
 .preferences-actions { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--border-soft); padding: 14px 20px; }
-.preferences-actions p { margin: 0; color: var(--text-faint); font-size: 10px; line-height: 1.55; }
+.preferences-actions p { margin: 0; color: var(--text-faint); font-size: 11px; line-height: 1.55; }
 .preferences-actions button { min-height: 46px; white-space: nowrap; }
 
 @media (max-width: 900px) {
