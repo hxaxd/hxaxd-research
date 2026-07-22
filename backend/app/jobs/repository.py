@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 from .models import (
@@ -782,12 +783,23 @@ def _public_success_payload(
     attachments: list[JobAttachment],
 ) -> dict[str, Any]:
     outputs = [attachment for attachment in attachments if attachment.role != "input"]
+    project_id = result.get("project_id")
+    item_id = result.get("item_id")
+
+    def attachment_href(attachment_id: str) -> str:
+        if isinstance(project_id, str) and project_id and isinstance(item_id, str) and item_id:
+            return (
+                f"/projects/{quote(project_id, safe='')}/items/{quote(item_id, safe='')}"
+                f"/read/{quote(attachment_id, safe='')}?panel=pdf"
+            )
+        return f"/api/attachments/{quote(attachment_id, safe='')}/content"
+
     products: list[dict[str, str]] = [
         {
             "type": "attachment",
             "id": attachment.attachment_id,
             "role": attachment.role,
-            "href": f"/api/attachments/{attachment.attachment_id}/content",
+            "href": attachment_href(attachment.attachment_id),
         }
         for attachment in outputs
     ]
@@ -802,7 +814,7 @@ def _public_success_payload(
                         "type": "attachment",
                         "id": attachment_id,
                         "role": "output",
-                        "href": f"/api/attachments/{attachment_id}/content",
+                        "href": attachment_href(attachment_id),
                     }
                 )
                 recorded_ids.add(attachment_id)

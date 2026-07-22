@@ -12,19 +12,19 @@
 .semantic-onboarding small { max-width: 500px; margin-top: 14px; color: var(--warning); line-height: 1.6; }
 .semantic-action-error { color: var(--danger) !important; }
 .semantic-toolbar { display: flex; min-height: 58px; flex: 0 0 auto; align-items: center; gap: 9px; border-bottom: 1px solid var(--border); padding: 7px 12px; background: rgb(16 20 28 / 94%); backdrop-filter: blur(16px); }
-.semantic-segments { display: flex; min-height: 42px; padding: 4px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--bg); }
+.semantic-segments { display: flex; min-height: 44px; padding: 4px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--bg); }
 .semantic-segments button { min-width: 62px; border: 0; border-radius: 8px; background: transparent; color: var(--text-faint); }
 .semantic-segments button:disabled { opacity: .42; cursor: not-allowed; }
 .semantic-segments button.active { background: var(--surface-active); color: var(--text); box-shadow: 0 3px 10px rgb(0 0 0 / 20%); }
 .semantic-role-filter { display: flex; align-items: center; gap: 7px; color: var(--text-faint); font-size: 10px; }
-.semantic-role-filter select { min-height: 42px; }
-.semantic-search { display: flex; min-width: 160px; min-height: 42px; align-items: center; gap: 7px; border: 1px solid var(--border-soft); border-radius: 10px; padding: 0 8px 0 11px; color: var(--text-faint); background: var(--bg); }
+.semantic-role-filter select { min-height: 44px; }
+.semantic-search { display: flex; min-width: 160px; min-height: 44px; align-items: center; gap: 7px; border: 1px solid var(--border-soft); border-radius: 10px; padding: 0 8px 0 11px; color: var(--text-faint); background: var(--bg); }
 .semantic-search input { min-width: 0; width: 150px; min-height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 10px; }
 .semantic-search input::-webkit-search-cancel-button { display: none; }
 .semantic-search button { display: grid; width: 30px; min-height: 30px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--text-faint); }
 .semantic-toolbar__status { margin-left: auto; color: var(--text-faint); font-size: 10px; }
 .semantic-toolbar .toolbar-button,
-.semantic-toolbar .primary-toolbar-button { min-height: 42px; }
+.semantic-toolbar .primary-toolbar-button { min-height: 44px; }
 .toolbar-count { display: inline-grid; min-width: 20px; height: 20px; margin-left: 2px; place-items: center; border-radius: 999px; background: rgb(255 255 255 / 8%); font-size: 9px; }
 .semantic-settings { display: flex; flex: 0 0 auto; align-items: end; gap: 12px; border-bottom: 1px solid var(--border-soft); padding: 12px; background: var(--surface); }
 .semantic-settings label { display: grid; min-width: 132px; gap: 5px; color: var(--text-faint); font-size: 9px; }
@@ -128,12 +128,12 @@
 .annotation-composer textarea { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
 .annotation-composer textarea { min-height: 92px; line-height: 1.6; }
 .annotation-composer__actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 8px; }
-.annotation-composer__actions > button { min-height: 42px; border: 1px solid var(--border); border-radius: 9px; padding: 0 13px; background: transparent; color: var(--text-muted); }
+.annotation-composer__actions > button { min-height: 44px; border: 1px solid var(--border); border-radius: 9px; padding: 0 13px; background: transparent; color: var(--text-muted); }
 
 .reading-notes-panel { min-width: 0; overflow: auto; border-left: 1px solid var(--border-soft); padding: 16px 14px 80px; background: rgb(12 15 22 / 98%); box-shadow: -15px 0 40px rgb(0 0 0 / 12%); }
 .reading-notes-panel > header { display: flex; min-height: 50px; align-items: flex-start; justify-content: space-between; }
 .reading-notes-panel h2 { margin: 3px 0 0; font-size: 17px; letter-spacing: -.02em; }
-.reading-notes-panel > header > button { display: grid; width: 42px; min-height: 42px; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--text-faint); }
+.reading-notes-panel > header > button { display: grid; width: 44px; min-height: 44px; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--text-faint); }
 .reading-notes-panel > section { margin-top: 20px; }
 .reading-notes-panel h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; color: var(--text-muted); font-size: 10px; letter-spacing: .05em; }
 .reading-notes-panel h3 span { display: grid; min-width: 20px; height: 20px; margin-left: auto; place-items: center; border-radius: 999px; background: var(--surface-active); color: var(--text-faint); font-size: 9px; }
@@ -149,7 +149,11 @@
 .reading-memory-list > button { display: grid; min-height: 58px; gap: 3px; padding: 10px; }
 .reading-memory-list article { display: flex; align-items: stretch; }
 .reading-memory-list article > button:first-child { display: grid; min-width: 0; flex: 1; gap: 4px; border: 0; padding: 10px; background: transparent; color: var(--text); text-align: left; }
-.reading-memory-list article > button:last-child { display: grid; width: 42px; min-height: 42px; flex: 0 0 auto; place-items: center; border: 0; border-left: 1px solid var(--border-soft); background: transparent; color: var(--text-faint); }
+.reading-memory-list article > button:last-child { display: grid; width: 44px; min-height: 44px; flex: 0 0 auto; place-items: center; border: 0; border-left: 1px solid var(--border-soft); background: transparent; color: var(--text-faint); }
+.anchor-status { margin-left: 7px; border-radius: 999px; padding: 2px 6px; color: var(--warning); background: rgb(239 196 110 / 12%); font-size: 8px; font-style: normal; }
+.anchor-status--unresolved { color: var(--danger); background: var(--danger-soft); }
+.reading-memory-anchor-stale { border-color: rgb(239 196 110 / 28%); }
+.reading-memory-anchor-stale > button:first-child { cursor: not-allowed; opacity: .72; }
 .reading-memory-list strong { overflow: hidden; font-size: 10px; font-weight: 500; line-height: 1.45; text-overflow: ellipsis; }
 .reading-memory-list small { color: var(--text-faint); font-size: 8px; }
 .reading-panel-empty { margin: 0; color: var(--text-faint); font-size: 10px; line-height: 1.6; }

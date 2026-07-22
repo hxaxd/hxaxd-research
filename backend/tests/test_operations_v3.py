@@ -259,6 +259,7 @@ def test_scheduling_validates_attachment_kind_and_hides_url_from_concurrency_key
     job = service.download_attachment(
         "item-1",
         AttachmentDownloadRequest(url="https://papers.example.test/file.pdf?token=secret"),
+        project_id="project-1",
     )
 
     request = scheduler.requests[-1]
@@ -266,21 +267,27 @@ def test_scheduling_validates_attachment_kind_and_hides_url_from_concurrency_key
     assert "secret" not in (request.concurrency_key or "")
     assert len(request.concurrency_key or "") < 120
     with pytest.raises(ValueError, match="TeX"):
-        service.compile_attachment(source.id, CompileJobRequest())
+        service.compile_attachment(source.id, CompileJobRequest(), project_id="project-1")
 
     attachments.source = _attachment(
         source.id,
         AttachmentType.SOURCE_ARCHIVE,
         AttachmentFormat.TEX,
     )
-    service.compile_attachment(source.id, CompileJobRequest(main_tex="paper/main.tex"))
+    service.compile_attachment(
+        source.id,
+        CompileJobRequest(main_tex="paper/main.tex"),
+        project_id="project-1",
+    )
     compile_request = scheduler.requests[-1]
     assert compile_request.max_attempts == 2
     assert compile_request.input["main_tex"] == "paper/main.tex"
 
     attachments.source = source.model_copy(update={"language_mode": LanguageMode.TRANSLATED})
     with pytest.raises(ValueError, match="原文 PDF"):
-        service.translate_attachment(source.id, TranslationJobRequest())
+        service.translate_attachment(
+            source.id, TranslationJobRequest(), project_id="project-1"
+        )
 
 
 def test_download_rejects_private_dns_and_cancellation_without_network(tmp_path, monkeypatch):
@@ -325,6 +332,7 @@ def test_download_event_exposes_only_the_remote_host(tmp_path, monkeypatch):
         "attachment.download",
         {
             "item_id": "item-1",
+            "project_id": "project-1",
             "url": "https://papers.example.test/file.pdf?token=very-secret",
         },
     )
@@ -393,11 +401,11 @@ def test_public_download_route_keeps_path_and_rejects_non_https_before_schedulin
 
     with TestClient(app) as client:
         rejected = client.post(
-            "/api/items/item-1/attachments/download",
+            "/api/items/item-1/attachments/download?project_id=project-1",
             json={"url": "http://example.test/paper.pdf"},
         )
         accepted = client.post(
-            "/api/items/item-1/attachments/download",
+            "/api/items/item-1/attachments/download?project_id=project-1",
             json={"url": "https://example.test/paper.pdf"},
         )
 
@@ -443,6 +451,7 @@ def test_translation_registers_both_outputs_in_one_batch_and_records_job_attachm
         {
             "attachment_id": source.id,
             "item_id": source.item_id,
+            "project_id": "project-1",
             "qps": 3,
             "workers": 2,
         },
@@ -486,7 +495,11 @@ def test_translation_registration_failure_does_not_split_the_output_batch(
         handler.translate(
             _context(
                 "attachment.translate",
-                {"attachment_id": source.id, "item_id": source.item_id},
+                {
+                    "attachment_id": source.id,
+                    "item_id": source.item_id,
+                    "project_id": "project-1",
+                },
             )
         )
 
@@ -513,7 +526,11 @@ def test_canceled_translation_is_retryable_and_never_registers_outputs(tmp_path,
         handler.translate(
             _context(
                 "attachment.translate",
-                {"attachment_id": source.id, "item_id": source.item_id},
+                {
+                    "attachment_id": source.id,
+                    "item_id": source.item_id,
+                    "project_id": "project-1",
+                },
             )
         )
 
@@ -545,7 +562,12 @@ def test_compile_uses_process_runner_with_shell_escape_disabled(tmp_path):
     result = handler.compile(
         _context(
             "attachment.compile",
-            {"attachment_id": source.id, "item_id": source.item_id, "main_tex": "main.tex"},
+            {
+                "attachment_id": source.id,
+                "item_id": source.item_id,
+                "project_id": "project-1",
+                "main_tex": "main.tex",
+            },
         )
     )
 

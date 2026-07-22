@@ -19,6 +19,8 @@ from .models import (
     CandidatePromotionRequest,
     CandidateView,
     ProjectCreate,
+    ProjectDeleteRequest,
+    ProjectDeleteResult,
     ProjectInsightsPatch,
     ProjectView,
     ProjectWorkDecision,
@@ -70,6 +72,97 @@ class ScreeningCommands:
         except sqlite3.IntegrityError as error:
             raise ScreeningConflictError("a project with this name already exists") from error
         return self.queries.get_project(project_id)
+
+    def delete_project(
+        self, project_id: str, payload: ProjectDeleteRequest
+    ) -> ProjectDeleteResult:
+        """Delete an explicitly confirmed project and selected empty orphan works."""
+
+        now = _now()
+        requested_work_ids = set(payload.orphan_work_ids)
+        with self.database.transaction() as connection:
+            project = connection.execute(
+                "SELECT * FROM projects WHERE id = ?", (project_id,)
+            ).fetchone()
+            if project is None:
+                raise ScreeningNotFoundError("project does not exist")
+            current_updated_at = datetime.fromisoformat(
+                str(project["updated_at"]).replace("Z", "+00:00")
+            )
+            if (
+                project["name"] != payload.expected_name
+                or current_updated_at != payload.expected_updated_at
+            ):
+                raise ScreeningConflictError("project confirmation no longer matches")
+            if connection.execute(
+                "SELECT 1 FROM agent_runs WHERE project_id = ? LIMIT 1", (project_id,)
+            ).fetchone() is not None:
+                raise ScreeningConflictError("project has agent run history")
+            if connection.execute(
+                "SELECT 1 FROM change_sets WHERE project_id = ? LIMIT 1", (project_id,)
+            ).fetchone() is not None:
+                raise ScreeningConflictError("project has change set history")
+            if connection.execute(
+                """
+                SELECT 1 FROM candidates
+                WHERE project_id = ? AND state IN ('staged', 'matched')
+                LIMIT 1
+                """,
+                (project_id,),
+            ).fetchone() is not None:
+                raise ScreeningConflictError("project has unresolved candidates")
+
+            project_work_ids = {
+                str(row["work_id"])
+                for row in connection.execute(
+                    "SELECT work_id FROM project_works WHERE project_id = ?",
+                    (project_id,),
+                ).fetchall()
+            }
+            if requested_work_ids != project_work_ids:
+                raise ScreeningConflictError(
+                    "orphan work confirmation does not match the project"
+                )
+            for work_id in sorted(requested_work_ids):
+                self._require_disposable_orphan_work(connection, project_id, work_id)
+
+            source_record_ids = [
+                str(row["source_record_id"])
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT source_record_id FROM candidates
+                    WHERE project_id = ? AND source_record_id IS NOT NULL
+                    """,
+                    (project_id,),
+                ).fetchall()
+            ]
+            self._audit(
+                connection,
+                now=now,
+                actor_type="user",
+                actor_id=None,
+                action="screening.project_deleted",
+                entity_type="project",
+                entity_id=project_id,
+                before={
+                    "name": project["name"],
+                    "description": project["description"],
+                    "updated_at": project["updated_at"],
+                    "deleted_orphan_work_ids": sorted(requested_work_ids),
+                },
+            )
+            connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            for work_id in sorted(requested_work_ids):
+                connection.execute("DELETE FROM works WHERE id = ?", (work_id,))
+            for source_record_id in source_record_ids:
+                if not self._source_record_is_referenced(connection, source_record_id):
+                    connection.execute(
+                        "DELETE FROM source_records WHERE id = ?", (source_record_id,)
+                    )
+        return ProjectDeleteResult(
+            project_id=project_id,
+            deleted_orphan_work_ids=sorted(requested_work_ids),
+        )
 
     def stage_candidate(
         self,
@@ -585,6 +678,83 @@ class ScreeningCommands:
                 after=changes,
             )
         return self.queries.get_project_work(project_id, work_id)
+
+    @staticmethod
+    def _require_disposable_orphan_work(
+        connection: sqlite3.Connection, project_id: str, work_id: str
+    ) -> None:
+        if connection.execute(
+            """
+            SELECT 1 FROM project_works
+            WHERE work_id = ? AND project_id != ? LIMIT 1
+            """,
+            (work_id, project_id),
+        ).fetchone() is not None:
+            raise ScreeningConflictError("work still belongs to another project")
+        if connection.execute(
+            """
+            SELECT 1 FROM candidates
+            WHERE matched_work_id = ? AND project_id != ? LIMIT 1
+            """,
+            (work_id, project_id),
+        ).fetchone() is not None:
+            raise ScreeningConflictError("work is referenced by another project candidate")
+        item_ids = [
+            str(row["id"])
+            for row in connection.execute(
+                "SELECT id FROM bibliographic_items WHERE work_id = ?", (work_id,)
+            ).fetchall()
+        ]
+        if not item_ids:
+            raise ScreeningConflictError("work has no bibliographic item")
+        placeholders = ",".join("?" for _ in item_ids)
+        protected_tables = (
+            "attachments",
+            "annotations",
+            "reading_states",
+            "agent_runs",
+            "change_sets",
+        )
+        for table in protected_tables:
+            if connection.execute(
+                f"SELECT 1 FROM {table} WHERE item_id IN ({placeholders}) LIMIT 1",
+                item_ids,
+            ).fetchone() is not None:
+                raise ScreeningConflictError(f"work has protected {table} data")
+        if connection.execute(
+            f"""
+            SELECT 1 FROM item_relations
+            WHERE source_item_id IN ({placeholders})
+               OR target_item_id IN ({placeholders})
+            LIMIT 1
+            """,
+            [*item_ids, *item_ids],
+        ).fetchone() is not None:
+            raise ScreeningConflictError("work has item relations")
+        subject_ids = [project_id, work_id, *item_ids]
+        subject_placeholders = ",".join("?" for _ in subject_ids)
+        if connection.execute(
+            f"SELECT 1 FROM jobs WHERE subject_id IN ({subject_placeholders}) LIMIT 1",
+            subject_ids,
+        ).fetchone() is not None:
+            raise ScreeningConflictError("work has job history")
+
+    @staticmethod
+    def _source_record_is_referenced(
+        connection: sqlite3.Connection, source_record_id: str
+    ) -> bool:
+        return connection.execute(
+            """
+            SELECT 1 FROM candidates WHERE source_record_id = ?
+            UNION ALL SELECT 1 FROM item_creators WHERE source_record_id = ?
+            UNION ALL SELECT 1 FROM item_identifiers WHERE source_record_id = ?
+            UNION ALL SELECT 1 FROM item_links WHERE source_record_id = ?
+            UNION ALL SELECT 1 FROM item_tags WHERE source_record_id = ?
+            UNION ALL SELECT 1 FROM item_field_sources WHERE source_record_id = ?
+            LIMIT 1
+            """,
+            (source_record_id,) * 6,
+        ).fetchone() is not None
 
     @staticmethod
     def _require_project(connection: sqlite3.Connection, project_id: str) -> None:

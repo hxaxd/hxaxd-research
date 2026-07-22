@@ -151,6 +151,10 @@ class ChangeSetCreate(_Model):
     def items_match_kind_and_scope(self) -> ChangeSetCreate:
         if any(_OPERATION_KIND[item.operation] is not self.kind for item in self.items):
             raise ValueError("change item operation does not match change set kind")
+        if self.kind is ChangeSetKind.RESOURCE_ACQUISITION and (
+            self.project_id is None or self.item_id is None
+        ):
+            raise ValueError("resource acquisition requires project and item scope")
         if self.item_id is not None and any(
             item.target_type == "bibliographic_item" and item.target_id != self.item_id
             for item in self.items

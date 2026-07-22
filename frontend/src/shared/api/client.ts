@@ -139,18 +139,22 @@ export const api = {
     for (const purpose of metadata.preferred_for ?? []) body.append("preferred_for", purpose);
     return request<Attachment>(`/items/${itemId}/attachments`, { method: "POST", body });
   },
-  acquireAttachment: (itemId: string, payload: AttachmentDownloadRequest) =>
-    request<Job>(`/items/${itemId}/attachments/download`, {
+  acquireAttachment: (
+    itemId: string,
+    payload: AttachmentDownloadRequest,
+    projectId: string,
+  ) =>
+    request<Job>(`/items/${itemId}/attachments/download${query({ project_id: projectId })}`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  compileAttachment: (attachmentId: string, mainTex?: string | null) =>
-    request<Job>(`/attachments/${attachmentId}/compile`, {
+  compileAttachment: (attachmentId: string, mainTex: string | null, projectId: string) =>
+    request<Job>(`/attachments/${attachmentId}/compile${query({ project_id: projectId })}`, {
       method: "POST",
       body: JSON.stringify({ main_tex: mainTex || null }),
     }),
-  translateAttachment: (attachmentId: string, qps = 4, workers = 4) =>
-    request<Job>(`/attachments/${attachmentId}/translate`, {
+  translateAttachment: (attachmentId: string, qps: number, workers: number, projectId: string) =>
+    request<Job>(`/attachments/${attachmentId}/translate${query({ project_id: projectId })}`, {
       method: "POST",
       body: JSON.stringify({ qps, workers }),
     }),
@@ -163,13 +167,35 @@ export const api = {
     request<SemanticDocument[]>(`/items/${itemId}/documents`),
   document: (documentId: string) =>
     request<SemanticDocument>(`/documents/${documentId}`),
-  documentBlocks: (documentId: string, targetLanguage?: string | null) =>
-    request<DocumentBlocksPage>(
-      `/documents/${documentId}/blocks${query({
-        limit: 1000,
-        target_language: targetLanguage,
-      })}`,
-    ),
+  documentBlocks: async (documentId: string, targetLanguage?: string | null) => {
+    const pageSize = 1000;
+    const items: DocumentBlocksPage["items"] = [];
+    let firstPage: DocumentBlocksPage | null = null;
+    let offset = 0;
+    while (true) {
+      const page = await request<DocumentBlocksPage>(
+        `/documents/${documentId}/blocks${query({
+          limit: pageSize,
+          offset: offset || null,
+          target_language: targetLanguage,
+        })}`,
+      );
+      firstPage ??= page;
+      if (page.document_id !== documentId || page.offset !== offset) {
+        throw new Error("结构化文档分页响应与请求不一致");
+      }
+      items.push(...page.items);
+      if (items.length >= page.total) break;
+      if (!page.items.length) throw new Error("结构化文档分页提前结束");
+      offset += page.items.length;
+    }
+    return {
+      ...(firstPage as DocumentBlocksPage),
+      offset: 0,
+      limit: items.length,
+      items,
+    };
+  },
   extractDocument: (attachmentId: string, ocrMode: "auto" | "force" | "off" = "auto") =>
     request<Job>(`/attachments/${attachmentId}/documents`, {
       method: "POST",

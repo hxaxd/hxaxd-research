@@ -233,6 +233,109 @@ def test_literature_search_requires_a_real_project_scope(client) -> None:
     assert client.get("/api/agent-runs").json() == []
 
 
+def test_resource_download_requires_the_items_real_project_scope(client) -> None:
+    project = client.post(
+        "/api/projects", json={"name": "Owned", "description": "contains the item"}
+    ).json()
+    candidate = client.post(
+        f"/api/projects/{project['id']}/candidates",
+        json=_candidate("Scoped resource"),
+    ).json()
+    decision = client.post(
+        f"/api/projects/{project['id']}/candidate-decisions",
+        json={
+            "decisions": [
+                {
+                    "candidate_id": candidate["id"],
+                    "decision": "include",
+                    "reason": "resource scope test",
+                }
+            ]
+        },
+    ).json()[0]
+    item_id = decision["project_item"]["preferred_item_id"]
+    foreign = client.post(
+        "/api/projects", json={"name": "Foreign", "description": "does not contain it"}
+    ).json()
+
+    response = client.post(
+        f"/api/items/{item_id}/attachments/download?project_id={foreign['id']}",
+        json={"url": "https://example.test/scoped.pdf"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "资源任务的文献不属于所选项目"
+    assert client.get("/api/jobs").json() == []
+
+
+def test_confirmed_project_delete_can_prune_only_an_unattached_orphan_work(client) -> None:
+    project = client.post(
+        "/api/projects", json={"name": "Disposable", "description": "exact confirmation"}
+    ).json()
+    candidate = client.post(
+        f"/api/projects/{project['id']}/candidates",
+        json=_candidate("Disposable work"),
+    ).json()
+    decision = client.post(
+        f"/api/projects/{project['id']}/candidate-decisions",
+        json={
+            "decisions": [
+                {
+                    "candidate_id": candidate["id"],
+                    "decision": "include",
+                    "reason": "delete command test",
+                }
+            ]
+        },
+    ).json()[0]
+    work_id = decision["project_item"]["work_id"]
+    confirmation = {
+        "expected_name": project["name"],
+        "expected_updated_at": project["updated_at"],
+        "orphan_work_ids": [work_id],
+    }
+
+    refused = client.request(
+        "DELETE",
+        f"/api/projects/{project['id']}",
+        json={**confirmation, "expected_name": "wrong name"},
+    )
+    assert refused.status_code == 409
+    assert client.get(f"/api/projects/{project['id']}").status_code == 200
+    incomplete = client.request(
+        "DELETE",
+        f"/api/projects/{project['id']}",
+        json={**confirmation, "orphan_work_ids": []},
+    )
+    assert incomplete.status_code == 409
+    assert client.get(f"/api/projects/{project['id']}").status_code == 200
+
+    deleted = client.request(
+        "DELETE", f"/api/projects/{project['id']}", json=confirmation
+    )
+
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {
+        "project_id": project["id"],
+        "deleted_orphan_work_ids": [work_id],
+    }
+    assert client.get(f"/api/projects/{project['id']}").status_code == 404
+    assert client.get(f"/api/works/{work_id}").status_code == 404
+    with client.app.state.context.database.read() as connection:
+        assert connection.execute(
+            "SELECT 1 FROM source_records WHERE id = ?", (candidate["source_record_id"],)
+        ).fetchone() is None
+        audit = connection.execute(
+            """
+            SELECT action FROM audit_events
+            WHERE entity_type = 'project' AND entity_id = ?
+            ORDER BY occurred_at DESC LIMIT 1
+            """,
+            (project["id"],),
+        ).fetchone()
+    assert audit["action"] == "screening.project_deleted"
+
+
 def test_snapshot_maintenance_blocks_writes_but_keeps_reads_available(client) -> None:
     gate = client.app.state.context.mutation_gate
     with gate.maintenance():

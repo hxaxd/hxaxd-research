@@ -307,12 +307,15 @@ class ChangeSetService:
             return {"item_id": result.id, "revision": result.revision}
         if item.operation == "resource.acquire":
             payload = ResourceAcquisitionPayload.model_validate(item.payload)
+            if change_set.project_id is None:
+                raise ChangeSetConflictError("resource acquisition has no project scope")
             current = self.catalog.get_item(item.target_id)
             if current.revision != int(item.base_revision or "0"):
                 raise CatalogConflictError("resource proposal item revision is stale")
             job = self.operations.download_attachment(
                 item.target_id,
                 payload.request,
+                project_id=change_set.project_id,
                 idempotency_key=f"change-item:{item.id}",
             )
             return {"job_id": job.id, "job_status": job.status.value}

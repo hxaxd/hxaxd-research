@@ -80,6 +80,8 @@ def test_success_event_exposes_only_product_ids_and_internal_links(tmp_path):
             result={
                 "document_id": "document-1",
                 "attachment_ids": ["attachment-2", "attachment-1"],
+                "item_id": "item-1",
+                "project_id": "project-1",
                 "private_receipt": "not-public",
             },
             commit_point_reached=True,
@@ -102,13 +104,13 @@ def test_success_event_exposes_only_product_ids_and_internal_links(tmp_path):
                 "type": "attachment",
                 "id": "attachment-2",
                 "role": "output",
-                "href": "/api/attachments/attachment-2/content",
+                "href": "/projects/project-1/items/item-1/read/attachment-2?panel=pdf",
             },
             {
                 "type": "attachment",
                 "id": "attachment-1",
                 "role": "output",
-                "href": "/api/attachments/attachment-1/content",
+                "href": "/projects/project-1/items/item-1/read/attachment-1?panel=pdf",
             },
             {
                 "type": "document",

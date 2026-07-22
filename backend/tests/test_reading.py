@@ -215,6 +215,44 @@ def test_annotation_and_reading_positions_reject_cross_item_anchors(client) -> N
     ).json() == []
 
 
+def test_annotations_become_stale_when_the_current_source_hash_changes(client) -> None:
+    fixture = _document_fixture(client, "Changed source anchor")
+    block = fixture["blocks"][1]
+    endpoint = (
+        f"/api/projects/{fixture['project_id']}/items/{fixture['item_id']}/annotations"
+    )
+    block_annotation = client.post(
+        endpoint,
+        json={"block_id": block["id"], "kind": "method"},
+    ).json()
+    pdf_annotation = client.post(
+        endpoint,
+        json={
+            "attachment_id": fixture["attachment_id"],
+            "kind": "excerpt",
+            "quoted_text": "page quote",
+            "page_number": 1,
+            "anchor": {"page": 1},
+        },
+    ).json()
+    assert block_annotation["anchor_status"] == "valid"
+    assert pdf_annotation["anchor_status"] == "valid"
+
+    with client.app.state.context.database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE blobs SET sha256 = ? WHERE id = (
+                SELECT blob_id FROM attachments WHERE id = ?
+            )
+            """,
+            ("f" * 64, fixture["attachment_id"]),
+        )
+
+    refreshed = {annotation["id"]: annotation for annotation in client.get(endpoint).json()}
+    assert refreshed[block_annotation["id"]]["anchor_status"] == "stale"
+    assert refreshed[pdf_annotation["id"]]["anchor_status"] == "stale"
+
+
 def test_reading_state_and_bookmarks_are_durable_idempotent_and_audited(client) -> None:
     fixture = _document_fixture(client, "Durable reading state")
     block = fixture["blocks"][1]

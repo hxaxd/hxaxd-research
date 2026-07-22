@@ -91,7 +91,7 @@
 .activity-empty { display: flex; min-height: 190px; align-items: center; justify-content: center; gap: 8px; color: var(--text-faint); font-size: 10px; }
 
 .page-tabs { display: flex; gap: 5px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
-.page-tabs button { display: inline-flex; min-height: 42px; align-items: center; gap: 7px; border: 0; border-bottom: 2px solid transparent; padding: 0 13px; background: transparent; color: var(--text-faint); }
+.page-tabs button { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border: 0; border-bottom: 2px solid transparent; padding: 0 13px; background: transparent; color: var(--text-faint); }
 .page-tabs button.active { border-bottom-color: var(--accent); color: var(--text); }
 .page-tabs em { min-width: 19px; border-radius: 999px; padding: 2px 5px; background: var(--warning-soft); color: var(--warning); font-size: 9px; font-style: normal; }
 .page-error { margin-bottom: 9px; border: 1px solid rgb(255 140 154 / 24%); border-radius: 9px; padding: 9px 11px; background: var(--danger-soft); color: var(--danger); font-size: 10px; }
