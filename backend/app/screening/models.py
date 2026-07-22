@@ -27,6 +27,23 @@ class ProjectView(BaseModel):
     updated_at: datetime
 
 
+class ProjectDeleteRequest(BaseModel):
+    expected_name: NonEmptyText
+    expected_updated_at: datetime
+    orphan_work_ids: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def require_unique_work_ids(self) -> ProjectDeleteRequest:
+        if len(self.orphan_work_ids) != len(set(self.orphan_work_ids)):
+            raise ValueError("orphan work ids must be unique")
+        return self
+
+
+class ProjectDeleteResult(BaseModel):
+    project_id: str
+    deleted_orphan_work_ids: list[str]
+
+
 class CandidateCreate(BaseModel):
     item: BibliographicItemDraft
     source_provider: NonEmptyText = "manual"

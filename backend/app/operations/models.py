@@ -97,6 +97,7 @@ class AttachmentDownloadRequest(_OperationModel):
 
 class AttachmentDownloadJobInput(AttachmentDownloadRequest):
     item_id: str = Field(min_length=1, max_length=200)
+    project_id: str = Field(min_length=1, max_length=200)
 
 
 class TranslationJobRequest(_OperationModel):
@@ -107,6 +108,7 @@ class TranslationJobRequest(_OperationModel):
 class TranslationJobInput(TranslationJobRequest):
     attachment_id: str = Field(min_length=1, max_length=200)
     item_id: str = Field(min_length=1, max_length=200)
+    project_id: str = Field(min_length=1, max_length=200)
 
 
 class CompileJobRequest(_OperationModel):
@@ -133,3 +135,4 @@ class CompileJobRequest(_OperationModel):
 class CompileJobInput(CompileJobRequest):
     attachment_id: str = Field(min_length=1, max_length=200)
     item_id: str = Field(min_length=1, max_length=200)
+    project_id: str = Field(min_length=1, max_length=200)

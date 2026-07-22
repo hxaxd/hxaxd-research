@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.jobs.models import PublicJob
 from app.jobs.public import project_public_job
@@ -49,11 +49,16 @@ def download_attachment(
     item_id: str,
     payload: AttachmentDownloadRequest,
     service: Annotated[OperationService, Depends(get_service)],
+    project_id: Annotated[str, Query(min_length=1)],
 ) -> PublicJob:
     try:
-        return project_public_job(service.download_attachment(item_id, payload))
+        return project_public_job(
+            service.download_attachment(item_id, payload, project_id=project_id)
+        )
     except JobConflictError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post(
@@ -63,9 +68,12 @@ def compile_attachment(
     attachment_id: str,
     payload: CompileJobRequest,
     service: Annotated[OperationService, Depends(get_service)],
+    project_id: Annotated[str, Query(min_length=1)],
 ) -> PublicJob:
     try:
-        return project_public_job(service.compile_attachment(attachment_id, payload))
+        return project_public_job(
+            service.compile_attachment(attachment_id, payload, project_id=project_id)
+        )
     except JobConflictError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:
@@ -79,9 +87,12 @@ def translate_attachment(
     attachment_id: str,
     payload: TranslationJobRequest,
     service: Annotated[OperationService, Depends(get_service)],
+    project_id: Annotated[str, Query(min_length=1)],
 ) -> PublicJob:
     try:
-        return project_public_job(service.translate_attachment(attachment_id, payload))
+        return project_public_job(
+            service.translate_attachment(attachment_id, payload, project_id=project_id)
+        )
     except JobConflictError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:

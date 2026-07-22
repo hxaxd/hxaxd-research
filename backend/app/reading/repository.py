@@ -10,6 +10,7 @@ from app.utils.identity import new_id
 
 from .models import (
     Annotation,
+    AnnotationAnchorStatus,
     AnnotationCreate,
     AnnotationUpdate,
     ReadingBookmark,
@@ -43,7 +44,15 @@ class ReadingRepository:
                 (project_id, item_id),
             ).fetchall()
             tags = self._annotation_tags(connection, [str(row["id"]) for row in rows])
-        return [self._annotation(row, tags.get(str(row["id"]), [])) for row in rows]
+            projected = [
+                self._annotation(
+                    row,
+                    tags.get(str(row["id"]), []),
+                    anchor_status=self._current_anchor_status(connection, row),
+                )
+                for row in rows
+            ]
+        return projected
 
     def create_annotation(
         self, project_id: str, item_id: str, payload: AnnotationCreate
@@ -435,10 +444,63 @@ class ReadingRepository:
         )
 
     @staticmethod
-    def _annotation(row: sqlite3.Row, tags: list[str]) -> Annotation:
+    def _current_anchor_status(
+        connection: sqlite3.Connection, row: sqlite3.Row
+    ) -> AnnotationAnchorStatus:
+        source_sha256 = row["source_sha256"]
+        if source_sha256 is None:
+            return AnnotationAnchorStatus(row["anchor_status"])
+        if row["block_id"] is not None:
+            current = connection.execute(
+                """
+                SELECT d.status, d.source_sha256, blob.sha256 AS current_source_sha256
+                FROM document_blocks block
+                JOIN documents d ON d.id = block.document_id
+                JOIN attachments attachment ON attachment.id = d.source_attachment_id
+                JOIN blobs blob ON blob.id = attachment.blob_id
+                WHERE block.id = ?
+                """,
+                (row["block_id"],),
+            ).fetchone()
+            if current is None:
+                return AnnotationAnchorStatus.UNRESOLVED
+            if (
+                current["status"] != "ready"
+                or current["source_sha256"] != source_sha256
+                or current["current_source_sha256"] != source_sha256
+            ):
+                return AnnotationAnchorStatus.STALE
+            return AnnotationAnchorStatus.VALID
+        if row["attachment_id"] is not None:
+            current = connection.execute(
+                """
+                SELECT blob.sha256 FROM attachments attachment
+                JOIN blobs blob ON blob.id = attachment.blob_id
+                WHERE attachment.id = ?
+                """,
+                (row["attachment_id"],),
+            ).fetchone()
+            if current is None:
+                return AnnotationAnchorStatus.UNRESOLVED
+            return (
+                AnnotationAnchorStatus.VALID
+                if current["sha256"] == source_sha256
+                else AnnotationAnchorStatus.STALE
+            )
+        return AnnotationAnchorStatus.UNRESOLVED
+
+    @staticmethod
+    def _annotation(
+        row: sqlite3.Row,
+        tags: list[str],
+        *,
+        anchor_status: AnnotationAnchorStatus | None = None,
+    ) -> Annotation:
         values = dict(row)
         values["anchor"] = json.loads(values.pop("anchor_json"))
         values["tags"] = tags
+        if anchor_status is not None:
+            values["anchor_status"] = anchor_status.value
         return Annotation.model_validate(values)
 
     @staticmethod

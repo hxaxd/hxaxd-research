@@ -16,6 +16,8 @@ from .models import (
     CandidatePromotionRequest,
     CandidateView,
     ProjectCreate,
+    ProjectDeleteRequest,
+    ProjectDeleteResult,
     ProjectView,
     ProjectWorkDecision,
     ProjectWorkView,
@@ -59,6 +61,18 @@ def create_project(
 ) -> ProjectView:
     try:
         return commands.create_project(payload)
+    except (ScreeningConflictError, ScreeningNotFoundError) as error:
+        _raise_http(error)
+
+
+@router.delete("/projects/{project_id}", response_model=ProjectDeleteResult)
+def delete_project(
+    project_id: str,
+    payload: ProjectDeleteRequest,
+    commands: Annotated[ScreeningCommands, Depends(get_commands)],
+) -> ProjectDeleteResult:
+    try:
+        return commands.delete_project(project_id, payload)
     except (ScreeningConflictError, ScreeningNotFoundError) as error:
         _raise_http(error)
 

@@ -85,6 +85,10 @@ function successfulResourceJob(): Job {
   return { id: "job-resource", kind: "attachment.download", subject_type: "item", subject_id: "item-1", status: "succeeded", priority: 0, error_code: null, error_message: null, max_attempts: 3, created_at: NOW, updated_at: NOW, started_at: NOW, finished_at: NOW, cancel_requested_at: null };
 }
 
+function runningResourceJob(): Job {
+  return { ...successfulResourceJob(), id: "job-direct", status: "running", finished_at: null };
+}
+
 function agentRun(id: string, taskKind: string, goal: string) {
   return {
     id, task_kind: taskKind, status: "completed", goal, project_id: "project-1",
@@ -193,7 +197,23 @@ async function handleApi(route: Route, state: MockState) {
   if (/^\/api\/attachments\/attachment-[12]\/content$/.test(path)) return route.fulfill({ status: 200, contentType: "application/pdf", body: Buffer.from(PDF, "base64") });
   if (path === "/api/items/item-1/documents") return json([{ id: "document-1", item_id: "item-1", source_attachment_id: "attachment-1", source_sha256: "b".repeat(64), extractor: "babeldoc+tex-structure", extractor_version: "1.0", structure_version: "v1", status: "ready", language: "en", page_count: 24, block_count: 240, structure_hash: "c".repeat(64), created_by_job_id: "job-extract", created_at: NOW, completed_at: NOW }]);
   if (path === "/api/documents/document-1/blocks") return json(documentBlocks());
-  if (path === "/api/projects/project-1/items/item-1/annotations") return json([]);
+  if (path === "/api/projects/project-1/items/item-1/annotations") return json([{
+    id: "annotation-stale",
+    project_id: "project-1",
+    item_id: "item-1",
+    attachment_id: "attachment-1",
+    block_id: "block-1",
+    kind: "method",
+    body: "这条方法批注需要重新定位。",
+    quoted_text: null,
+    source_sha256: "a".repeat(64),
+    page_number: 1,
+    anchor: { type: "pdf_bbox", page: 1 },
+    anchor_status: "stale",
+    tags: ["method"],
+    created_at: NOW,
+    updated_at: NOW,
+  }]);
   if (path === "/api/projects/project-1/items/item-1/reading-state") return json({ attachment_id: "attachment-1", block_id: null, page_number: 1, progress: 0.08, project_id: "project-1", item_id: "item-1", bookmarks: [], updated_at: NOW });
   if (path === "/api/user-preferences" && method === "GET") {
     if (state.preferencesFailures > 0) { state.preferencesFailures -= 1; return json({ detail: "网络短暂断开，请重新读取" }, 503); }
@@ -203,7 +223,7 @@ async function handleApi(route: Route, state: MockState) {
   if (path === "/api/agent-task-definitions") return json([
     { id: "literature_search", label: "文献检索", description: "检索并把候选及来源证据放入项目。", scope_requirement: "project", web_search: true, scopes: ["catalog:read", "candidate:propose", "web:search"], tools: ["stage_candidate"], result_kind: "candidate", ready: true, missing_reason: null },
     { id: "metadata_enrichment", label: "元数据补全", description: "核验来源并提出字段级元数据修订。", scope_requirement: "item", web_search: true, scopes: ["catalog:read", "metadata:propose", "web:search"], tools: ["propose_metadata_patch"], result_kind: "change_set", ready: true, missing_reason: null },
-    { id: "resource_discovery", label: "资源获取", description: "查找资源并提出可审阅的 HTTPS 获取建议。", scope_requirement: "item", web_search: true, scopes: ["catalog:read", "resource:propose", "web:search"], tools: ["propose_resource_acquisition"], result_kind: "change_set", ready: true, missing_reason: null },
+    { id: "resource_acquisition", label: "资源获取", description: "查找资源并提出可审阅的 HTTPS 获取建议。", scope_requirement: "item", web_search: true, scopes: ["catalog:read", "resource:propose", "web:search"], tools: ["propose_resource_acquisition"], result_kind: "change_set", ready: true, missing_reason: null },
     { id: "conflict_resolution", label: "冲突分析", description: "分析固定 Zotero 预览中的冲突。", scope_requirement: "zotero_preview", web_search: false, scopes: ["zotero:conflict:propose"], tools: ["propose_zotero_conflict_resolution"], result_kind: "change_set", ready: true, missing_reason: null },
   ]);
   if (path === "/api/agent-runs" && method === "POST") {
@@ -211,7 +231,7 @@ async function handleApi(route: Route, state: MockState) {
     const run = agentRun(`run-${state.runs.length + 1}`, body.task_kind, body.goal);
     state.runs = [run, ...state.runs];
     if (body.task_kind === "literature_search") state.candidates = [candidate(0)];
-    if (body.task_kind === "resource_discovery") state.changes = [resourceChangeSet(run.id), ...state.changes];
+    if (body.task_kind === "resource_acquisition") state.changes = [resourceChangeSet(run.id), ...state.changes];
     return json({ run, job_id: `agent-job-${run.id}` });
   }
   if (path === "/api/jobs") return json(state.jobs);
@@ -249,9 +269,29 @@ async function handleApi(route: Route, state: MockState) {
   }
   if (path === "/api/jobs/job-1/events") return route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ id: 1, job_id: "job-1", event_type: "job.failed", level: "error", payload: { code: "provider_unavailable", message: "翻译服务暂时不可用", retryable: true, automatic_retry: false, attempt: 3, max_attempts: 3 }, created_at: NOW })}\n\n` });
   if (path === "/api/jobs/job-resource/events") return route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ id: 2, job_id: "job-resource", event_type: "job.succeeded", level: "info", payload: { summary: "原文已经验证并登记", products: [{ type: "attachment", id: "attachment-2", role: "original", href: "/projects/project-1/items/item-1/read/attachment-2?panel=pdf" }] }, created_at: NOW })}\n\n` });
+  if (path === "/api/items/item-1/attachments/download" && method === "POST") {
+    const direct = runningResourceJob();
+    state.jobs = [direct, ...state.jobs];
+    return json(direct, 202);
+  }
+  if (path === "/api/jobs/job-direct/events") {
+    if (!state.attachments.some((entry) => entry.id === "attachment-direct")) {
+      state.attachments.push(attachment("attachment-direct", "event-refreshed.pdf"));
+    }
+    state.jobs = state.jobs.map((entry) => entry.id === "job-direct" ? { ...entry, status: "succeeded", finished_at: NOW } : entry);
+    return route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ id: 3, job_id: "job-direct", event_type: "job.succeeded", level: "info", payload: { summary: "原文已经验证并登记", products: [{ type: "attachment", id: "attachment-direct", role: "output", href: "/projects/project-1/items/item-1/read/attachment-direct?panel=pdf" }] }, created_at: NOW })}\n\n` });
+  }
   if (path === "/api/device-access/sessions") return json([]);
   if (path === "/api/tools") return json([{ name: "pdf2zh", label: "PDF2zh / BabelDOC", description: "结构提取、OCR 与兼容 PDF 输出", status: "ready", version: "2.6.8", message: "固定版本已验证", job_id: null, updated_at: NOW }, { name: "tex", label: "TeX Live", description: "编译论文源码", status: "ready", version: "2026", message: "可用", job_id: null, updated_at: NOW }]);
-  if (path === "/api/snapshots") return json({ snapshots: [], active_jobs: 0 });
+  if (path === "/api/snapshots") return json({
+    snapshots: [{
+      filename: "workspace-20260722-080000.zip",
+      size: 4096,
+      created_at: NOW,
+      download_url: "/api/snapshots/workspace-20260722-080000.zip",
+    }],
+    active_jobs: 0,
+  });
   return json({ detail: `Unhandled mock endpoint: ${method} ${path}` }, 404);
 }
 
@@ -300,7 +340,7 @@ test("complete touch workflow reaches a verified resource from discovery", async
 
   const itemLauncher = page.locator(".agent-launcher--item");
   await expect(itemLauncher.getByText("项目与文献标识由页面固定，不能跨作用域提交。")).toBeVisible();
-  await itemLauncher.getByLabel("任务类型").selectOption("resource_discovery");
+  await itemLauncher.getByLabel("任务类型").selectOption("resource_acquisition");
   await itemLauncher.getByPlaceholder(/核对出版者页面/).fill("查找出版者原文并提交可审阅的 HTTPS 获取建议。");
   await itemLauncher.getByRole("button", { name: "创建独立运行" }).tap();
   await expect(page).toHaveURL(/\/agent-runs\/run-2$/);
@@ -321,8 +361,33 @@ test("complete touch workflow reaches a verified resource from discovery", async
     expect.objectContaining({ candidate_id: "candidate-0", decision: "include" }),
   ]);
   expect(state.projectItem.summary).toBe("用于验证完整的结构化阅读工作流。");
-  expect(state.runs.map((run) => run.task_kind)).toEqual(["resource_discovery", "literature_search"]);
+  expect(state.runs.map((run) => run.task_kind)).toEqual(["resource_acquisition", "literature_search"]);
   expect(state.jobs.map((entry) => entry.id)).toEqual(["job-resource"]);
+  await expectNoHorizontalOverflow(page);
+});
+
+test("item resource task refreshes attachments from its real event contract", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  const state = newState(0);
+  await mockApi(page, state);
+  await page.goto("/projects/project-1/items/item-1/read/attachment-1?panel=pdf");
+
+  await page.getByRole("button", { name: "信息" }).tap();
+  await page.getByText("从 HTTPS 获取", { exact: true }).tap();
+  await page.getByPlaceholder("https://…").fill("https://example.test/event-refreshed.pdf");
+  await page.getByPlaceholder("可选文件名").fill("event-refreshed.pdf");
+  await page.getByRole("button", { name: "创建获取任务" }).tap();
+
+  await expect(page.getByText("任务已完成，附件列表已自动更新。")).toBeVisible();
+  await expect(page.locator(".attachment-list")).toContainText("event-refreshed.pdf");
+  const tracker = page.locator(".resource-job").filter({ hasText: "HTTPS 获取" });
+  await expect(tracker).toContainText("已完成");
+  await tracker.getByRole("link", { name: "查看任务" }).tap();
+  await expect(page).toHaveURL(/\/tasks\?job=job-direct$/);
+  await page.getByRole("link", { name: "打开输出附件" }).tap();
+  await expect(page).toHaveURL(/\/projects\/project-1\/items\/item-1\/read\/attachment-direct\?panel=pdf$/);
+  await page.getByRole("button", { name: "信息" }).tap();
+  await expect(page.locator(".attachment-list button.active")).toContainText("event-refreshed.pdf");
   await expectNoHorizontalOverflow(page);
 });
 
@@ -332,6 +397,11 @@ test("large candidate inbox supports touch, batch reasons, keyboard and portrait
   await mockApi(page, state);
   await page.goto("/projects/project-1");
   await expect(page.getByRole("heading", { name: "等待你的判断" })).toBeVisible();
+  const projectTabs = await page.locator(".page-tabs button").evaluateAll((buttons) => buttons.map((button) => {
+    const box = button.getBoundingClientRect();
+    return { width: box.width, height: box.height };
+  }));
+  expect(projectTabs.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
   await page.getByRole("button", { name: "选择 Traceable candidate 001" }).tap();
   await page.getByRole("button", { name: "选择 Traceable candidate 002" }).tap();
   await page.locator(".candidate-row-main").filter({ hasText: "Traceable candidate 001" }).tap();
@@ -380,6 +450,11 @@ test("long semantic paper remains searchable and usable above a virtual keyboard
   await page.goto("/projects/project-1/items/item-1/read/attachment-1?panel=semantic&block=block-239&page=24");
   await expect(page.locator(".semantic-toolbar__status")).toHaveText("240 块 · 240 已译 · 8%");
   await expect(page.getByText("Paragraph 240 explains a stable semantic reading block and its evidence.")).toBeInViewport();
+  await page.getByRole("button", { name: /笔记 1/ }).tap();
+  const staleAnchor = page.locator(".reading-memory-anchor-stale > button:first-child");
+  await expect(staleAnchor).toBeDisabled();
+  await expect(staleAnchor).toContainText("源文已变化，锚点失效");
+  await page.getByRole("button", { name: "关闭阅读工作区" }).tap();
   await page.getByRole("button", { name: "分屏" }).tap();
   await expect(page.getByRole("region", { name: "PDF 版面" })).toBeVisible();
   await expect(page.getByRole("region", { name: "结构化双语内容" })).toBeVisible();
@@ -423,4 +498,19 @@ test("settings recover locally after a transient preferences outage", async ({ p
   await expect(page.getByLabel("术语表")).toBeInViewport();
   await expectNoHorizontalOverflow(page);
   await expect(page).toHaveScreenshot("settings-recovered-tablet.png");
+});
+
+test("destructive snapshot controls keep tablet-sized touch targets", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await mockApi(page, newState());
+  await page.goto("/settings");
+  const restore = page.locator(".snapshot-restore");
+  await expect(restore).toBeVisible();
+  await restore.scrollIntoViewIfNeeded();
+  const touchTargets = await restore.locator("input, button").evaluateAll((controls) => controls.map((control) => {
+    const box = control.getBoundingClientRect();
+    return { width: box.width, height: box.height };
+  }));
+  expect(touchTargets.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+  await expectNoHorizontalOverflow(page);
 });

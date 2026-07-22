@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from uuid import uuid4
 
+from app.catalog import CatalogQueries
+from app.catalog.domain import CatalogNotFoundError
 from app.core.config import Settings
 from app.documents.capabilities import PdfPipelineCapabilityProbe
 from app.jobs.models import Job, JobAttachment, JobCreate, JobStatus
@@ -36,6 +38,7 @@ class OperationService:
         job_repository: SqliteJobRepository,
         runner: ProcessRunner,
         capability_probe: PdfPipelineCapabilityProbe | None = None,
+        catalog: CatalogQueries | None = None,
     ) -> None:
         self.settings = settings
         self.attachments = attachments
@@ -45,6 +48,7 @@ class OperationService:
         self.capability_probe = capability_probe or PdfPipelineCapabilityProbe(
             settings, runner
         )
+        self.catalog = catalog
 
     def list_tools(self) -> list[ManagedTool]:
         return [self.get_tool(name) for name in ManagedToolName]
@@ -79,7 +83,9 @@ class OperationService:
                     self._job_attachment(job.id, role, outputs[role]) for role in roles
                 )
                 result: dict[str, object] = {
-                    "attachment_ids": [outputs[role].id for role in roles]
+                    "attachment_ids": [outputs[role].id for role in roles],
+                    "item_id": job.input.get("item_id"),
+                    "project_id": job.input.get("project_id"),
                 }
                 if isinstance(input_id, str):
                     result["input_attachment_id"] = input_id
@@ -186,10 +192,13 @@ class OperationService:
         item_id: str,
         request: AttachmentDownloadRequest,
         *,
+        project_id: str,
         idempotency_key: str | None = None,
     ) -> Job:
+        self._require_project_item(project_id, item_id)
         payload = AttachmentDownloadJobInput(
             item_id=item_id,
+            project_id=project_id,
             **request.model_dump(mode="json"),
         )
         url_digest = hashlib.sha256(str(request.url).encode("utf-8")).hexdigest()
@@ -206,9 +215,10 @@ class OperationService:
         )
 
     def compile_attachment(
-        self, attachment_id: str, request: CompileJobRequest
+        self, attachment_id: str, request: CompileJobRequest, *, project_id: str
     ) -> Job:
         attachment, _ = self.attachments.locate(attachment_id)
+        self._require_project_item(project_id, attachment.item_id)
         if (
             attachment.attachment_type is not AttachmentType.SOURCE_ARCHIVE
             or attachment.format is not AttachmentFormat.TEX
@@ -217,6 +227,7 @@ class OperationService:
         payload = CompileJobInput(
             attachment_id=attachment_id,
             item_id=attachment.item_id,
+            project_id=project_id,
             **request.model_dump(mode="json"),
         )
         return self.jobs.create(
@@ -231,9 +242,10 @@ class OperationService:
         )
 
     def translate_attachment(
-        self, attachment_id: str, request: TranslationJobRequest
+        self, attachment_id: str, request: TranslationJobRequest, *, project_id: str
     ) -> Job:
         attachment, _ = self.attachments.locate(attachment_id)
+        self._require_project_item(project_id, attachment.item_id)
         if (
             attachment.attachment_type is not AttachmentType.FULLTEXT
             or attachment.format is not AttachmentFormat.PDF
@@ -243,6 +255,7 @@ class OperationService:
         payload = TranslationJobInput(
             attachment_id=attachment_id,
             item_id=attachment.item_id,
+            project_id=project_id,
             **request.model_dump(mode="json"),
         )
         return self.jobs.create(
@@ -262,6 +275,14 @@ class OperationService:
             job.kind == kind
             for job in self.job_repository.active_for_subject("tool", tool_name)
         )
+
+    def _require_project_item(self, project_id: str, item_id: str) -> None:
+        if self.catalog is None:
+            return
+        try:
+            self.catalog.get_project_item(project_id, item_id)
+        except CatalogNotFoundError as error:
+            raise ValueError("资源任务的文献不属于所选项目") from error
 
     def _last_failure(self, kind: str) -> str | None:
         jobs = self.job_repository.list_jobs(

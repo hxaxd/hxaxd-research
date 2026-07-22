@@ -10,6 +10,7 @@
     "lint": "oxlint --deny-warnings src",
     "test": "vitest run src",
     "test:e2e": "playwright test",
+    "test:e2e:fullstack": "npm run build && playwright test --config playwright.fullstack.config.ts",
     "test:e2e:update": "playwright test --update-snapshots"
   },
   "dependencies": {

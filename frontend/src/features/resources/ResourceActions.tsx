@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, useParams } from "react-router-dom";
 
 import { api } from "../../shared/api/client";
-import type { Attachment } from "../../shared/api/contracts";
+import type { Attachment, Job, JobEvent } from "../../shared/api/contracts";
+import { useEventStream } from "../../shared/api/useEventStream";
 import { Icon } from "../../shared/ui/Icon";
 import "./resources.css";
 
@@ -14,7 +15,14 @@ interface Props {
 
 type AcquisitionType = "fulltext" | "source_archive";
 
+interface TrackedJob {
+  job: Job;
+  label: string;
+  outcome: "running" | "succeeded" | "failed" | "canceled";
+}
+
 export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Props) {
+  const { projectId = "" } = useParams<{ projectId: string }>();
   const [file, setFile] = useState<File | null>(null);
   const [uploadType, setUploadType] = useState<AcquisitionType>("fulltext");
   const [url, setUrl] = useState("");
@@ -24,6 +32,48 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
+
+  async function refreshCompletedJob() {
+    try {
+      await onAttachmentChanged();
+      setError(null);
+      setMessage("任务已完成，附件列表已自动更新。");
+    } catch (reason) {
+      setMessage(null);
+      setError(reason instanceof Error
+        ? `任务已完成，但附件列表刷新失败：${reason.message}`
+        : "任务已完成，但附件列表刷新失败；请重新加载页面。");
+    }
+  }
+
+  function track(job: Job, label: string) {
+    setTrackedJobs((current) => [
+      ...current.filter((entry) => entry.job.id !== job.id),
+      { job, label, outcome: job.status === "succeeded" ? "succeeded" : "running" },
+    ]);
+    if (job.status === "succeeded") {
+      void refreshCompletedJob();
+    }
+  }
+
+  async function finishTrackedJob(
+    jobId: string,
+    outcome: TrackedJob["outcome"],
+    event: JobEvent,
+  ) {
+    setTrackedJobs((current) => current.map((entry) => (
+      entry.job.id === jobId ? { ...entry, outcome } : entry
+    )));
+    if (outcome === "succeeded") {
+      await refreshCompletedJob();
+      return;
+    }
+    const detail = typeof event.payload.message === "string"
+      ? event.payload.message
+      : outcome === "canceled" ? "资源任务已取消" : "资源任务执行失败";
+    setError(detail);
+  }
 
   async function upload(event: FormEvent) {
     event.preventDefault();
@@ -62,7 +112,8 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
         language_mode: "original",
         origin: "preprint",
         preferred_for: downloadType === "fulltext" ? ["reading", "pdf:original"] : [],
-      });
+      }, projectId);
+      track(job, "HTTPS 获取");
       setMessage(`HTTPS 获取任务已创建：${job.id}`);
       setUrl("");
       setFilename("");
@@ -78,7 +129,12 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
     setError(null);
     setMessage(null);
     try {
-      const job = await api.compileAttachment(attachment.id, mainTex.trim() || null);
+      const job = await api.compileAttachment(
+        attachment.id,
+        mainTex.trim() || null,
+        projectId,
+      );
+      track(job, `编译 ${attachment.filename}`);
       setMessage(`TeX 编译任务已创建：${job.id}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法创建编译任务");
@@ -92,7 +148,8 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
     setError(null);
     setMessage(null);
     try {
-      const job = await api.translateAttachment(attachment.id);
+      const job = await api.translateAttachment(attachment.id, 4, 4, projectId);
+      track(job, `翻译 ${attachment.filename}`);
       setMessage(`PDF 翻译任务已创建：${job.id}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法创建翻译任务");
@@ -148,6 +205,53 @@ export function ResourceActions({ itemId, attachments, onAttachmentChanged }: Pr
       {originals.length ? <div className="resource-operation resource-operation--translate"><p>翻译只会在你点击后创建任务，不会自动触发。</p>{originals.map((attachment) => <button className="primary-button" disabled={busy !== null} key={attachment.id} type="button" onClick={() => void translate(attachment)}><Icon name="languages" size={14} />翻译原文 {attachment.filename}</button>)}</div> : null}
       {message ? <p className="resource-message"><Icon name="check" size={13} />{message}<Link to="/tasks">打开任务中心</Link></p> : null}
       {error ? <p className="resource-error">{error}</p> : null}
+      {trackedJobs.length ? <div className="resource-job-list" aria-label="本页资源任务">
+        {trackedJobs.map((entry) => <ResourceJobTracker
+          key={entry.job.id}
+          tracked={entry}
+          onTerminal={finishTrackedJob}
+        />)}
+      </div> : null}
     </section>
   );
+}
+
+function ResourceJobTracker({
+  tracked,
+  onTerminal,
+}: {
+  tracked: TrackedJob;
+  onTerminal: (
+    jobId: string,
+    outcome: TrackedJob["outcome"],
+    event: JobEvent,
+  ) => Promise<void>;
+}) {
+  const reported = useRef(false);
+  const stream = useEventStream<JobEvent>(
+    tracked.outcome === "running" ? api.jobEventsUrl(tracked.job.id) : null,
+  );
+  const terminal = [...stream.events].reverse().find((event) => (
+    event.event_type === "job.succeeded"
+    || event.event_type === "job.failed"
+    || event.event_type === "job.canceled"
+  ));
+
+  useEffect(() => {
+    if (!terminal || reported.current) return;
+    reported.current = true;
+    const outcome = terminal.event_type === "job.succeeded"
+      ? "succeeded"
+      : terminal.event_type === "job.canceled" ? "canceled" : "failed";
+    void onTerminal(tracked.job.id, outcome, terminal);
+  }, [onTerminal, terminal, tracked.job.id]);
+
+  return <article className={`resource-job resource-job--${tracked.outcome}`} role="status">
+    <span>{tracked.label}</span>
+    <strong>{tracked.outcome === "running"
+      ? stream.state === "error" ? "事件连接中断" : "执行中"
+      : tracked.outcome === "succeeded" ? "已完成"
+      : tracked.outcome === "canceled" ? "已取消" : "失败"}</strong>
+    <Link to={`/tasks?job=${tracked.job.id}`}>查看任务</Link>
+  </article>;
 }

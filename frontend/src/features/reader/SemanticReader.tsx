@@ -48,6 +48,12 @@ const annotationLabels: Record<AnnotationKind, string> = {
   bibliographic_note: "书目笔记",
 };
 
+const anchorStatusLabels: Record<Annotation["anchor_status"], string> = {
+  valid: "锚点有效",
+  stale: "源文已变化，锚点失效",
+  unresolved: "锚点无法解析",
+};
+
 const defaultPreferences: ReaderPreferences = {
   target_language: "zh-CN",
   default_mode: "source",
@@ -669,7 +675,7 @@ function SemanticBlockCard({
     </div>
     {annotations.length ? <div className="block-annotations">
       {annotations.map((annotation) => <article className={`block-note block-note--${annotation.kind}`} key={annotation.id}>
-        <header><span>{annotationLabels[annotation.kind]}</span><div><button aria-label="编辑批注" type="button" onClick={() => onEditAnnotation(annotation)}><Icon name="edit" size={13} /></button><button aria-label="删除批注" type="button" onClick={() => onDeleteAnnotation(annotation)}><Icon name="trash" size={13} /></button></div></header>
+        <header><span>{annotationLabels[annotation.kind]}{annotation.anchor_status !== "valid" ? <em className={`anchor-status anchor-status--${annotation.anchor_status}`}>{anchorStatusLabels[annotation.anchor_status]}</em> : null}</span><div><button aria-label="编辑批注" type="button" onClick={() => onEditAnnotation(annotation)}><Icon name="edit" size={13} /></button><button aria-label="删除批注" type="button" onClick={() => onDeleteAnnotation(annotation)}><Icon name="trash" size={13} /></button></div></header>
         {annotation.body ? <p>{annotation.body}</p> : <p className="block-note__quote">已标记本段</p>}
         {annotation.tags.length ? <footer>{annotation.tags.map((tag) => <span key={tag}>#{tag}</span>)}</footer> : null}
       </article>)}
@@ -704,6 +710,6 @@ function ReadingWorkspace({
     <header><div><span className="eyebrow">READING MEMORY</span><h2>阅读工作区</h2></div><button aria-label="关闭阅读工作区" type="button" onClick={onClose}><Icon name="close" size={17} /></button></header>
     <section className="reading-progress-card"><div><strong>{Math.round(progress * 100)}%</strong><span>本篇进度</span></div><div className="reading-progress-track"><span style={{ width: `${Math.round(progress * 100)}%` }} /></div></section>
     <section><h3><Icon name="bookmark" size={14} />书签 <span>{bookmarks.length}</span></h3>{bookmarks.length ? <div className="reading-memory-list">{bookmarks.map((bookmark) => <button key={bookmark.id} type="button" onClick={() => bookmark.block_id && onJump(bookmark.block_id)}><strong>{bookmark.label}</strong><small>{bookmark.page_number ? `第 ${bookmark.page_number} 页` : "语义位置"}</small></button>)}</div> : <p className="reading-panel-empty">从段落右上角添加书签。</p>}</section>
-    <section><h3><Icon name="note" size={14} />批注 <span>{annotations.length}</span></h3>{annotations.length ? <div className="reading-memory-list">{annotations.map((annotation) => <article key={annotation.id}><button type="button" onClick={() => annotation.block_id && onJump(annotation.block_id)}><small>{annotationLabels[annotation.kind]}{annotation.page_number ? ` · 第 ${annotation.page_number} 页` : ""}</small><strong>{annotation.body || annotation.quoted_text?.slice(0, 100) || "已标记段落"}</strong></button><button aria-label="删除批注" type="button" onClick={() => onDeleteAnnotation(annotation)}><Icon name="trash" size={13} /></button></article>)}</div> : <p className="reading-panel-empty">批注会与稳定段落锚点一起保存。</p>}</section>
+    <section><h3><Icon name="note" size={14} />批注 <span>{annotations.length}</span></h3>{annotations.length ? <div className="reading-memory-list">{annotations.map((annotation) => <article className={annotation.anchor_status === "valid" ? "" : "reading-memory-anchor-stale"} key={annotation.id}><button disabled={!annotation.block_id || annotation.anchor_status !== "valid"} type="button" onClick={() => annotation.block_id && onJump(annotation.block_id)}><small>{annotationLabels[annotation.kind]}{annotation.page_number ? ` · 第 ${annotation.page_number} 页` : ""}{annotation.anchor_status !== "valid" ? ` · ${anchorStatusLabels[annotation.anchor_status]}` : ""}</small><strong>{annotation.body || annotation.quoted_text?.slice(0, 100) || "已标记段落"}</strong></button><button aria-label="删除批注" type="button" onClick={() => onDeleteAnnotation(annotation)}><Icon name="trash" size={13} /></button></article>)}</div> : <p className="reading-panel-empty">批注会与稳定段落锚点一起保存。</p>}</section>
   </aside>;
 }

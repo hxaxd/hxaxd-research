@@ -30,9 +30,9 @@
 .snapshot-restore { display: grid; gap: 5px; padding-left: 32px; }
 .snapshot-restore label { color: var(--warning); font-size: 8px; }
 .snapshot-restore > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
-.snapshot-restore input { min-width: 0; height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; outline: 0; background: var(--bg); color: var(--text); font-size: 9px; }
+.snapshot-restore input { min-width: 0; height: 44px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; outline: 0; background: var(--bg); color: var(--text); font-size: 9px; }
 .snapshot-restore input:focus { border-color: rgb(239 196 110 / 45%); }
-.snapshot-restore-button { border: 1px solid rgb(255 140 154 / 24%); border-radius: 8px; padding: 0 10px; background: var(--danger-soft); color: var(--danger); font-size: 9px; }
+.snapshot-restore-button { min-height: 44px; border: 1px solid rgb(255 140 154 / 24%); border-radius: 8px; padding: 0 10px; background: var(--danger-soft); color: var(--danger); font-size: 9px; }
 .settings-empty { grid-column: 1 / -1; margin: 0; padding: 20px; color: var(--text-faint); font-size: 10px; text-align: center; }
 .settings-feedback { display: flex; align-items: center; gap: 6px; margin: 0; border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; color: var(--text-muted); font-size: 10px; }
 .settings-feedback a { margin-left: auto; color: var(--accent); }
@@ -45,5 +45,5 @@
   .settings-operation-section > header { align-items: flex-start; flex-direction: column; }
   .snapshot-restore { padding-left: 0; }
   .snapshot-restore > div { grid-template-columns: 1fr; }
-  .snapshot-restore-button { min-height: 34px; }
+  .snapshot-restore-button { min-height: 44px; }
 }

@@ -630,7 +630,13 @@ def _attachment_result(
         )
         for attachment, role in zip(attachments, roles, strict=True)
     )
-    result: dict[str, object] = {"attachment_ids": [item.id for item in attachments]}
+    result: dict[str, object] = {
+        "attachment_ids": [item.id for item in attachments],
+        "item_id": attachments[0].item_id,
+    }
+    project_id = context.claimed.job.input.get("project_id")
+    if isinstance(project_id, str) and project_id:
+        result["project_id"] = project_id
     if input_attachment is not None:
         result["input_attachment_id"] = input_attachment.id
     return JobExecutionResult(

@@ -97,15 +97,15 @@ describe("domain API client", () => {
       language_mode: "original",
       origin: "preprint",
       preferred_for: ["reading"],
-    });
-    await api.compileAttachment("source-1", "src/main.tex");
-    await api.translateAttachment("pdf-1", 6, 3);
+    }, "project-1");
+    await api.compileAttachment("source-1", "src/main.tex", "project-1");
+    await api.translateAttachment("pdf-1", 6, 3, "project-1");
     await api.installTool("tex");
 
     expect(fetch.mock.calls.map(([path]) => path)).toEqual([
-      "/api/items/item-1/attachments/download",
-      "/api/attachments/source-1/compile",
-      "/api/attachments/pdf-1/translate",
+      "/api/items/item-1/attachments/download?project_id=project-1",
+      "/api/attachments/source-1/compile?project_id=project-1",
+      "/api/attachments/pdf-1/translate?project_id=project-1",
       "/api/tools/tex/install",
     ]);
     expect(JSON.parse(String((fetch.mock.calls[1]![1] as RequestInit).body))).toEqual({ main_tex: "src/main.tex" });
@@ -113,7 +113,12 @@ describe("domain API client", () => {
   });
 
   it("routes semantic extraction and whole-document translation through document commands", async () => {
-    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}", { status: 202, headers: { "Content-Type": "application/json" } })));
+    const fetch = vi.fn().mockImplementation((path: string) => Promise.resolve(new Response(
+      path.includes("/blocks")
+        ? JSON.stringify({ document_id: "document-1", offset: 0, limit: 1000, total: 0, items: [] })
+        : "{}",
+      { status: path.includes("/blocks") ? 200 : 202, headers: { "Content-Type": "application/json" } },
+    )));
     vi.stubGlobal("fetch", fetch);
 
     await api.extractDocument("attachment-1", "force");
@@ -127,6 +132,29 @@ describe("domain API client", () => {
     ]);
     expect(JSON.parse(String((fetch.mock.calls[0]![1] as RequestInit).body))).toEqual({ ocr_mode: "force" });
     expect(JSON.parse(String((fetch.mock.calls[2]![1] as RequestInit).body))).toEqual({ target_language: "zh-CN" });
+  });
+
+  it("loads every semantic block page before returning searchable document content", async () => {
+    const page = (offset: number, count: number) => ({
+      document_id: "document-1",
+      offset,
+      limit: 1000,
+      total: 1002,
+      items: Array.from({ length: count }, (_, index) => ({ id: `block-${offset + index}` })),
+    });
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(page(0, 1000)), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(page(1000, 2)), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+
+    const result = await api.documentBlocks("document-1", "zh-CN");
+
+    expect(result.items).toHaveLength(1002);
+    expect(result.items.at(-1)).toEqual({ id: "block-1001" });
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual([
+      "/api/documents/document-1/blocks?limit=1000&target_language=zh-CN",
+      "/api/documents/document-1/blocks?limit=1000&offset=1000&target_language=zh-CN",
+    ]);
   });
 
   it("routes reading state, bookmarks, annotations, and preferences through typed commands", async () => {

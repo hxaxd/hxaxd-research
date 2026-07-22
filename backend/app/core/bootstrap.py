@@ -238,6 +238,7 @@ def build_app_context(settings: Settings) -> AppContext:
         job_repository,
         process_runner,
         pdf_capability_probe,
+        catalog,
     )
     OperationHandlers(settings, attachments, process_runner, pdf_capability_probe).register(
         job_registry

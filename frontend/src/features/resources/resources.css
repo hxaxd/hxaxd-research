@@ -16,3 +16,10 @@
 .resource-message { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 2px 0 0; color: var(--success); font-size: 9px; }
 .resource-message a { margin-left: auto; }
 .resource-error { margin: 2px 0 0; color: var(--danger); font-size: 9px; }
+.resource-job-list { display: grid; gap: 6px; }
+.resource-job { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; min-height: 44px; align-items: center; gap: 9px; border: 1px solid var(--border-soft); border-radius: 9px; padding: 0 9px; background: var(--bg); font-size: 9px; }
+.resource-job strong { color: var(--text-muted); }
+.resource-job--succeeded strong { color: var(--success); }
+.resource-job--failed strong,
+.resource-job--canceled strong { color: var(--danger); }
+.resource-job a { display: inline-flex; min-height: 44px; align-items: center; color: var(--accent); }
