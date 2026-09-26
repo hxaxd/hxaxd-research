@@ -1,26 +1,33 @@
+"""Shared fixtures: isolated settings, app, and client per test."""
+
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
+from app.config import Settings
 from app.main import create_app
 
 
-@pytest.fixture()
-def app_settings(tmp_path):
-    data_dir = (tmp_path / "data").resolve()
+@pytest.fixture
+def settings(tmp_path: Path) -> Settings:
     return Settings(
-        data_dir=data_dir,
-        database_path=data_dir / "research.sqlite3",
-        artifact_dir=data_dir / "artifacts",
-        tools_dir=tmp_path / ".tools",
-        snapshot_dir=tmp_path / "snapshots",
-        frontend_origins=("http://testserver",),
+        data_dir=tmp_path / "data",
+        projects_root=tmp_path / "projects",
+        dsh_base_url="http://127.0.0.1:3080",
+        backend_port=8642,
+        allowed_origins=["http://127.0.0.1:3080"],
     )
 
 
-@pytest.fixture()
-def client(app_settings):
-    with TestClient(create_app(app_settings)) as test_client:
-        yield test_client
+@pytest.fixture
+def app(settings: Settings) -> FastAPI:
+    return create_app(settings)
+
+
+@pytest.fixture
+def client(app: FastAPI) -> TestClient:
+    return TestClient(app)
