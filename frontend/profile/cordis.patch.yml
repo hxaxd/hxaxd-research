@@ -1,0 +1,16 @@
+# hxaxd project workbench — profile patch layer (applied after every bundle).
+#
+# Replaces the upstream workspace UI with our project workbench plugin:
+# - the upstream ui-workspace row is disabled, so its sidebar browser and
+#   hero picker never boot and no duplicate registration occurs;
+# - our client module (@hxaxd/dsh-ui-projects) is inserted instead; it fills
+#   the same `sidebar.workspaces` and `conversation.hero.workspace` slots
+#   with the project browser and the new-project flow.
+# The composed directory-picker packages stay mounted but are inert: with no
+# directory-flow hole declared, their occupants never materialize and no code
+# path calls the native chooser.
+- id: ui-workspace
+  disabled: true
+- insert:
+    - id: ui-projects
+      name: '@hxaxd/dsh-ui-projects'

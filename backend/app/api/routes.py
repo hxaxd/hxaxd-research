@@ -10,20 +10,24 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..projects.errors import (
     DirectoryConflictError,
     ProjectError,
     ProjectValidationError,
 )
+from ..projects.materials import AddedMaterial
 from ..projects.models import Project
 from ..projects.service import CreationResult, ProjectService
 from .schemas import (
+    AddedMaterialOut,
     BindWorkspaceRequest,
     CreateProjectRequest,
     HealthOut,
+    MaterialsOut,
     ProjectListOut,
     ProjectOut,
 )
@@ -57,6 +61,23 @@ def build_router(service: ProjectService) -> APIRouter:
     ) -> ProjectOut:
         _get(service, project_id)
         return _to_out(_bind(service, project_id, request.workspace_id))
+
+    @router.post("/projects/{project_id}/materials")
+    async def add_materials(
+        project_id: str,
+        files: Annotated[list[UploadFile], File(min_length=1)],
+    ) -> MaterialsOut:
+        _get(service, project_id)
+        uploads = [
+            (upload.filename or "", [await upload.read()]) for upload in files
+        ]
+        try:
+            added = service.add_materials(project_id, uploads)
+        except ProjectValidationError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except ProjectError as error:
+            raise HTTPException(status_code=500, detail=str(error)) from error
+        return MaterialsOut(materials=[_to_material(material) for material in added])
 
     @router.post("/projects/{project_id}/reveal", status_code=204)
     async def reveal_project(project_id: str) -> None:
@@ -109,6 +130,12 @@ def _to_out(project: Project) -> ProjectOut:
         workspace_id=project.workspace_id,
         created_at=project.created_at,
         updated_at=project.updated_at,
+    )
+
+
+def _to_material(material: AddedMaterial) -> AddedMaterialOut:
+    return AddedMaterialOut(
+        name=material.name, size=material.size, duplicate=material.duplicate
     )
 
 

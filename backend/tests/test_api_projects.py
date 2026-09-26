@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -104,6 +105,54 @@ def test_invalid_requests_fail_cleanly(client: TestClient) -> None:
         == 422
     )
     assert client.get("/api/projects/missing").status_code == 404
+
+
+def test_add_materials_stores_files_and_reports_names(client: TestClient) -> None:
+    project = create_project(client, "论文阅读", "req-1")
+    files = [
+        ("files", ("paper.pdf", b"%PDF-1.4 body", "application/pdf")),
+        ("files", ("notes.txt", b"hello", "text/plain")),
+    ]
+    response = client.post(f"/api/projects/{project['id']}/materials", files=files)
+    assert response.status_code == 200, response.text
+    added = response.json()["materials"]
+    assert [item["name"] for item in added] == ["paper.pdf", "notes.txt"]
+
+    listed = client.get("/api/projects").json()["projects"]
+    assert listed[0]["directory"] == project["directory"]
+
+
+def test_add_materials_requires_an_existing_project(client: TestClient) -> None:
+    response = client.post(
+        "/api/projects/missing/materials",
+        files=[("files", ("a.txt", b"x", "text/plain"))],
+    )
+    assert response.status_code == 404
+
+
+def test_add_materials_via_real_filesystem_roundtrip(
+    client: TestClient, settings
+) -> None:
+    project = create_project(client, "材料项目", "req-mat")
+    client.post(
+        f"/api/projects/{project['id']}/materials",
+        files=[("files", ("same.pdf", b"one", "application/pdf"))],
+    )
+    response = client.post(
+        f"/api/projects/{project['id']}/materials",
+        files=[
+            ("files", ("same.pdf", b"one", "application/pdf")),
+            ("files", ("same.pdf", b"two", "application/pdf")),
+        ],
+    )
+    assert response.status_code == 200
+    added = response.json()["materials"]
+    assert added[0]["duplicate"] is True
+    assert added[1]["duplicate"] is False
+    assert added[1]["name"] == "same (1).pdf"
+    directory = Path(project["directory"])
+    assert (directory / "same.pdf").read_bytes() == b"one"
+    assert (directory / "same (1).pdf").read_bytes() == b"two"
 
 
 def test_reveal_opens_the_registered_directory(

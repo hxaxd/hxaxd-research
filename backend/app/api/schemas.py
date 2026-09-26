@@ -38,5 +38,15 @@ class ProjectListOut(CamelModel):
     projects: list[ProjectOut]
 
 
+class AddedMaterialOut(CamelModel):
+    name: str
+    size: int
+    duplicate: bool
+
+
+class MaterialsOut(CamelModel):
+    materials: list[AddedMaterialOut]
+
+
 class HealthOut(CamelModel):
     status: str

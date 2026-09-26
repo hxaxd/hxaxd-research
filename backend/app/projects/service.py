@@ -18,11 +18,17 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .errors import DirectoryConflictError, ProjectValidationError
+from .errors import (
+    DirectoryConflictError,
+    ProjectNotFoundError,
+    ProjectValidationError,
+)
+from .materials import AddedMaterial, add_material
 from .models import Project
 from .store import ProjectStore
 
@@ -122,6 +128,28 @@ class ProjectService:
 
     def list_projects(self) -> list[Project]:
         return self._store.list_projects()
+
+    def add_materials(
+        self,
+        project_id: str,
+        uploads: Iterable[tuple[str, Iterable[bytes]]],
+    ) -> list[AddedMaterial]:
+        """Store uploaded files in the project's managed directory.
+
+        `uploads` yields (name, byte-chunks) pairs; the project must exist and
+        its directory must still be present.
+        """
+        project = self._store.find_by_id(project_id)
+        if project is None:
+            raise KeyError(project_id)
+        directory = Path(project.directory)
+        if not directory.is_dir():
+            raise ProjectNotFoundError(
+                f"项目目录不存在:{directory}"
+            )
+        return [
+            add_material(directory, name, chunks) for name, chunks in uploads
+        ]
 
     def _ensure_directory(self, project_id: str) -> Path:
         """Allocate the managed directory for `project_id`.

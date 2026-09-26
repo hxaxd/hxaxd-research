@@ -166,6 +166,55 @@
         }
       }
     },
+    "/api/projects/{project_id}/materials": {
+      "post": {
+        "summary": "Add Materials",
+        "operationId": "add_materials_api_projects__project_id__materials_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_add_materials_api_projects__project_id__materials_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/reveal": {
       "post": {
         "summary": "Reveal Project",
@@ -201,6 +250,29 @@
   },
   "components": {
     "schemas": {
+      "AddedMaterialOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "size",
+          "duplicate"
+        ],
+        "title": "AddedMaterialOut"
+      },
       "BindWorkspaceRequest": {
         "properties": {
           "workspaceId": {
@@ -213,6 +285,24 @@
           "workspaceId"
         ],
         "title": "BindWorkspaceRequest"
+      },
+      "Body_add_materials_api_projects__project_id__materials_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_add_materials_api_projects__project_id__materials_post"
       },
       "CreateProjectRequest": {
         "properties": {
@@ -257,6 +347,22 @@
           "status"
         ],
         "title": "HealthOut"
+      },
+      "MaterialsOut": {
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/AddedMaterialOut"
+            },
+            "type": "array",
+            "title": "Materials"
+          }
+        },
+        "type": "object",
+        "required": [
+          "materials"
+        ],
+        "title": "MaterialsOut"
       },
       "ProjectListOut": {
         "properties": {
