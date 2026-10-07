@@ -1,0 +1,18 @@
+import { z } from 'zod';
+import { createWorkspaceSchema, idSchema } from '@/features/workspaces/workspace-schema';
+import { materialReferenceSchema } from '@/features/files/file-schema';
+export const createConversationSchema = createWorkspaceSchema;
+export const conversationSchema = createConversationSchema.extend({ workspaceId: idSchema, createdAt: z.string(), updatedAt: z.string() });
+export const sendMessageSchema = z.object({ id: idSchema, text: z.string().trim().min(1).max(100000), model: z.string().min(1), materials: z.array(materialReferenceSchema).max(20).default([]) });
+export const runStatusSchema = z.enum(['accepted', 'running', 'completed', 'cancelled', 'failed', 'interrupted']);
+export const runSchema = z.object({ id: idSchema, conversationId: idSchema, status: runStatusSchema, startedAt: z.string(), finishedAt: z.string().nullable(), errorCode: z.string().nullable() });
+export const chatMessageSchema = z.object({ id: z.string(), role: z.enum(['user', 'assistant', 'tool']), text: z.string(), toolName: z.string().optional(), isError: z.boolean().optional() });
+export const conversationSnapshotSchema = z.object({ revision: z.number(), messages: z.array(chatMessageSchema), run: runSchema.nullable(), error: z.string().nullable() });
+export const conversationEventSchema = z.object({ type: z.literal('snapshot'), snapshot: conversationSnapshotSchema });
+export const modelSchema = z.object({ id: z.string(), name: z.string(), provider: z.string() });
+export type Conversation = z.infer<typeof conversationSchema>;
+export type ConversationRun = z.infer<typeof runSchema>;
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+export type ConversationSnapshot = z.infer<typeof conversationSnapshotSchema>;
+export type SendMessage = z.infer<typeof sendMessageSchema>;
+export type ConfiguredModel = z.infer<typeof modelSchema>;

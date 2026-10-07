@@ -1,0 +1,42 @@
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { createTestApp } from '../../../tests/create-test-app';
+import { generateOpenapi } from './generate-openapi';
+import { GET as listWorkspaces, POST as createWorkspace } from '@/app/api/workspaces/route';
+import { POST as createPaper } from '@/app/api/workspaces/[workspaceId]/papers/route';
+import { GET as listFiles } from '@/app/api/workspaces/[workspaceId]/files/route';
+import { POST as createConversation } from '@/app/api/workspaces/[workspaceId]/conversations/route';
+import { POST as sendMessage } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/messages/route';
+import { workspaceSchema } from '@/features/workspaces/workspace-schema';
+import { conversationSchema } from '@/features/conversations/conversation-schema';
+import { paperSchema } from '@/features/papers/paper-schema';
+import { getAppRuntime } from '@/server/app-runtime';
+let app: Awaited<ReturnType<typeof createTestApp>>;
+beforeEach(async () => { app = await createTestApp(); vi.stubEnv('APP_DATA_DIR', app.config.dataDir); });
+afterEach(async () => { getAppRuntime().db.close(); delete (globalThis as typeof globalThis & { researchAppRuntime?: unknown }).researchAppRuntime; vi.unstubAllEnvs(); await app.cleanup(); });
+function request(path: string, body: object, origin = 'http://localhost') { return new Request(`http://localhost${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(body) }); }
+test('route responses obey the shared contract and reject invalid origin, id and ownership', async () => {
+  const body = { id: randomUUID(), name: '接口工作区' };
+  const response = await createWorkspace(request('/api/workspaces', body));
+  expect(response.status).toBe(201); const workspace = workspaceSchema.parse(await response.json());
+  expect(workspace.id).toBe(body.id);
+  const replay = await createWorkspace(request('/api/workspaces', body)); expect((await replay.json()).id).toBe(body.id);
+  const browserRequest = new Request('http://localhost:4219/api/workspaces', { method: 'POST', headers: { 'Content-Type': 'application/json', Host: '127.0.0.1:4219', Origin: 'http://127.0.0.1:4219' }, body: JSON.stringify(body) });
+  expect((await createWorkspace(browserRequest)).status).toBe(201);
+  expect((await createWorkspace(request('/api/workspaces', { id: randomUUID(), name: '异源' }, 'http://evil.example'))).status).toBe(403);
+  expect((await createWorkspace(request('/api/workspaces', { id: '../../bad', name: '无效' }))).status).toBe(400);
+  const context = { params: Promise.resolve({ workspaceId: workspace.id }) };
+  const paper = paperSchema.parse(await (await createPaper(request(`/api/workspaces/${workspace.id}/papers`, { id: randomUUID(), name: '论文' }), context)).json()); expect(paper.workspaceId).toBe(workspace.id);
+  expect((await listFiles(new Request('http://localhost/files?path=../app.sqlite'), context)).status).toBe(400);
+  expect((await listWorkspaces(new Request('http://localhost/api/workspaces'))).status).toBe(200);
+  const conversation = conversationSchema.parse(await (await createConversation(request('/conversations', { id: randomUUID(), name: '讨论' }), context)).json());
+  const message = { id: randomUUID(), text: 'hello', model: 'missing/model', materials: [] };
+  expect((await sendMessage(request('/messages', message), { params: Promise.resolve({ workspaceId: randomUUID(), conversationId: conversation.id }) })).status).toBe(404);
+  expect((await sendMessage(request('/messages', message), { params: Promise.resolve({ workspaceId: workspace.id, conversationId: conversation.id }) })).status).toBe(503);
+});
+test('OpenAPI covers every public operation, stream event and binary resource contract', () => {
+  const document = generateOpenapi();
+  expect(Object.values(document.paths!).reduce((count, item) => count + Object.keys(item!).length, 0)).toBe(17);
+  expect(document.components?.schemas?.ConversationEvent).toBeDefined();
+  expect(document.paths?.['/api/workspaces/{workspaceId}/file']?.get?.responses?.['206']).toBeDefined();
+});

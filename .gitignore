@@ -20,6 +20,14 @@ backend/.runtime/
 # Local secrets
 .env
 .env.*
+!.env.example
+node_modules/
+.next/
+.local/
+test-results/
+playwright-report/
+*.tsbuildinfo
+public/pdf-assets/
 
 # Editor and operating-system files
 .vscode/

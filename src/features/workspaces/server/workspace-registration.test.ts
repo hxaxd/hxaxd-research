@@ -1,0 +1,30 @@
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { createTestApp } from '../../../../tests/create-test-app';
+import { createWorkspace } from './create-workspace';
+import { renameWorkspace, getWorkspace } from './workspace-store';
+import { createPaper } from '@/features/papers/server/create-paper';
+import { renamePaper, getPaper } from '@/features/papers/server/paper-store';
+import { openAppDatabase } from '@/server/open-app-database';
+let app: Awaited<ReturnType<typeof createTestApp>>;
+beforeEach(async () => { app = await createTestApp(); });
+afterEach(async () => { await app.cleanup(); });
+test('creation retries preserve identity, rename preserves directory, and registration survives reopen', () => {
+  const same = createWorkspace(app.db, app.config.workspaceDir, { id: app.workspace.id, name: app.workspace.name });
+  expect(same.id).toBe(app.workspace.id);
+  expect(() => createWorkspace(app.db, app.config.workspaceDir, { id: same.id, name: 'other' })).toThrow();
+  const paper = createPaper(app.db, app.config.workspaceDir, same.id, { id: randomUUID(), name: '论文' });
+  renameWorkspace(app.db, same.id, '新名称'); renamePaper(app.db, same.id, paper.id, '新论文名');
+  expect(existsSync(path.join(app.config.workspaceDir, same.id, 'papers', paper.id))).toBe(true);
+  const reopened = openAppDatabase(app.config.dataDir);
+  expect(getWorkspace(reopened, same.id).name).toBe('新名称'); expect(getPaper(reopened, same.id, paper.id).name).toBe('新论文名');
+  reopened.close();
+});
+test('papers cannot be reassigned by reusing a creation id', () => {
+  const other = createWorkspace(app.db, app.config.workspaceDir, { id: randomUUID(), name: '其他工作区' });
+  const paper = createPaper(app.db, app.config.workspaceDir, app.workspace.id, { id: randomUUID(), name: '论文' });
+  expect(() => getPaper(app.db, other.id, paper.id)).toThrow('论文不存在');
+  expect(() => createPaper(app.db, app.config.workspaceDir, other.id, { id: paper.id, name: paper.name })).toThrow();
+});
