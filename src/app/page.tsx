@@ -1,12 +1,42 @@
-import { Layers2, BookOpen, MessagesSquare } from 'lucide-react';
-import { getAppRuntime } from '@/server/app-runtime';
-import { listWorkspaces } from '@/features/workspaces/server/workspace-store';
-import { WorkspaceList } from '@/features/workspaces/components/WorkspaceList';
+import { BookOpen } from 'lucide-react';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+
 import { CreateWorkspaceDialog } from '@/features/workspaces/components/CreateWorkspaceDialog';
+import { listWorkspaces } from '@/features/workspaces/server/workspaces';
+import { getAppRuntime } from '@/server/runtime';
+
+import { WorkbenchHeader } from './workspaces/[workspaceId]/WorkbenchHeader';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
 export default async function Home() {
-  const app = getAppRuntime(); await app.ready;
-  const workspaces = listWorkspaces(app.db);
-  return <div className="home-shell"><header className="app-header"><div className="brand"><Layers2 size={22} /><span>科研工作台</span></div><div className="header-spacer" /><span className="local-indicator"><i />本地运行</span></header><main className="home-content"><div className="home-intro"><span className="eyebrow">材料 · 阅读 · 对话</span><h1>把材料和思考<br />放在一起。</h1><p>为每个研究主题建立一个工作区。<br />整理论文，阅读文件，让对话围绕实际材料展开。</p></div><div className="workspace-section-heading"><h2>我的工作区 <small>{workspaces.length}</small></h2><CreateWorkspaceDialog /></div>{workspaces.length ? <WorkspaceList workspaces={workspaces} /> : <div className="workspace-empty"><div className="empty-illustration"><BookOpen size={38} strokeWidth={1.2} /><MessagesSquare size={24} strokeWidth={1.2} /></div><h3>你的第一个研究主题</h3><p>新建工作区后，即可加入论文、材料和多段对话。</p></div>}</main><footer className="home-footer">资料保存在本机 · 对话使用已配置的模型服务</footer></div>;
+  const workspaces = listWorkspaces(getAppRuntime().config.workspaceDir);
+  if (workspaces.length) {
+    const last = (await cookies()).get('research-last-workspace')?.value;
+    const saved = last ?? '';
+    const id = saved.split('?')[0].split('/')[2];
+    if (
+      saved.startsWith('/workspaces/') &&
+      workspaces.some((workspace) => workspace.id === id)
+    )
+      redirect(saved);
+    redirect(`/workspaces/${workspaces[0].id}`);
+  }
+  return (
+    <div className="app-shell">
+      <WorkbenchHeader workspace={null} workspaces={[]} />
+      <main className="first-workspace">
+        <div className="reader-empty">
+          <div className="reader-mark">
+            <BookOpen size={36} strokeWidth={1.4} aria-hidden="true" />
+          </div>
+          <h1>从一个研究主题开始</h1>
+          <p>建立工作区，放入材料，开始阅读与讨论。</p>
+          <CreateWorkspaceDialog />
+        </div>
+      </main>
+    </div>
+  );
 }

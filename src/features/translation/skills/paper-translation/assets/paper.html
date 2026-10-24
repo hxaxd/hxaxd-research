@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="assets/katex/katex.min.css">
+  <style>
+    :root { color-scheme: light dark; --paper: #fff; --ground: #f3f5f7; --ink: #222b38; --muted: #687487; --line: #e4e8ee; --accent: #315ca7; }
+    @media (prefers-color-scheme: dark) { :root { --paper: #20242b; --ground: #191c22; --ink: #e0e5ed; --muted: #a0adbf; --line: #363d48; --accent: #a1bdf6; } }
+    :root[data-theme="light"] { color-scheme: light; --paper: #fff; --ground: #f3f5f7; --ink: #222b38; --muted: #687487; --line: #e4e8ee; --accent: #315ca7; }
+    :root[data-theme="dark"] { color-scheme: dark; --paper: #20242b; --ground: #191c22; --ink: #e0e5ed; --muted: #a0adbf; --line: #363d48; --accent: #a1bdf6; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.85 Charter, "Iowan Old Style", "Noto Serif SC", "Songti SC", serif; overflow-wrap: anywhere; }
+    .tools { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 8px 18px; background: var(--paper); border-bottom: 1px solid var(--line); font: 13px/1.4 system-ui, sans-serif; }
+    .tools a, button { min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; text-decoration: none; }
+    button[aria-pressed="true"] { background: var(--ground); color: var(--accent); }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .tools .spacer { flex: 1; }
+    .reading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 76ch) minmax(0, 1fr); gap: 28px; max-width: 1420px; padding: 44px 32px 96px; margin: auto; }
+    article { grid-column: 2; min-width: 0; }
+    h1 { font-size: clamp(26px, 3vw, 36px); line-height: 1.4; letter-spacing: -.025em; margin: 0 0 2em; font-weight: 650; }
+    h2, h3, h4 { line-height: 1.5; margin: 1.9em 0 .8em; font-weight: 650; }
+    h2 { font-size: 1.34em; } h3 { font-size: 1.14em; }
+    p { margin: .8em 0; }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    aside { grid-column: 1; grid-row: 1; align-self: start; position: sticky; top: 86px; font: 12px/1.65 system-ui, sans-serif; max-height: calc(100dvh - 110px); overflow: auto; }
+    aside:empty { display: none; }
+    aside a { display: block; color: var(--muted); text-decoration: none; padding: 8px 4px; border-radius: 4px; }
+    aside a:hover { color: var(--accent); background: var(--ground); }
+    img, svg { max-width: 100%; height: auto; display: block; margin: 1.4em auto; }
+    table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin: 1.5em auto; font-size: .9em; font-variant-numeric: tabular-nums; }
+    th, td { padding: .5em .8em; border-bottom: 1px solid var(--line); text-align: start; }
+    th { border-top: 1.5px solid var(--ink); border-bottom-color: var(--ink); }
+    .math-display, .katex-display { overflow-x: auto; overflow-y: hidden; padding: .2em 0; }
+    .katex { font-size: 1.06em; }
+    pre { overflow: auto; padding: 16px; border-radius: 8px; background: var(--ground); font-size: .82em; line-height: 1.65; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: .88em; }
+    blockquote { margin: 1.5em 0; padding: 0 1em; border-left: 2px solid var(--line); color: var(--muted); }
+    .original { display: none; color: var(--muted); font-size: .9em; border-left: 2px solid var(--line); padding-left: 1em; margin: 1em 0 1.8em; }
+    body[data-original="true"] .original { display: block; }
+    @media (max-width: 1100px) { .reading { display: block; max-width: 86ch; padding: 30px 28px 80px; } aside { display: none; } }
+    @media print { .tools, aside, .original { display: none !important; } .reading { display: block; padding: 0; } body { font-size: 11pt; color: #111; background: white; } h2, h3 { break-after: avoid; } img, table { break-inside: avoid; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <nav class="tools" aria-label="阅读设置">
+    {{SOURCE}}
+    <button id="original" aria-pressed="false">原文对照</button>
+    <span class="spacer"></span>
+    <button id="theme" aria-label="切换明暗外观">明暗外观</button>
+    <button id="print">打印</button>
+  </nav>
+  <div class="reading"><aside aria-label="目录">{{TOC}}</aside><article><h1>{{TITLE}}</h1>{{CONTENT}}</article></div>
+  <script src="assets/katex/katex.min.js"></script>
+  <script src="assets/katex/auto-render.min.js"></script>
+  <script>
+    document.querySelector('#original').onclick = event => {
+      const active = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+      event.currentTarget.setAttribute('aria-pressed', String(active));
+      document.body.dataset.original = String(active);
+    };
+    document.querySelector('#original').hidden = !document.querySelector('.original');
+    document.querySelector('#theme').onclick = () => {
+      const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    };
+    document.querySelector('#print').onclick = () => print();
+    renderMathInElement(document.querySelector('article'), { delimiters: [
+      { left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true },
+      { left: '\\(', right: '\\)', display: false }, { left: '$', right: '$', display: false }
+    ], throwOnError: false });
+  </script>
+</body>
+</html>

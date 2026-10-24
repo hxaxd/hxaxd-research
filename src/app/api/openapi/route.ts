@@ -1,5 +1,10 @@
-import { handleApiRequest } from '@/shared/http/handle-api-request';
-import { generateOpenapi } from '@/shared/http/generate-openapi';
+import { handleApiRequest } from '@/app/api/handle-request';
+
+import { generateOpenapi } from './document';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export function GET(request: Request) { return handleApiRequest(request, generateOpenapi); }
+
+export function GET(request: Request) {
+  return handleApiRequest(request, generateOpenapi);
+}

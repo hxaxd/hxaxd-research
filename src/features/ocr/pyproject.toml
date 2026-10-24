@@ -1,0 +1,28 @@
+[project]
+name = "research-ocr"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+# The native doc_parser command exports DOCX alongside JSON and Markdown.
+dependencies = ["paddleocr[doc-parser]==3.7.0", "paddlex==3.7.2", "numpy==2.3.5", "python-docx==1.2.0"]
+
+[project.optional-dependencies]
+gpu = ["paddlepaddle-gpu==3.2.1"]
+cpu = ["paddlepaddle==3.2.1"]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+conflicts = [[{ extra = "gpu" }, { extra = "cpu" }]]
+
+[tool.uv.sources]
+paddlepaddle-gpu = { index = "paddle-gpu" }
+paddlepaddle = { index = "paddle-cpu" }
+
+[[tool.uv.index]]
+name = "paddle-gpu"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cu129/"
+explicit = true
+
+[[tool.uv.index]]
+name = "paddle-cpu"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+explicit = true

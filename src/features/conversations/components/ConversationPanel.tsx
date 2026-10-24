@@ -1,20 +1,86 @@
 'use client';
-import { Pencil } from 'lucide-react';
-import { useConversationStream } from '../hooks/use-conversation-stream';
-import type { Conversation, ConfiguredModel } from '../conversation-schema';
-import type { MaterialReference } from '@/features/files/file-schema';
-import { NameDialog } from '@/shared/ui/NameDialog';
-import { requestJson } from '@/shared/http/request-json';
-import { ConversationMessages } from './ConversationMessages';
+
+import type { Dispatch, SetStateAction } from 'react';
+
+import type { ImageClip, ReadingContext, TextQuote } from '@/features/files/schema';
+import { ModelSettingsButton } from '@/features/models/components/ModelSettingsButton';
+import type { ConfiguredModel } from '@/features/models/schema';
+import { ChoiceSelect } from '@/shared/ui/ChoiceSelect';
+
+import type { Conversation } from '../schema';
 import { ConversationComposer } from './ConversationComposer';
-export function ConversationPanel({ workspaceId, conversation, models, model, onModelChange, materials, onRemove, onSent, onRenamed }: { workspaceId: string; conversation: Conversation; models: ConfiguredModel[]; model: string; onModelChange: (id: string) => void; materials: MaterialReference[]; onRemove: (path: string) => void; onSent: () => void; onRenamed: (conversation: Conversation) => void }) {
+import { ConversationMessages } from './ConversationMessages';
+import { useConversationStream } from './use-conversation-stream';
+
+export function ConversationPanel({
+  workspaceId,
+  conversation,
+  models,
+  model,
+  onModelChange,
+  reading,
+  clips,
+  onClipsChange,
+  quotes,
+  onQuotesChange,
+  onOpenQuote,
+}: {
+  workspaceId: string;
+  conversation: Conversation;
+  models: ConfiguredModel[];
+  model: string;
+  onModelChange: (id: string) => void;
+  reading: ReadingContext | null;
+  clips: ImageClip[];
+  onClipsChange: Dispatch<SetStateAction<ImageClip[]>>;
+  quotes: TextQuote[];
+  onQuotesChange: Dispatch<SetStateAction<TextQuote[]>>;
+  onOpenQuote: (quote: TextQuote) => void;
+}) {
   const url = `/api/workspaces/${workspaceId}/conversations/${conversation.id}`;
   const { snapshot, connected, error } = useConversationStream(url);
-  const running = snapshot?.run?.status === 'accepted' || snapshot?.run?.status === 'running';
-  return <>
-    <div className="model-toolbar"><select aria-label="选择模型" value={model} onChange={event => onModelChange(event.target.value)} disabled={running || !models.length}><option value="">选择模型</option>{models.map(model => <option key={model.id} value={model.id}>{model.name} · {model.provider}</option>)}</select><NameDialog title="重命名对话" label="为这段讨论起一个容易辨认的名称。" initialName={conversation.name} onSubmit={async name => onRenamed(await requestJson<Conversation>(url, { method: 'PATCH', body: JSON.stringify({ name }) }))}><button className="icon-button" aria-label="重命名对话"><Pencil size={14} /></button></NameDialog></div>
-    {error && <p role="alert" className="error-message">{error}</p>}
-    <ConversationMessages snapshot={snapshot} />
-    <ConversationComposer url={url} model={model} run={snapshot?.run ?? null} materials={materials} onRemove={onRemove} onSent={onSent} connected={connected} />
-  </>;
+  const running =
+    snapshot?.run?.status === 'accepted' || snapshot?.run?.status === 'running';
+  return (
+    <>
+      {error && (
+        <p role="alert" className="error-message">
+          {error}
+        </p>
+      )}
+      <ConversationMessages snapshot={snapshot} onOpenQuote={onOpenQuote} />
+      <div className="model-toolbar">
+        <span
+          className="connection-indicator"
+          role="status"
+          aria-label={connected ? '对话已连接' : '正在连接对话'}
+          title={connected ? '对话已连接' : '正在连接对话'}
+        >
+          <span className={`status-dot${connected ? ' connected' : ''}`} />
+        </span>
+        <span className="model-label">模型</span>
+        <ChoiceSelect
+          label="选择模型"
+          value={model}
+          items={models.map((model) => ({ ...model, detail: model.provider }))}
+          onChange={onModelChange}
+          disabled={running || !models.length}
+          placeholder={models.length ? '选择模型' : '暂无可用模型'}
+        />
+        <ModelSettingsButton />
+      </div>
+      <ConversationComposer
+        url={url}
+        model={model}
+        run={snapshot?.run ?? null}
+        reading={reading}
+        connected={connected}
+        clips={clips}
+        onClipsChange={onClipsChange}
+        quotes={quotes}
+        onQuotesChange={onQuotesChange}
+        supportsImages={models.find(item => item.id === model)?.input.includes('image') ?? false}
+      />
+    </>
+  );
 }

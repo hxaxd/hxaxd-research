@@ -1,0 +1,27 @@
+'use client';
+
+import * as Dialog from '@radix-ui/react-dialog';
+import { X } from 'lucide-react';
+
+export function ImageAttachment({ src, label }: { src: string; label: string }) {
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger asChild>
+        <button className="image-attachment" aria-label={`查看${label}`}>
+          <img src={src} alt={label} />
+          <span>{label}</span>
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content image-lightbox" aria-describedby={undefined}>
+          <div className="dialog-heading">
+            <Dialog.Title>{label}</Dialog.Title>
+            <Dialog.Close className="icon-button" aria-label="关闭截图预览"><X size={18} /></Dialog.Close>
+          </div>
+          <img src={src} alt={label} />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}

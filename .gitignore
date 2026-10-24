@@ -5,17 +5,8 @@ env/
 __pycache__/
 *.py[codz]
 .cache/
-.tools/
 .pytest_cache/
 .ruff_cache/
-frontend/node_modules/
-frontend/dist/
-frontend/test-results/
-frontend/playwright-report/
-backend/data/
-backend/snapshots/
-backend/.venv/
-backend/.runtime/
 
 # Local secrets
 .env
@@ -23,7 +14,7 @@ backend/.runtime/
 !.env.example
 node_modules/
 .next/
-.local/
+.runtime/
 test-results/
 playwright-report/
 *.tsbuildinfo
@@ -38,8 +29,3 @@ Thumbs.db
 /old/
 /toss/
 /tmp/
-
-# Frontend build outputs
-frontend/ui-projects/lib/
-frontend/tsconfig.tsbuildinfo
-frontend/ui-projects/tsconfig.tsbuildinfo
