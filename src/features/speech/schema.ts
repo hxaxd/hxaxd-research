@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-export const speechProtocolSchema = z.enum(['realtime', 'file']);
+const speechProtocolSchema = z.enum(['realtime', 'file']);
 
-export const speechBaseUrlSchema = z
+const speechBaseUrlSchema = z
   .url()
   .max(2048)
   .refine((value) => {
@@ -25,7 +25,7 @@ export const speechConnectionInputSchema = z.object({
   clearKey: z.boolean().optional(),
 });
 
-export const speechConnectionSchema = z.object({
+const speechConnectionSchema = z.object({
   id: z.string(),
   name: z.string(),
   protocol: speechProtocolSchema,
@@ -47,7 +47,6 @@ export const speechChatgptSchema = z.object({
 export const speechConnectionRefSchema = z.object({
   connectionId: z.string().min(1),
 });
-export const speechTestSchema = speechConnectionRefSchema;
 export const speechTestResultSchema = z.object({
   ok: z.boolean(),
   message: z.string(),

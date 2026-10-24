@@ -39,7 +39,7 @@ import {
   speechSelectionSchema,
   speechSettingsSchema,
   speechTestResultSchema,
-  speechTestSchema,
+  speechConnectionRefSchema,
   speechTranscriptSchema,
 } from '@/features/speech/schema';
 import {
@@ -198,7 +198,7 @@ export function generateOpenapi() {
     {
       method: 'post',
       path: '/api/speech/test',
-      body: speechTestSchema,
+      body: speechConnectionRefSchema,
       response: speechTestResultSchema,
     },
     {

@@ -1177,9 +1177,7 @@ name = "research-ocr"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "numpy" },
     { name = "paddleocr", extra = ["doc-parser"] },
-    { name = "paddlex" },
     { name = "python-docx" },
 ]
 
@@ -1193,11 +1191,9 @@ gpu = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = "==2.3.5" },
     { name = "paddleocr", extras = ["doc-parser"], specifier = "==3.7.0" },
     { name = "paddlepaddle", marker = "extra == 'cpu'", specifier = "==3.2.1", index = "https://www.paddlepaddle.org.cn/packages/stable/cpu/" },
     { name = "paddlepaddle-gpu", marker = "extra == 'gpu'", specifier = "==3.2.1", index = "https://www.paddlepaddle.org.cn/packages/stable/cu129/" },
-    { name = "paddlex", specifier = "==3.7.2" },
     { name = "python-docx", specifier = "==1.2.0" },
 ]
 provides-extras = ["gpu", "cpu"]

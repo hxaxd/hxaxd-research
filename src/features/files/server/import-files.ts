@@ -16,6 +16,22 @@ import { ApiError } from '@/shared/http/api-error';
 import { importMetadataSchema, type ImportResult } from '../schema';
 import { resolveWorkspacePath, validateRelativePath } from './paths';
 
+async function importDestination(root: string, workspaceId: string, target: string, name: string, single: boolean) {
+  const parsed = path.parse(name);
+  for (let suffix = 0; ; suffix++) {
+    const availableName = suffix === 0 ? name : single
+      ? `${parsed.name} (${suffix})${parsed.ext}` : `${name} (${suffix})`;
+    const relative = target ? `${target}/${availableName}` : availableName;
+    const absolute = await resolveWorkspacePath(root, workspaceId, relative, true);
+    try {
+      await stat(absolute);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { relative, absolute };
+      throw error;
+    }
+  }
+}
+
 export async function importWorkspaceFiles(
   config: AppConfig,
   workspaceId: string,
@@ -27,13 +43,18 @@ export async function importWorkspaceFiles(
   const files: string[] = [];
   const tasks: Promise<void>[] = [];
   const seen = new Set<string>();
+  let parser: ReturnType<typeof busboy>;
+  try {
+    parser = busboy({
+      headers: { 'content-type': request.headers.get('content-type') ?? '' },
+      preservePath: true,
+      defParamCharset: 'utf8',
+      limits: { fileSize: 256 * 1024 * 1024, files: 1000, fields: 1, fieldSize: 4096, parts: 1001 },
+    });
+  } catch {
+    throw new ApiError(400, 'invalid_input', '请使用有效的 multipart/form-data 上传文件');
+  }
   const source = Readable.fromWeb(request.body as NodeReadableStream<Uint8Array>);
-  const parser = busboy({
-    headers: { 'content-type': request.headers.get('content-type') ?? '' },
-    preservePath: true,
-    defParamCharset: 'utf8',
-    limits: { fileSize: 256 * 1024 * 1024, files: 1000, fields: 1, fieldSize: 4096, parts: 1001 },
-  });
   const stage = await mkdtemp(path.join(config.stagingDir, 'import-'));
   const aborted = () => source.destroy(new ApiError(499, 'cancelled', '导入已取消'));
   request.signal.addEventListener('abort', aborted, { once: true });
@@ -111,28 +132,13 @@ export async function importWorkspaceFiles(
     if (!metadata || !files.length) throw new ApiError(400, 'invalid_input', '没有收到文件');
     const single = files.length === 1 && !metadata.folderName && !files[0].includes('/');
     const topName = single ? files[0] : metadata.folderName || '材料';
-    let finalPath = metadata.target ? `${metadata.target}/${topName}` : topName;
-    let destination = await resolveWorkspacePath(config.workspaceDir, workspaceId, finalPath, true);
-    for (let suffix = 1; ; suffix++) {
-      try {
-        await stat(destination);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') break;
-        throw error;
-      }
-      const parsed = path.parse(topName);
-      const alternative = single
-        ? `${parsed.name} (${suffix})${parsed.ext}`
-        : `${topName} (${suffix})`;
-      finalPath = metadata.target ? `${metadata.target}/${alternative}` : alternative;
-      destination = await resolveWorkspacePath(config.workspaceDir, workspaceId, finalPath, true);
-    }
-    await cp(single ? path.join(stage, files[0]) : stage, destination, {
+    const destination = await importDestination(config.workspaceDir, workspaceId, metadata.target, topName, single);
+    await cp(single ? path.join(stage, files[0]) : stage, destination.absolute, {
       recursive: true,
       force: false,
       errorOnExist: true,
     });
-    return { path: finalPath, files: files.length, bytes: totalBytes };
+    return { path: destination.relative, files: files.length, bytes: totalBytes };
   } finally {
     request.signal.removeEventListener('abort', aborted);
     await Promise.allSettled(tasks);

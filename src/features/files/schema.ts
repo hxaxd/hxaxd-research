@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const relativePathSchema = z.string().max(2048);
+const relativePathSchema = z.string().max(2048);
 export const importMetadataSchema = z.object({
   target: relativePathSchema.default(''),
   folderName: z.string().max(160).optional(),
@@ -38,7 +38,7 @@ export const textFileSchema = z.object({
 export type FileEntry = z.infer<typeof fileEntrySchema>;
 export type ReadingContext = z.infer<typeof readingContextSchema>;
 export const maxTextQuotes = 12;
-export const textQuoteSchema = readingContextSchema.extend({ text: z.string().trim().min(1).max(10000) });
+const textQuoteSchema = readingContextSchema.extend({ text: z.string().trim().min(1).max(10000) });
 export const textQuotesSchema = z.array(textQuoteSchema).max(maxTextQuotes);
 export type TextQuote = z.infer<typeof textQuoteSchema>;
 export const maxImageClips = 6;

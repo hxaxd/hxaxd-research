@@ -16,7 +16,7 @@ import {
   type SpeechProtocol,
 } from '../schema';
 
-export const defaultChatgptModel = 'gpt-live-transcribe';
+const defaultChatgptModel = 'gpt-live-transcribe';
 
 const storedConnectionSchema = speechConnectionInputSchema
   .omit({ clearKey: true })

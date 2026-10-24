@@ -10,7 +10,7 @@ import { ApiError } from '@/shared/http/api-error';
 
 import type { Conversation } from '../schema';
 
-export function sessionDirectory(root: string, workspaceId: string) {
+function sessionDirectory(root: string, workspaceId: string) {
   return path.join(root, workspaceId, '.pi', 'sessions');
 }
 

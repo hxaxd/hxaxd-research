@@ -8,14 +8,14 @@ import { POST as create, GET as list } from '@/app/api/workspaces/[workspaceId]/
 import { GET as get, PATCH as rename } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/route';
 import { POST as send } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/messages/route';
 import { GET as events } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/events/route';
+import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/images/route';
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
-import { POST as createPaper } from '@/app/api/workspaces/[workspaceId]/papers/route';
 import type { ConversationSnapshot } from '@/features/conversations/schema';
 
 import { startModelServer } from '../model-server';
-import { createApiTestApp, request, restartApp, workspaceContext } from './app';
+import { createTestApp, request, restartApp, workspaceContext } from '../app';
 
-let app: Awaited<ReturnType<typeof createApiTestApp>>;
+let app: Awaited<ReturnType<typeof createTestApp>>;
 let model: Awaited<ReturnType<typeof startModelServer>>;
 let conversationId: string;
 function context(workspaceId = app.workspace.id) {
@@ -32,7 +32,7 @@ function message(text: string, extra: object = {}) {
   return send(request('/messages', 'POST', { id: randomUUID(), text, model: 'test/test-model', reading: null, ...extra }), context());
 }
 beforeEach(async () => {
-  app = await createApiTestApp();
+  app = await createTestApp();
   model = await startModelServer();
   await writeFile(path.join(app.config.piDir, 'models.json'), JSON.stringify(model.config));
   conversationId = (await (await create(request('/conversations', 'POST', { id: randomUUID(), name: '讨论' }), workspaceContext(app.workspace.id))).json()).id;
@@ -65,21 +65,55 @@ test('disconnecting the event stream keeps generation alive; competing sends fai
   const run = await response.json();
   const stream = await events(request('/events'), context());
   const reader = stream.body!.getReader();
-  await reader.read();
+  const event = JSON.parse(new TextDecoder().decode((await reader.read()).value).split('data: ')[1]);
+  expect(event.type).toBe('snapshot');
+  expect(event.snapshot.run.id).toBe(run.id);
   await reader.cancel();
   await expect.poll(async () => (await snapshot()).run?.status).toBe('running');
   expect((await message('competing')).status).toBe(409);
   expect((await stop(request('/stop', 'POST', { id: run.id }), context())).status).toBe(200);
   expect((await snapshot()).run?.status).toBe('cancelled');
+  expect((await message('继续讨论')).status).toBe(202);
+  expect((await complete()).messages.at(-1)?.text).toBe('测试回答');
 });
 
-test('native commands and workspace metadata produce real material, while service errors remain failures', async () => {
-  await createPaper(request('/papers', 'POST', { id: randomUUID(), name: '当前论文' }), workspaceContext(app.workspace.id));
-  await message('[WORKSPACE]');
-  expect((await complete()).messages.at(-1)?.text).toContain('analysis/summary.custom');
-  await message('[SHELL]');
-  await complete();
-  expect(await readFile(path.join(app.config.workspaceDir, 'native-command.txt'), 'utf8')).toBe('shell-output');
+test('stopping an idle conversation is harmless and a missing conversation returns not found', async () => {
+  const response = await stop(request('/stop', 'POST', { id: randomUUID() }), context());
+  expect(response.status).toBe(200);
+  expect(await snapshot()).toMatchObject({ run: null, messages: [] });
+  const missing = { params: Promise.resolve({ workspaceId: app.workspace.id, conversationId: randomUUID() }) };
+  expect((await get(request('/conversation'), missing)).status).toBe(404);
+  expect((await message('开始讨论')).status).toBe(202);
+  expect((await complete()).messages.at(-1)?.text).toBe('测试回答');
+});
+
+test('images remain downloadable from conversation history after the runtime is reloaded', async () => {
+  const data = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAO0lEQVRIiWMwTptJU8QwakHaaBDNHE1FxqMZbeZoUWE8WpqmjVY4xqNVZtpoq2LmaMMrbbTpOHNQt64BpuTIPb7rfhkAAAAASUVORK5CYII=';
+  await message('请看截图', { clips: [{ path: 'figure.png', data }] });
+  const saved = await complete();
+  const url = saved.messages.find(item => item.role === 'user')!.images![0].url;
+  restartApp();
+  const response = await image(request(url), context());
+  expect(response.status).toBe(200);
+  expect(response.headers.get('Content-Type')).toBe('image/png');
+  expect(response.headers.get('Cache-Control')).toContain('private');
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from(data, 'base64'));
+  expect((await image(request(url.replace('index=0', 'index=1')), context())).status).toBe(404);
+  expect((await image(request('/images?message=invalid&index=0'), context())).status).toBe(400);
+});
+
+test('unknown models fail explicitly and unreadable references do not save a question', async () => {
+  await message('hello', { model: 'test/missing' });
+  expect((await complete('failed')).error).toContain('模型不可用');
+  expect((await snapshot()).messages).toEqual([]);
+  expect((await message('解释', { reading: { path: 'missing.md' } })).status).toBe(404);
+  expect((await message('解释', { reading: { path: '' } })).status).toBe(400);
+  expect((await message('解释', { quotes: [{ path: 'missing.md', text: '引用' }] })).status).toBe(404);
+  expect((await snapshot()).messages).toEqual([]);
+  expect((await create(request('/conversations', 'POST', { id: conversationId, name: '重复' }), workspaceContext(app.workspace.id))).status).toBe(409);
+});
+
+test('a rejected model request is reported as a failure', async () => {
   await message('[FAIL]');
   const failed = await complete('failed');
   expect(failed.error).toContain('Test authentication failure');

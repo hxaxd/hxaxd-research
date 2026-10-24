@@ -12,12 +12,12 @@ import { POST as realtime } from '@/app/api/speech/realtime/route';
 import { POST as transcribe } from '@/app/api/speech/transcriptions/route';
 import { POST as testConnection } from '@/app/api/speech/test/route';
 
-import { createApiTestApp, request, restartApp } from './app';
+import { createTestApp, request, restartApp } from '../app';
 
-let app: Awaited<ReturnType<typeof createApiTestApp>>;
+let app: Awaited<ReturnType<typeof createTestApp>>;
 const input = { name: '本地转写', protocol: 'file', baseUrl: 'http://127.0.0.1:8000/v1/', model: 'whisper-1', key: 'sk-private' };
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
-beforeEach(async () => { app = await createApiTestApp(); });
+beforeEach(async () => { app = await createTestApp(); });
 afterEach(async () => { await app.cleanup(); });
 async function state() { return (await settings(request('/speech'))).json(); }
 async function connection(extra: object = {}) {
@@ -47,10 +47,29 @@ test('connections, selection and ChatGPT model persist; keys are retained, repla
   await chatgptModel(request('/chatgpt', 'PATCH', { model: 'configured-transcriber' }));
   await select(request('/speech', 'PATCH', { activeId: id }));
   expect(await state()).toMatchObject({ activeId: id, chatgpt: { model: 'configured-transcriber' } });
+  await select(request('/speech', 'PATCH', { activeId: null }));
+  expect((await state()).activeId).toBeNull();
+  await select(request('/speech', 'PATCH', { activeId: id }));
   await remove(request('/connection', 'DELETE'), context(id));
   expect(await state()).toMatchObject({ activeId: 'chatgpt', connections: [] });
   expect((await select(request('/speech', 'PATCH', { activeId: id }))).status).toBe(404);
   expect((await remove(request('/connection', 'DELETE'), context(randomUUID()))).status).toBe(404);
+  expect((await update(request('/connection', 'PATCH', input), context(id))).status).toBe(404);
+  expect((await testConnection(request('/test', 'POST', { connectionId: id }))).status).toBe(404);
+});
+
+test('editing or removing another speech connection preserves the selected connection', async () => {
+  const other = await connection({ name: '备用转写' });
+  const active = await connection({ name: '当前转写' });
+  const selected = (await state()).connections.find((item: { id: string }) => item.id === active);
+  const updated = await update(request('/connection', 'PATCH', { ...input, name: '备用新名称' }), context(other));
+  expect(updated.status).toBe(200);
+  expect(await updated.json()).toMatchObject({ activeId: active, connections: expect.arrayContaining([
+    selected, expect.objectContaining({ id: other, name: '备用新名称' }),
+  ]) });
+  expect((await remove(request('/connection', 'DELETE'), context(other))).status).toBe(200);
+  restartApp();
+  expect(await state()).toMatchObject({ activeId: active, connections: [selected] });
 });
 
 test('invalid addresses and malformed local configuration are rejected without overwriting the file', async () => {
@@ -61,6 +80,8 @@ test('invalid addresses and malformed local configuration are rejected without o
   expect((await settings(request('/speech'))).status).toBe(500);
   expect((await create(request('/connections', 'POST', input))).status).toBe(500);
   expect(await readFile(config, 'utf8')).toBe('{not json');
+  await writeFile(config, '{}');
+  expect((await settings(request('/speech'))).status).toBe(500);
 });
 
 test('file transcription uploads the selected model and audio using the stored credential', async () => {
@@ -75,6 +96,13 @@ test('file transcription uploads the selected model and audio using the stored c
     return Response.json({ text: '可编辑的文字' });
   });
   expect(await (await transcribe(audio(id))).json()).toEqual({ text: '可编辑的文字' });
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const form = init.body as FormData;
+    const sample = Buffer.from(await (form.get('file') as File).arrayBuffer());
+    expect(sample.subarray(0, 4).toString()).toBe('RIFF');
+    return Response.json({ text: '' });
+  });
+  expect(await (await testConnection(request('/test', 'POST', { connectionId: id }))).json()).toMatchObject({ ok: true });
   expect((await realtime(request('/realtime', 'POST', { connectionId: id, sdp: 'offer' }))).status).toBe(409);
   expect((await transcribe(audio('chatgpt'))).status).toBe(409);
 });
@@ -110,4 +138,55 @@ test('upstream authentication, malformed responses and network failure return re
   const response = await transcribe(audio(id));
   expect(response.status).toBe(502);
   expect(await response.json()).toMatchObject({ error: { code: 'speech_unreachable' } });
+});
+
+test('transcription distinguishes invalid responses, timeouts and cancelled requests', async () => {
+  const id = await connection();
+  vi.stubGlobal('fetch', async () => Response.json({ text: 42 }));
+  expect(await (await transcribe(audio(id))).json()).toMatchObject({ error: { code: 'speech_response_invalid' } });
+  vi.stubGlobal('fetch', async () => { throw new DOMException('timeout', 'TimeoutError'); });
+  expect((await transcribe(audio(id))).status).toBe(504);
+  const controller = new AbortController();
+  controller.abort();
+  const input = audio(id);
+  const cancelled = new Request(input, { signal: controller.signal });
+  vi.stubGlobal('fetch', async () => { throw new DOMException('cancelled', 'AbortError'); });
+  expect((await transcribe(cancelled)).status).toBe(408);
+});
+
+test('recording requests reject missing or oversized audio before contacting a speech service', async () => {
+  const id = await connection();
+  const form = new FormData();
+  form.set('connectionId', id);
+  const missing = await transcribe(new Request('http://localhost/transcriptions', { method: 'POST', body: form }));
+  expect(missing.status).toBe(400);
+  expect((await transcribe(new Request('http://localhost/transcriptions', { method: 'POST', body: 'invalid' }))).status).toBe(400);
+  const oversized = await transcribe(new Request('http://localhost/transcriptions', {
+    method: 'POST', headers: { 'Content-Length': '40000001' }, body: 'audio',
+  }));
+  expect(oversized.status).toBe(413);
+  expect((await realtime(request('/realtime', 'POST', { connectionId: 'chatgpt', sdp: 'offer' }))).status).toBe(409);
+});
+
+test.each([
+  [404, 'speech_endpoint_missing'], [429, 'speech_limited'], [503, 'speech_unavailable'], [400, 'speech_request_failed'],
+])('speech service status %i is reported as %s', async (status, code) => {
+  const id = await connection();
+  vi.stubGlobal('fetch', async () => new Response(null, { status }));
+  const response = await transcribe(audio(id));
+  expect(response.status).toBe(502);
+  expect(await response.json()).toMatchObject({ error: { code } });
+});
+
+test('connection testing accepts an SDP validation response but rejects invalid credentials', async () => {
+  const id = await connection({ protocol: 'realtime' });
+  let status = 400;
+  vi.stubGlobal('fetch', async (url: string) => new Response(null, {
+    status: url.endsWith('/client_secrets') ? 404 : status,
+  }));
+  expect(await (await testConnection(request('/test', 'POST', { connectionId: id }))).json()).toMatchObject({ ok: true });
+  status = 401;
+  const rejected = await testConnection(request('/test', 'POST', { connectionId: id }));
+  expect(rejected.status).toBe(502);
+  expect(await rejected.json()).toMatchObject({ error: { code: 'speech_auth_failed' } });
 });

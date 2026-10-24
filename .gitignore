@@ -1,31 +1,18 @@
-# Local environments and caches
-.venv/
-venv/
-env/
+# Dependencies and generated files
+/node_modules/
+/.next/
+/.runtime/
+/public/pdf-assets/
+/next-env.d.ts
 __pycache__/
-*.py[codz]
-.cache/
-.pytest_cache/
-.ruff_cache/
 
 # Local secrets
 .env
 .env.*
 !.env.example
-node_modules/
-.next/
-.runtime/
-test-results/
-playwright-report/
-*.tsbuildinfo
-public/pdf-assets/
 
 # Editor and operating-system files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-
-/old/
-/toss/
-/tmp/

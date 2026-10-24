@@ -23,7 +23,7 @@ export function validateRelativePath(value: string, allowEmpty = true): string {
   return normalized;
 }
 
-export function isWithin(root: string, target: string): boolean {
+function isWithin(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return (
     relative === '' ||
@@ -31,7 +31,7 @@ export function isWithin(root: string, target: string): boolean {
   );
 }
 
-export async function resolveWorkspaceRoot(
+async function resolveWorkspaceRoot(
   workspaceDir: string,
   workspaceId: string,
 ): Promise<string> {

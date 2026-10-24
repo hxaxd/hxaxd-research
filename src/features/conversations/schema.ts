@@ -22,7 +22,7 @@ export const conversationImageQuerySchema = z.object({
   message: z.coerce.number().int().positive(),
   index: z.coerce.number().int().nonnegative(),
 });
-export const runStatusSchema = z.enum(['accepted', 'running', 'completed', 'cancelled', 'failed']);
+const runStatusSchema = z.enum(['accepted', 'running', 'completed', 'cancelled', 'failed']);
 export const runSchema = z.object({
   id: idSchema,
   conversationId: idSchema,
@@ -31,7 +31,7 @@ export const runSchema = z.object({
   finishedAt: z.string().nullable(),
   errorCode: z.string().nullable(),
 });
-export const chatMessageSchema = z.object({
+const chatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(['user', 'assistant', 'tool']),
   text: z.string(),

@@ -3,7 +3,7 @@ name = "research-ocr"
 version = "1.0.0"
 requires-python = ">=3.12,<3.13"
 # The native doc_parser command exports DOCX alongside JSON and Markdown.
-dependencies = ["paddleocr[doc-parser]==3.7.0", "paddlex==3.7.2", "numpy==2.3.5", "python-docx==1.2.0"]
+dependencies = ["paddleocr[doc-parser]==3.7.0", "python-docx==1.2.0"]
 
 [project.optional-dependencies]
 gpu = ["paddlepaddle-gpu==3.2.1"]

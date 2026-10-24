@@ -13,12 +13,13 @@
     "dev": "next dev --hostname 127.0.0.1 --port 8642",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 8642",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "playwright test",
     "predev": "node src/features/files/copy-pdf-assets.mjs",
-    "prebuild": "node src/features/files/copy-pdf-assets.mjs"
+    "prebuild": "node src/features/files/copy-pdf-assets.mjs",
+    "test:coverage": "vitest run --coverage",
+    "analyze": "knip"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
@@ -43,16 +44,30 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/busboy": "^1.5.4",
-    "@types/node": "^26.6.4",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitest/coverage-v8": "^5.0.3",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.8",
+    "knip": "^6.43.0",
+    "mdast-util-from-markdown": "^2.0.3",
+    "micromark-util-types": "^2.0.3",
+    "remark-parse": "^11.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
+    "unified": "^11.0.5",
     "vitest": "^5.0.3"
+  },
+  "knip": {
+    "entry": [
+      "src/features/models/invoke.mjs"
+    ],
+    "ignoreBinaries": [
+      "uv",
+      "wsl.exe"
+    ]
   }
 }

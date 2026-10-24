@@ -9,7 +9,7 @@ import type { SpeechTarget } from './connections';
 const secretSchema = z.object({ value: z.string().min(1) });
 const transcriptSchema = z.object({ text: z.string() });
 
-export function transcriptionSession(model: string) {
+function transcriptionSession(model: string) {
   return {
     type: 'transcription' as const,
     audio: {
@@ -196,7 +196,8 @@ export async function testTarget(target: SpeechTarget, signal: AbortSignal) {
     } catch (error) {
       if (!isApiError(error) || error.code !== 'speech_endpoint_missing') throw error;
       const reachable = await send(`${target.baseUrl}/realtime/calls`, { method: 'POST', body: '' }, 10_000, signal);
-      if (reachable.status >= 500) throw failure(reachable.status);
+      if ([401, 403, 404, 429].includes(reachable.status) || reachable.status >= 500)
+        throw failure(reachable.status);
       return '地址可访问；实时连接将在开始录音时建立';
     }
   }

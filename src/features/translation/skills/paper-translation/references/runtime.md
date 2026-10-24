@@ -1,8 +1,24 @@
 # 翻译运行时
 
-在项目目录执行 `npm run ocr:setup` 和 `npm run translation:setup`。OCR 的独立解释器、依赖、模型、配置和缓存保存在 `.runtime/env/ocr/`；翻译渲染的独立环境位于 `.runtime/env/translation/`，TeX 位于 `.runtime/env/tex/`。安装使用项目锁定依赖，OCR 模型由官方来源下载。无需预装其他项目或全局 PaddleOCR。
+## 按需准备环境
 
-Windows 使用 WSL Ubuntu 的 Linux 执行环境，独立 Python 和依赖仍安装在本项目 `.runtime/env/ocr/`；Linux x64 原生运行。默认 NVIDIA CUDA 12.9 GPU；`npm run ocr:setup -- --device cpu` 可安装 CPU 版本，Windows 可用 `--distro` 指定 WSL 发行版。操作系统、适配的显卡驱动及 Linux 动态库属于运行前提，安装程序不会修改全局 Python。
+仅准备当前路线需要且缺失的环境，先向用户说明并询问，同意后安装；沿用本任务已有的明确安装授权。直接写入和预览 Markdown／HTML，或通过 `translation.modelsCommand` 调用文本模型，无需下面的 Python 环境。
+
+| 用途 | 上下文安装入口 | 项目内资源目录 |
+| --- | --- | --- |
+| 翻译 Python 流水线、模板渲染与 PDF 回填 | `translation.setupCommand` | `.runtime/env/translation/` |
+| PDF 文档识别 | `translation.ocr.setupCommand` | `.runtime/env/ocr/` |
+| TeX 编译与 PDF 行内公式排版 | 见 `document-workbench` 技能 | `.runtime/env/tex/` |
+
+安装入口是完整命令数组，按返回值执行；也可在项目根目录执行 `npm run translation:setup`、`npm run ocr:setup`，按需选择。首次安装需要联网；OCR 会下载模型和运行依赖。安装使用项目锁定依赖，OCR 模型从官方来源下载，不依赖其他项目或全局 PaddleOCR。安装后重新获取 `get_workspace_context`，使用更新的命令完成当前任务，以实际输出确认可用。
+
+翻译安装入口需要 `uv`。若未提供，在用户同意的安装范围内，使用原生命令从官方发布包获取当前平台的 `uv`，放在 `.runtime/env/translation/tools/`，仅在当前进程将该目录加入 PATH，再执行安装入口。独立 Python、依赖、下载、缓存和临时资源都留在 `.runtime/env/translation/`；新增依赖使用该环境的解释器及包管理器，不做全局安装。
+
+OCR 支持 Linux x64 原生运行；Windows 使用 WSL Ubuntu 的 Linux 执行环境，独立 Python 和依赖仍安装在本项目 `.runtime/env/ocr/`。安装入口会准备项目内的 `uv`。默认 GPU 版本要求 NVIDIA 驱动支持 CUDA 12.9；按实际设备选择，CPU 版本向安装数组追加 `--device cpu`，或执行 `npm run ocr:setup -- --device cpu`。Windows 可用 `--distro` 指定已有的 WSL 发行版。缺少 WSL、显卡驱动或 Linux 动态库时，说明所需系统变更并取得相应授权，再用原生方法处理。
+
+OCR 的程序、独立解释器、依赖、模型、配置、下载、缓存和临时资源放在 `.runtime/env/ocr/`；TeX 资源放在 `.runtime/env/tex/`。用户材料、识别结果和译稿留在当前工作区。包管理器使用项目内安装与缓存目录，不修改全局 Python 或 PATH。
+
+## 使用与输出
 
 使用 `get_workspace_context` 返回的 `translation.ocr.command`，展开完整命令数组后追加原生参数：
 

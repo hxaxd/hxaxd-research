@@ -6,7 +6,7 @@ import { requestJson } from '@/shared/http/request-json';
 
 import type { SpeechSettings } from './schema';
 
-export const speechChangedEvent = 'research-speech-changed';
+const speechChangedEvent = 'research-speech-changed';
 
 export function notifySpeechChanged() {
   window.dispatchEvent(new Event(speechChangedEvent));

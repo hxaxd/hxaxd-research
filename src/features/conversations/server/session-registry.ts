@@ -92,6 +92,19 @@ export class PiSessionRegistry {
     }
   }
 
+  private async sessionFor(record: LiveConversation, conversation: Conversation, input: SendMessage, signal: AbortSignal) {
+    const selection = await this.resolveModel(input.model, signal);
+    if (input.clips?.length && !selection.model.input.includes('image'))
+      throw new ApiError(400, 'image_not_supported', '当前模型不支持图片，请切换支持图片的模型');
+    const session = record.session ?? (await createPiSession(
+      this.config, selection, conversation.workspaceId, conversation.id, this.reader,
+    ));
+    record.session = session;
+    await session.setModel(selection.model);
+    signal.throwIfAborted();
+    return session;
+  }
+
   async send(workspaceId: string, id: string, input: SendMessage) {
     const root = this.config.workspaceDir;
     const conversation = getConversation(root, workspaceId, id);
@@ -125,14 +138,7 @@ export class PiSessionRegistry {
     record.execution = (async () => {
       let unsubscribe: (() => void) | undefined;
       try {
-        const selection = await this.resolveModel(input.model, signal);
-        if (input.clips?.length && !selection.model.input.includes('image'))
-          throw new ApiError(400, 'image_not_supported', '当前模型不支持图片，请切换支持图片的模型');
-        const session =
-          record.session ?? (await createPiSession(this.config, selection, workspaceId, id, this.reader));
-        record.session = session;
-        await session.setModel(selection.model);
-        signal.throwIfAborted();
+        const session = await this.sessionFor(record, conversation, input, signal);
         let liveId = '';
         let sequence = 0;
         unsubscribe = session.subscribe((event) => {

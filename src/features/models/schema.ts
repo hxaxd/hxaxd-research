@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { idSchema } from '@/shared/schema';
 
-export const modelSchema = z.object({ id: z.string(), name: z.string(), provider: z.string(), input: z.array(z.enum(['text', 'image'])) });
+const modelSchema = z.object({ id: z.string(), name: z.string(), provider: z.string(), input: z.array(z.enum(['text', 'image'])) });
 export const modelCatalogSchema = z.object({
   models: z.array(modelSchema),
   issues: z.array(z.object({ provider: z.string(), message: z.string() })),

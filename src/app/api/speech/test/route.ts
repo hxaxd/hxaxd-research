@@ -1,12 +1,12 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { speechTestSchema } from '@/features/speech/schema';
+import { speechConnectionRefSchema } from '@/features/speech/schema';
 import { getAppRuntime } from '@/server/runtime';
 
 export const runtime = 'nodejs';
 
 export function POST(request: Request) {
   return handleApiRequest(request, async () => {
-    const { connectionId } = speechTestSchema.parse(await request.json());
+    const { connectionId } = speechConnectionRefSchema.parse(await request.json());
     const message = await getAppRuntime().speech.test(connectionId, request.signal);
     return { ok: true, message };
   });

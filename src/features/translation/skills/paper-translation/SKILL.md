@@ -37,6 +37,10 @@ description: 翻译论文或科研材料；按用户要求选择 TeX、HTML 或 
 
 调用 `get_workspace_context`，读取 `translation.command`、`translation.modelsCommand` 及 `translation.ocr`。命令是完整的程序及参数数组，路径为绝对路径；直接展开整个数组后追加子命令，不从脚本路径重新拼接。`translation.command` 包含独立 Python、脚本、必需的 `--config` 和配置路径。在 PowerShell 使用调用运算符，在 Bash 正确引用参数。下面的 `<translation.command>` 和 `<modelsCommand>` 表示展开整个数组，不是要输入的命令名称。
 
+按所选路线检查需要的环境。`translation.configured` 和 `translation.ocr.configured` 表示对应安装登记，返回命令路径本身不代表已安装。已有可用环境直接复用；环境缺失时先说明需要安装什么及联网下载，询问用户是否同意，收到同意后才执行安装。本任务中已有的明确安装授权可沿用；未获同意时不安装，说明受影响的步骤。安装入口、前提和资源目录见 [运行说明](references/runtime.md)。
+
+当前助手直接写入并预览 Markdown／HTML、或使用 `modelsCommand` 翻译文本，不要求安装 OCR 或翻译 Python 环境。只有调用 Python 流水线时才准备翻译环境，只有识别 PDF 时才准备 OCR；TeX 编译环境按 `document-workbench` 准备。
+
 需要 Python 提取或整理材料时，使用 `translation.command[0]` 的项目独立解释器，标准库可直接使用；不要依赖系统 `python` 别名。新增依赖仍安装在 `.runtime/env/translation/`，不做全局安装。
 
 - `modelsCommand`：通用文本模型调用，TeX、HTML、Markdown 都可直接提交，不要求 OCR 或 `document.json`。
@@ -62,7 +66,7 @@ TeX 按 `document-workbench` 处理工程、编译和展示。HTML 优先将论�
 
 ## PDF OCR 与块翻译
 
-环境未安装时，按实际需要执行 `translation.setupCommand` 或 `translation.ocr.setupCommand`。`translation.ocr.command` 是已配置好模型和缓存的原生 PaddleOCR 命令，追加 `--input` 和 `--save_path` 输出原始结果；Windows 的输入输出参数使用 WSL 的 `/mnt/<盘符>/...` 路径。需要规范化 `document.json`、图片资源和坐标回填时，使用 `translation.command ocr`，由流水线处理路径转换。TeX／HTML 路线无需先安装或加载 OCR。项目安装命令及目录约定见 [运行说明](references/runtime.md)。
+使用已就绪的 OCR 环境时，`translation.ocr.command` 是配置好模型和缓存的原生 PaddleOCR 命令，追加 `--input` 和 `--save_path` 输出原始结果；Windows 的输入输出参数使用 WSL 的 `/mnt/<盘符>/...` 路径。需要规范化 `document.json`、图片资源和坐标回填时，使用 `translation.command ocr`，由流水线处理路径转换。TeX／HTML 路线无需先安装或加载 OCR。
 
 ```text
 <modelsCommand> --list

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect, test } from 'vitest';
 
-import { createTestApp } from '../create-test-app';
+import { createTestApp } from '../app';
 import { startModelServer } from '../model-server';
 
 const execute = promisify(execFile);

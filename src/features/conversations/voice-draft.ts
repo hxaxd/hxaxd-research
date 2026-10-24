@@ -18,7 +18,7 @@ function commonSuffix(previous: string, next: string, prefix: number) {
   return index;
 }
 
-export function adjustPosition(position: number, previous: string, next: string) {
+function adjustPosition(position: number, previous: string, next: string) {
   if (previous === next) return position;
   const prefix = commonPrefix(previous, next);
   const suffix = commonSuffix(previous, next, prefix);
