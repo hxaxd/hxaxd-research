@@ -38,24 +38,20 @@
     <td width="50%" valign="top">
       <h3>随身接入自己的研究环境</h3>
       <p>工作台运行在自己的电脑上，通过浏览器使用。配合 <a href="https://github.com/hxaxd/remote-everything">Remote Everything</a>，从移动设备接入，让文件、依赖和计算任务留在原来的环境里。</p>
-      <p><sub>纯浏览器 · 移动访问 · 私有计算环境</sub></p>
     </td>
     <td width="50%" valign="top">
       <h3>看着材料，直接开口推进</h3>
       <p>页面内语音输入，助手自动获取当前文件与 PDF 页码。选中一句话、框出一张图就能提问，生成的成果直接打开查看，减少切屏和上下文搬运。</p>
-      <p><sub>语音输入 · 选段引用 · 同屏协作</sub></p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <h3>拿起平板，舒适地读下去</h3>
       <p>针对横屏平板适配布局和触屏操作，核心操作不依赖鼠标或硬件键盘。收起侧栏、调整栏宽，连续阅读与讨论，照顾长时间使用。</p>
-      <p><sub>触屏操作 · 连续阅读 · 明暗外观</sub></p>
     </td>
     <td width="50%" valign="top">
       <h3>复用已经在用的 ChatGPT 订阅</h3>
       <p>连接 ChatGPT，使用符合条件的订阅额度推进科研。也支持其他模型供应商与兼容 API，语音服务可独立配置。</p>
-      <p><sub>订阅复用 · 多模型选择 · 可配置语音</sub></p>
     </td>
   </tr>
 </table>
@@ -129,7 +125,6 @@ npm start -- --hostname 127.0.0.1 --port 8642
 <summary><b>资料保存、模型调用与运行权限</b></summary>
 
 - **本地保存**：材料、对话与模型凭据默认保存在 `.runtime/data/`，可在 `.runtime/config.jsonc` 中修改 `dataDir`。备份时保留整个数据目录。
-- **高级配置**：安装时从 Git 中的[默认配置模板](config.default.jsonc)自动创建 `.runtime/config.jsonc`，已有配置不会覆盖。技能、提示词和 HTML 模板由 Git 源文件安装至 `.runtime/templates/`，重装会更新这些模板；长期修改请编辑对应源文件。在运行配置中调整数据、环境、暂存目录，以及文件大小限制、请求超时、重试和 OCR 设备；修改后重启。执行 `node src/app/config.mjs --defaults` 查看完整默认配置，执行 `node src/app/config.mjs` 查看实际路径。相对路径以项目根目录为准，仅需指定其他配置文件时使用 `APP_CONFIG_FILE`。改目录不搬迁已有资料或环境。
 - **模型调用**：使用云端服务时，相关上下文会发送给你选择的供应商。
 - **个人使用**：平台无需注册账号，默认仅监听本机。Agent 可访问运行账号有权操作的文件和程序。
 

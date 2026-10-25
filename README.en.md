@@ -38,24 +38,20 @@ Read, ask questions, and make decisions on your mobile device. AI handles files 
     <td width="50%" valign="top">
       <h3>Take your research environment with you</h3>
       <p>Run the workbench on your own computer and use it through a browser. Connect from mobile devices with <a href="https://github.com/hxaxd/remote-everything">Remote Everything</a>, keeping your files, dependencies, and computation in the same environment.</p>
-      <p><sub>Browser access · Mobile access · Private computing environment</sub></p>
     </td>
     <td width="50%" valign="top">
       <h3>Keep reading. Speak your next step.</h3>
       <p>Use voice input directly on the page. The assistant knows your current file and PDF page. Select a passage or a region of an image to ask about it, and open generated results directly, with less app switching and context copying.</p>
-      <p><sub>Voice input · Passage references · One workspace</sub></p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <h3>Settle into reading on your tablet</h3>
       <p>The layout and touch controls are designed for landscape tablets. Core actions work without a mouse or physical keyboard. Collapse sidebars, resize panes, and move between reading and discussion comfortably during long sessions.</p>
-      <p><sub>Touch controls · Continuous reading · Light and dark themes</sub></p>
     </td>
     <td width="50%" valign="top">
       <h3>Use the ChatGPT subscription you already have</h3>
       <p>Connect ChatGPT and use eligible subscription allowances for your research. Other model providers and compatible APIs are supported, with separate configuration for speech services.</p>
-      <p><sub>Subscription access · Model choice · Configurable speech</sub></p>
     </td>
   </tr>
 </table>
@@ -129,7 +125,6 @@ The default listening address is `127.0.0.1`, on port `8642`. Open **<http://127
 <summary><b>Storage, model calls, and execution permissions</b></summary>
 
 - **Local storage:** Materials, conversations, and model credentials are saved in `.runtime/data/` by default. Change `dataDir` in `.runtime/config.jsonc` to use another location. Back up the entire data directory.
-- **Advanced configuration**: installation creates `.runtime/config.jsonc` from the [version-controlled default template](config.default.jsonc) without overwriting an existing file. Skills, prompts, and HTML templates are installed from Git sources into `.runtime/templates/` and refreshed on reinstall; edit their source files for lasting changes. Edit the runtime configuration to override storage/environment/temp directories, file limits, timeouts, retries and OCR device, then restart. Run `node src/app/config.mjs --defaults` for all defaults, or `node src/app/config.mjs` for resolved paths. Relative paths use the project root; Use `APP_CONFIG_FILE` only to select another configuration file. Changing paths does not move existing data or environments.
 - **Model calls:** When using a cloud service, relevant context is sent to the provider you choose.
 - **Personal use:** No platform account is required. The workbench listens on the loopback interface by default. The agent can access files and programs permitted by the account running it.
 
