@@ -1,0 +1,150 @@
+// Pi 1.0.0 的 models.json 全部配置入口，位于 <实际 dataDir>/pi/models.json。
+// providers 中的键是供应商 ID，可自由添加多个；原生供应商 ID 可用于覆盖其配置。
+// 已登录 ChatGPT 的凭据由 SDK 管理，不把授权令牌复制到本文件。
+// 下方仅启用一个最小占位连接；高级字段以注释列出，按真实服务需要启用。
+// 所有布尔选项均可取 true / false；可选字段省略时沿用 Pi 或模型目录的行为。
+// 本文件说明原生配置，不增加模型识别表；能力、价格和兼容开关须依据真实服务填写。
+{
+  "providers": {
+    "example": {
+      // 可选非空显示名称。
+      "name": "自定义模型服务",
+      // 可选非空接口根地址；新建自定义模型需要可解析的 baseUrl。
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      // 非空协议 ID。界面支持的全部取值：openai-completions、openai-responses、
+      // anthropic-messages、google-generative-ai。原生文件也可使用当前 Pi 支持的其他协议 ID。
+      "api": "openai-completions",
+      // 可选非空字符串：字面密钥、$ENV_NAME、${ENV_NAME}，或 !command。
+      // 无认证本地服务使用占位值 local；命令在请求时执行，命令语法随部署系统而定。
+      "apiKey": "local",
+      // 可选；唯一允许的字符串是 radius，仅用于 Pi 对应的 Radius OAuth 连接。
+      // 不是 ChatGPT 登录配置。
+      // "oauth": "radius",
+      // 可选字符串字典；请求头值与 apiKey 支持相同的环境变量和命令表达方式。
+      // "headers": { "X-Custom-Header": "value" },
+      // 可选布尔值；是否为兼容接口附加认证头，由具体协议处理。
+      // "authHeader": true,
+      // 可选协议兼容配置；全部字段见下方模型级 compat，供应商级使用相同结构。
+      // "compat": {},
+      // 可选字典：键是现有模型 ID；不存在的 ID 不会凭空创建模型。
+      // 值可包含：name、reasoning、thinkingLevelMap、input、inputLimits、cost、
+      // promptCache、contextWindow、maxTokens、samplingParams、headers、compat。
+      // 各字段含义与 models 项相同；这里的 cost 允许只覆盖部分费率字段。
+      // "modelOverrides": { "existing-model-id": { "contextWindow": 128000 } },
+      "models": [
+        {
+          // 必填非空字符串；数组内每项添加或替换一个模型。
+          "id": "your-model-id"
+          // 可选非空显示名称，默认使用 id。
+          // , "name": "模型名称"
+          // 可选协议和地址；覆盖供应商级同名字段。
+          // , "api": "openai-completions"
+          // , "baseUrl": "http://127.0.0.1:8000/v1"
+          // 可选正数，单位 token；自定义模型省略时 Pi 分别使用 128000、16384。
+          // , "contextWindow": 128000
+          // , "maxTokens": 16384
+          // 可选布尔值；声明推理能力，未声明的自定义模型默认 false。
+          // , "reasoning": true
+          // 可选数组；元素全部取值为 text、image；自定义模型默认 ["text"]。
+          // , "input": ["text", "image"]
+          // 可选字典；所有等级键为 off、minimal、low、medium、high、xhigh、max。
+          // 值是服务商对应的字符串；null 表示不支持该等级。xhigh/max 需显式映射才展示。
+          // , "thinkingLevelMap": { "off": "none", "minimal": null, "low": "low", "medium": "medium", "high": "high", "xhigh": null, "max": null }
+          // 可选输入限制；正整数。部分硬限制是元数据，Pi 尚不据此改写或拒绝历史。
+          // , "inputLimits": {
+          //   "maxRequestBytes": 16777216,
+          //   "images": {
+          //     "maxPerMessage": 10,
+          //     "maxPerRequest": 20,
+          //     "resize": {
+          //       "maxWidth": 2000,    // 新图片编码宽度上限，像素；默认 2000。
+          //       "maxHeight": 2000,   // 高度上限，像素；默认 2000。
+          //       "maxBytes": 4718592, // 编码后字节上限；默认 4.5 MiB。
+          //       "jpegQuality": 80    // 整数 1..100；默认 80。
+          //     }
+          //   }
+          // }
+          // 可选价格元数据；数字表示每百万 token 的美元价格，不限制费用。
+          // 新定义 cost 时 input、output、cacheRead、cacheWrite 四项需一起提供。
+          // , "cost": {
+          //   "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
+          //   "tiers": [{ "inputTokensAbove": 200000, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }]
+          // }
+          // 可选缓存寿命元数据；short/long 为大于 0 的秒数，不会改变服务商真实缓存策略。
+          // , "promptCache": { "short": 300, "long": 3600 }
+          // 可选任意键值字典；填写当前协议支持的采样参数，不作自动能力推断。
+          // , "samplingParams": { "temperature": 0.7 }
+          // 可选模型专用请求头，值的表达方式与供应商 headers 相同。
+          // , "headers": { "X-Model-Header": "value" }
+          // 可选兼容项。仅配置已确认的接口差异；下列是可选值示例，不是建议全部启用。
+          // , "compat": {
+          //   // OpenAI Completions 兼容项，均为可选布尔值：
+          //   "supportsStore": false,
+          //   "supportsDeveloperRole": true,
+          //   "supportsReasoningEffort": true,
+          //   "supportsUsageInStreaming": true,
+          //   "supportsFinishReason": true,
+          //   "requiresToolResultName": false,
+          //   "requiresAssistantAfterToolResult": false,
+          //   "requiresThinkingAsText": false,
+          //   "requiresReasoningContentOnAssistantMessages": false,
+          //   "supportsOpenAIGrammarTools": false,
+          //   "supportsStrictMode": true,
+          //   "sendSessionAffinityHeaders": false,
+          //   "supportsLongCacheRetention": false,
+          //   // 全部取值：max_completion_tokens、max_tokens。
+          //   "maxTokensField": "max_completion_tokens",
+          //   // 全部取值：openai、openrouter、together、baseten、deepseek、zai、qwen、
+          //   // chat-template、qwen-chat-template、string-thinking、ant-ling。
+          //   "thinkingFormat": "openai",
+          //   // 以下两个均为字典，键由服务商决定；值可为字符串、数字、布尔值、null，
+          //   // 或 { "$var": "thinking.enabled" / "thinking.effort", "omitWhenOff": true/false }。
+          //   "chatTemplateKwargs": { "enable_thinking": { "$var": "thinking.enabled", "omitWhenOff": false } },
+          //   "chatTemplateArgs": { "thinking": true },
+          //   // 唯一字符串选项：anthropic。
+          //   "cacheControlFormat": "anthropic",
+          //   // 全部取值：openai、openai-nosession、openrouter。
+          //   "sessionAffinityFormat": "openai",
+          //   // 可选数字，vLLM 调度优先级，取值意义由服务商决定。
+          //   "vllmPriority": 0,
+          //   // OpenAI Responses 另支持此可选布尔项；其余支持项为
+          //   // supportsDeveloperRole、sessionAffinityFormat、supportsLongCacheRetention、
+          //   // supportsStrictMode、supportsOpenAIGrammarTools。
+          //   "supportsMaxOutputTokens": true,
+          //   // Anthropic Messages 的可选布尔项：
+          //   "supportsEagerToolInputStreaming": false,
+          //   "supportsCacheControlOnTools": true,
+          //   "supportsTemperature": true,
+          //   "forceAdaptiveThinking": false,
+          //   "allowEmptySignature": false,
+          //   "supportsStrictTools": true,
+          //   "supportsMidConvoEffort": false,
+          //   // Anthropic 还支持 supportsLongCacheRetention、sendSessionAffinityHeaders。
+          //   // 可选后备数组，最多 3 项；provider/model 为非空字符串，cost 四项必填。
+          //   "allowedFallbackModels": [{ "provider": "provider-id", "model": "model-id", "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 } }],
+          //   // OpenRouter 的可选路由对象；各选项只影响对应网关。
+          //   "openRouterRouting": {
+          //     "allow_fallbacks": true,           // 布尔值，允许后备供应商。
+          //     "require_parameters": false,      // 布尔值，要求支持请求参数。
+          //     "data_collection": "deny",        // 全部取值：deny、allow。
+          //     "zdr": false,                     // 布尔值，零数据保留路由。
+          //     "enforce_distillable_text": false, // 布尔值。
+          //     "order": ["provider-name"],        // 字符串数组，优先顺序。
+          //     "only": ["provider-name"],         // 字符串数组，仅允许这些供应商。
+          //     "ignore": ["provider-name"],       // 字符串数组，排除这些供应商。
+          //     "quantizations": ["quantization"], // 字符串数组，服务支持的量化类型。
+          //     "sort": "price",                  // 字符串，或 {"by":"price","partition":null}；partition 为字符串/null。
+          //     "max_price": {                    // 每项可为数字或字符串；计价规则由网关决定。
+          //       "prompt": 1, "completion": 1, "image": 1, "audio": 1, "request": 1
+          //     },
+          //     "preferred_min_throughput": 20,   // 数字，或 {"p50":20,"p75":20,"p90":20,"p99":20}。
+          //     "preferred_max_latency": 10       // 数字，或 {"p50":10,"p75":10,"p90":10,"p99":10}。
+          //   },
+          //   // Vercel 网关的可选路由对象；两项均为供应商字符串数组。
+          //   "vercelGatewayRouting": { "only": ["provider-name"], "order": ["provider-name"] }
+          // }
+        }
+      ]
+    }
+  }
+}

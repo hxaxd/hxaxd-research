@@ -4,6 +4,11 @@ import type { AddressInfo } from 'node:net';
 
 export async function startModelServer() {
   const server = createServer(async (request, response) => {
+    if (request.method === 'GET' && request.url === '/v1/models') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ data: [{ id: 'test-model' }, { id: 'text-only' }, { id: 'gpt-6-luna' }] }));
+      return;
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const { messages } = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
@@ -35,6 +40,9 @@ export async function startModelServer() {
       frame({ content: JSON.stringify({ blocks: payload.blocks.map(block => ({
         id: block.id, text: block.preserve ? block.text : `译文：${block.text}`,
       })) }) }, 'stop');
+    } else if (prompt.includes('[REASONING]')) {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      frame({ content: JSON.stringify({ reasoning: body.reasoning_effort }) }, 'stop');
     } else if (prompt.includes('[READING]')) {
       const context = messages.filter(message => message.role === 'user').map(message => text(message.content))
         .findLast(content => content.startsWith('<research-workbench-materials>'))!;

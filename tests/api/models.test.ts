@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,10 +15,18 @@ import { DELETE as disconnect } from '@/app/api/model-providers/openai/route';
 import { POST as realtime } from '@/app/api/speech/realtime/route';
 import { POST as testSpeech } from '@/app/api/speech/test/route';
 import { POST as transcribe } from '@/app/api/speech/transcriptions/route';
+import { POST as createConnection } from '@/app/api/model-providers/connections/route';
+import { PATCH as updateConnection, DELETE as removeConnection } from '@/app/api/model-providers/connections/[id]/route';
+import { POST as discover } from '@/app/api/model-providers/discover/route';
+import { POST as createSpeech } from '@/app/api/speech/connections/route';
+import { POST as createConversation } from '@/app/api/workspaces/[workspaceId]/conversations/route';
+import { POST as send } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/messages/route';
+import { GET as conversation } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/route';
 
 import { startModelServer } from '../model-server';
-import { createTestApp, request, restartApp } from '../app';
+import { createTestApp, request, restartApp, workspaceContext } from '../app';
 
+const execute = promisify(execFile);
 const networkFetch = globalThis.fetch;
 const signing = await generateKeyPair('RS256');
 const publicKey = { ...(await exportJWK(signing.publicKey)), kid: 'test-key' };
@@ -74,6 +84,18 @@ test.each(['browser', 'manual'])('ChatGPT %s callback connects, survives reload 
   const models = await (await catalog(request('/models'))).json();
   expect(models.models).toContainEqual(expect.objectContaining({ id: 'openai/gpt-6-luna', name: '账号可用模型' }));
   expect(models.models).not.toContainEqual(expect.objectContaining({ id: 'openai/not-in-sdk' }));
+  if (method === 'manual') {
+    const upstream = `globalThis.fetch = async input => {
+      if (String(input) !== 'https://api.openai.com/v1/models') throw new Error('Unexpected external request');
+      return Response.json({ models: [{ slug: 'gpt-6-luna', display_name: '账号可用模型', visibility: 'list' }] });
+    };`;
+    const args = ['--import', 'data:text/javascript,' + encodeURIComponent(upstream),
+      path.resolve('src/features/models/invoke.mjs'), '--pi-dir', app.config.piDir, '--list'];
+    const native = JSON.parse((await execute(process.execPath, args)).stdout);
+    expect(native.models).toEqual([expect.objectContaining({ id: 'openai/gpt-6-luna', name: '账号可用模型' })]);
+    expect(JSON.stringify(native)).not.toContain('private-');
+    await expect(execute(process.execPath, [...args, '--model', 'openai/gpt-4.1'])).rejects.toThrow('模型不可用');
+  }
   restartApp();
   expect((await state()).providers).toContainEqual(expect.objectContaining({ id: 'openai', subscription: true, connected: true }));
   await disconnect(request('/openai', 'DELETE'));
@@ -190,5 +212,126 @@ test('malformed model configuration is reported through the catalog without repl
   const result = await (await catalog(request('/models'))).json();
   expect(result.models).toEqual([]);
   expect(result.issues).toContainEqual({ provider: 'configuration', message: expect.any(String) });
+  expect((await settings(request('/model-providers'))).status).toBe(422);
   expect(await readFile(config, 'utf8')).toBe('{invalid');
+});
+
+test('an API-configured text service inherits known model capabilities and can answer after reload', async () => {
+  const server = await startModelServer();
+  try {
+    const input = { name: '文字服务', api: 'openai-completions', baseUrl: server.config.providers.test.baseUrl,
+      key: 'private-service-key', models: [{ id: 'gpt-6-luna' }] };
+    const created = await createConnection(request('/connections', 'POST', input));
+    expect(created.status).toBe(200);
+    const result = await created.json();
+    expect(JSON.stringify(result)).not.toContain('private-service-key');
+    const saved = result.connections.find((item: { name: string }) => item.name === input.name);
+    expect(saved.models[0]).toMatchObject({ id: 'gpt-6-luna', recognized: true, contextWindow: expect.any(Number), maxTokens: expect.any(Number) });
+    expect(saved.models[0].contextWindow).toBeGreaterThan(0);
+    restartApp();
+    const model = `${saved.id}/gpt-6-luna`;
+    expect((await (await catalog(request('/models'))).json()).models).toContainEqual(expect.objectContaining({ id: model, thinkingLevels: expect.arrayContaining(['high']) }));
+    const id = randomUUID();
+    await createConversation(request('/conversations', 'POST', { id, name: '讨论' }), workspaceContext(app.workspace.id));
+    const context = { params: Promise.resolve({ workspaceId: app.workspace.id, conversationId: id }) };
+    expect((await send(request('/messages', 'POST', { id: randomUUID(), text: '[REASONING]', model, thinkingLevel: 'high' }), context)).status).toBe(202);
+    await expect.poll(async () => (await (await conversation(request('/conversation'), context)).json()).run?.status).toBe('completed');
+    expect(JSON.parse((await (await conversation(request('/conversation'), context)).json()).messages.at(-1).text)).toEqual({ reasoning: 'high' });
+  } finally { await server.close(); }
+});
+
+test('model information can be corrected and reset without losing connection credentials', async () => {
+  const input = { api: 'openai-completions', baseUrl: 'http://localhost:9000/v1', key: 'retained-secret',
+    models: [{ id: 'gpt-6-luna' }, { id: 'unknown-model' }] };
+  const created = (await (await createConnection(request('/connections', 'POST', input))).json()).connections[0];
+  const automatic = created.models[0];
+  expect(created.models[1]).toMatchObject({ recognized: false, customized: false });
+  expect(created.models[1]).not.toHaveProperty('contextWindow');
+  expect(created.models[1]).not.toHaveProperty('vision');
+  const context = { params: Promise.resolve({ id: created.id }) };
+  const corrected = await updateConnection(request('/connections', 'PATCH', { ...input, key: '', models: [
+    { id: 'gpt-6-luna', contextWindow: 8000, maxTokens: 1000, vision: false, reasoning: false },
+    { id: 'unknown-model', contextWindow: 9000, maxTokens: 2000, vision: true },
+  ] }), context);
+  expect(corrected.status).toBe(200);
+  expect((await corrected.json()).connections[0].models).toContainEqual(expect.objectContaining({ id: 'gpt-6-luna', contextWindow: 8000, vision: false, customized: true }));
+  restartApp();
+  const reset = await updateConnection(request('/connections', 'PATCH', { ...input, key: '',
+    models: input.models.map(model => ({ ...model, reset: true })),
+  }), context);
+  expect(reset.status).toBe(200);
+  const restored = (await reset.json()).connections[0].models;
+  expect(restored[0]).toMatchObject({ contextWindow: automatic.contextWindow, maxTokens: automatic.maxTokens, vision: automatic.vision, reasoning: automatic.reasoning, customized: false });
+  expect(restored[1]).not.toHaveProperty('contextWindow');
+  expect(restored[1]).not.toHaveProperty('vision');
+  const stored = JSON.parse(await readFile(path.join(app.config.piDir, 'models.json'), 'utf8'));
+  expect(stored.providers[created.id].apiKey).toBe('retained-secret');
+});
+
+test('editing a service retains credentials and unrelated native settings; deleting it removes only that service', async () => {
+  const file = path.join(app.config.piDir, 'models.json');
+  const unrelated = { api: 'openai-completions', baseUrl: 'http://localhost:8000/v1', apiKey: 'other-key',
+    models: [{ id: 'other-model', contextWindow: 9000, maxTokens: 1000, compat: { supportsStore: false } }] };
+  await writeFile(file, '// User configuration\n' + JSON.stringify({ providers: { other: unrelated } }));
+  const input = { name: '自定义', api: 'openai-completions', baseUrl: 'http://localhost:9000/v1',
+    key: 'keep-this-key', models: [{ id: 'new-model', contextWindow: 12000, maxTokens: 2000, vision: true }] };
+  const response = await createConnection(request('/connections', 'POST', input));
+  expect(response.status).toBe(200);
+  const created = (await response.json()).connections.find((item: { name: string }) => item.name === input.name);
+  const context = { params: Promise.resolve({ id: created.id }) };
+  const updated = await updateConnection(request('/connections', 'PATCH', { ...input, key: '', name: '改名' }), context);
+  expect(updated.status).toBe(200);
+  expect(JSON.stringify(await updated.json())).not.toContain('keep-this-key');
+  let stored = JSON.parse(await readFile(file, 'utf8'));
+  expect(stored.providers[created.id].apiKey).toBe('keep-this-key');
+  expect(stored.providers.other).toEqual(unrelated);
+  expect((await removeConnection(request('/connections', 'DELETE'), context)).status).toBe(200);
+  stored = JSON.parse(await readFile(file, 'utf8'));
+  expect(stored.providers).toEqual({ other: unrelated });
+  expect((await removeConnection(request('/connections', 'DELETE'), context)).status).toBe(404);
+  expect((await updateConnection(request('/connections', 'PATCH', input), context)).status).toBe(404);
+});
+
+test('model discovery reads IDs and distinguishes catalog capabilities from unknown models', async () => {
+  const server = await startModelServer();
+  try {
+    const response = await discover(request('/discover', 'POST', { api: 'openai-completions', baseUrl: server.config.providers.test.baseUrl }));
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.models).toContainEqual(expect.objectContaining({ id: 'gpt-6-luna', recognized: true, contextWindow: expect.any(Number) }));
+    expect(result.models).toContainEqual(expect.objectContaining({ id: 'test-model', name: 'test-model', recognized: false }));
+  } finally { await server.close(); }
+});
+
+test('model discovery reuses saved text and speech credentials without returning them', async () => {
+  const text = await createConnection(request('/connections', 'POST', { api: 'openai-completions', baseUrl: 'https://text.example/v1',
+    key: 'text-secret', models: [{ id: 'custom-model' }] }));
+  const connectionId = (await text.json()).connections[0].id;
+  const speech = await createSpeech(request('/speech/connections', 'POST', { name: '语音', protocol: 'file',
+    baseUrl: 'https://speech.example/v1', model: 'transcriber', key: 'speech-secret' }));
+  const speechConnectionId = (await speech.json()).activeId;
+  vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
+    expect(new Headers(init.headers).get('Authorization')).toBe(input.includes('text.example') ? 'Bearer text-secret' : 'Bearer speech-secret');
+    return Response.json({ data: [{ id: 'custom-model' }] });
+  });
+  for (const value of [{ connectionId, baseUrl: 'https://text.example/v1' }, { speechConnectionId, baseUrl: 'https://speech.example/v1' }]) {
+    const response = await discover(request('/discover', 'POST', { ...value, api: 'openai-completions' }));
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(await response.json())).not.toContain('-secret');
+  }
+});
+
+test('invalid connection inputs and failed upstream discovery do not overwrite model configuration', async () => {
+  const file = path.join(app.config.piDir, 'models.json');
+  const original = '{ "providers": {} }';
+  await writeFile(file, original);
+  expect((await createConnection(request('/connections', 'POST', { baseUrl: 'file:///tmp', api: 'openai-completions', models: [] }))).status).toBe(400);
+  const input = { api: 'openai-completions', baseUrl: 'https://service.example/v1', key: 'private-key' };
+  for (const result of [new Response('private-key', { status: 401 }), Response.json({ wrong: [] })]) {
+    vi.stubGlobal('fetch', async () => result);
+    const response = await discover(request('/discover', 'POST', input));
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(await response.json())).not.toContain('private-key');
+  }
+  expect(await readFile(file, 'utf8')).toBe(original);
 });

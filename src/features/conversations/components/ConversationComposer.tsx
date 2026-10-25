@@ -14,10 +14,12 @@ import type { ImageClip, ReadingContext, TextQuote } from '@/features/files/sche
 import {
   activeSpeech,
   speechUnavailable,
-} from '@/features/speech/active';
-import { useSpeechSettings } from '@/features/speech/use-speech-settings';
+} from '@/features/models/active-speech';
+import { useSpeechSettings } from '@/features/models/use-speech-settings';
 import { openSettings } from '@/features/settings/components/open-settings';
 import { requestJson } from '@/shared/http/request-json';
+
+import type { ThinkingLevel } from '@/features/models/schema';
 
 import type { ConversationRun } from '../schema';
 import { ImageAttachment } from './ImageAttachment';
@@ -31,6 +33,7 @@ function clock(seconds: number) {
 export function ConversationComposer({
   url,
   model,
+  thinkingLevel,
   run,
   reading,
   connected,
@@ -42,6 +45,7 @@ export function ConversationComposer({
 }: {
   url: string;
   model: string;
+  thinkingLevel?: ThinkingLevel;
   run: ConversationRun | null;
   reading: ReadingContext | null;
   connected: boolean;
@@ -117,7 +121,7 @@ export function ConversationComposer({
     if (running || submitting || !canSend) return;
     const sentClips = clips;
     const sentQuotes = quotes;
-    const content = JSON.stringify({ text: text.trim() || (quotes.length ? '请解释引用的选段。' : '请解释所附的截图。'), model, reading, clips, quotes });
+    const content = JSON.stringify({ text: text.trim() || (quotes.length ? '请解释引用的选段。' : '请解释所附的截图。'), model, thinkingLevel, reading, clips, quotes });
     if (!submission.current || submission.current.content !== content)
       submission.current = { id: crypto.randomUUID(), content };
     setSubmitting(true);

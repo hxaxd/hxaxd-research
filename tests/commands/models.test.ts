@@ -18,6 +18,9 @@ test('native model command uses registered providers without exposing credential
     const catalog = JSON.parse((await execute(process.execPath, [...command, '--list'])).stdout);
     expect(catalog.models.some((model: { id: string }) => model.id === 'test/test-model')).toBe(true);
     expect(JSON.stringify(catalog)).not.toContain('test-only-key');
+    const selected = JSON.parse((await execute(process.execPath, [...command, '--list', '--model', 'test/test-model'])).stdout);
+    expect(selected.models).toEqual([expect.objectContaining({ id: 'test/test-model', thinkingLevels: ['off'] })]);
+    await expect(execute(process.execPath, [...command, '--list', '--model', 'test/missing'])).rejects.toThrow('模型不可用');
     const input = path.join(app.config.dataDir, 'request.json');
     const output = path.join(app.config.dataDir, 'response.json');
     await writeFile(input, JSON.stringify({ system: 'Translate all blocks into Chinese.', prompt: JSON.stringify({

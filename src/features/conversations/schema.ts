@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { maxImageClips, imageClipSchema, readingContextSchema, textQuotesSchema } from '@/features/files/schema';
+import { thinkingLevelSchema } from '@/features/models/schema';
 import { createNamedSchema, idSchema } from '@/shared/schema';
 
 export const createConversationSchema = createNamedSchema;
@@ -13,6 +14,7 @@ export const sendMessageSchema = z.object({
   id: idSchema,
   text: z.string().trim().min(1).max(100000),
   model: z.string().min(1),
+  thinkingLevel: thinkingLevelSchema.optional(),
   reading: readingContextSchema.nullable().default(null),
   clips: z.array(imageClipSchema).max(maxImageClips).optional(),
   quotes: textQuotesSchema.optional(),

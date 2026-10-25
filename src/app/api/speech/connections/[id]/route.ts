@@ -1,5 +1,5 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { speechConnectionInputSchema } from '@/features/speech/schema';
+import { speechConnectionInputSchema } from '@/features/models/schema';
 import { getAppRuntime } from '@/server/runtime';
 
 export const runtime = 'nodejs';
@@ -11,7 +11,7 @@ export function PATCH(
   return handleApiRequest(request, async () => {
     const { id } = await validatedIds(context);
     const input = speechConnectionInputSchema.parse(await request.json());
-    return getAppRuntime().speech.update(id, input);
+    return getAppRuntime().models.updateSpeech(id, input);
   });
 }
 
@@ -21,6 +21,6 @@ export function DELETE(
 ) {
   return handleApiRequest(request, async () => {
     const { id } = await validatedIds(context);
-    return getAppRuntime().speech.remove(id);
+    return getAppRuntime().models.removeSpeech(id);
   });
 }

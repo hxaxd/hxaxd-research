@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 import type { AppConfig } from "@/server/config";
@@ -12,6 +12,10 @@ import { ApiError } from "@/shared/http/api-error";
 
 import type { Authorization, ModelCatalog, ProviderSettings } from "../schema";
 import { chatgptLogin } from "./chatgpt-login";
+import { createModelRuntime, modelCatalog, resolveModel, ModelAccessError, thinkingLevels } from '../runtime.mjs';
+import { SpeechConnections } from './speech-connections';
+import type { SpeechConnectionInput, SpeechSettings } from '../schema';
+import { listModelConnections } from './connections';
 
 type Login = {
   snapshot: Authorization;
@@ -20,27 +24,33 @@ type Login = {
   submit?: (url: string) => void;
 };
 
-const catalogSchema = z.object({
-  models: z.array(
-    z.object({
-      slug: z.string(),
-      display_name: z.string(),
-      visibility: z.string(),
-    }),
-  ),
-});
-
 export class ModelProviders {
   private runtime?: Promise<ModelRuntime>;
   private login?: Login;
 
-  constructor(private readonly config: AppConfig) {}
+  private readonly speech: SpeechConnections;
+
+  constructor(private readonly config: AppConfig) { this.speech = new SpeechConnections(config); }
+
+  async speechSettings(): Promise<SpeechSettings> {
+    const stored = this.speech.readSettings();
+    return { activeId: stored.activeId, connections: stored.connections,
+      chatgpt: { connected: await this.speechAuthorization(), model: stored.chatgptModel } };
+  }
+
+  async speechTarget(connectionId: string, signal?: AbortSignal) {
+    const target = this.speech.resolve(connectionId);
+    return target.kind === 'chatgpt' ? { ...target, token: await this.speechAccessToken(signal) } : target;
+  }
+
+  async selectSpeech(id: string | null) { this.speech.select(id); return this.speechSettings(); }
+  async createSpeech(input: SpeechConnectionInput) { this.speech.create(input); return this.speechSettings(); }
+  async updateSpeech(id: string, input: SpeechConnectionInput) { this.speech.update(id, input); return this.speechSettings(); }
+  async removeSpeech(id: string) { this.speech.remove(id); return this.speechSettings(); }
+  async setChatgptModel(model: string) { this.speech.setChatgptModel(model); return this.speechSettings(); }
 
   getRuntime() {
-    this.runtime ??= ModelRuntime.create({
-      authPath: path.join(this.config.piDir, "auth.json"),
-      modelsPath: path.join(this.config.piDir, "models.json"),
-    }).then((runtime) => {
+    this.runtime ??= createModelRuntime(this.config.piDir).then((runtime) => {
       const openai = runtime.getProvider("openai")!;
       const oauth = openai.auth.oauth!;
       runtime.registerNativeProvider({
@@ -50,12 +60,6 @@ export class ModelProviders {
           oauth: {
             ...oauth,
             login: chatgptLogin(path.join(this.config.piDir, "auth.json")),
-            async refresh(credential, signal) {
-              return {
-                ...credential,
-                ...(await oauth.refresh(credential, signal)),
-              };
-            },
           },
         },
       });
@@ -64,84 +68,21 @@ export class ModelProviders {
     return this.runtime;
   }
 
-  async available(provider: string, signal?: AbortSignal) {
+  async resolve(id: string, signal?: AbortSignal) {
     const runtime = await this.getRuntime();
-    let models = [...(await runtime.getAvailable(provider, { signal }))];
-    if (provider === "openai" && runtime.isUsingSubscription(provider)) {
-      const auth = await runtime.getAuth("openai", { signal });
-      const response = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${auth!.auth.apiKey}` },
-        signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
-          : AbortSignal.timeout(15000),
-      });
-      if (!response.ok)
-        throw new ApiError(
-          502,
-          "model_catalog_failed",
-          `ChatGPT 模型列表获取失败（${response.status}），请重新连接后重试`,
-        );
-      const catalog = catalogSchema.safeParse(await response.json());
-      if (!catalog.success)
-        throw new ApiError(
-          502,
-          "model_catalog_invalid",
-          "ChatGPT 返回的模型列表格式无效",
-        );
-      const known = new Map(models.map((model) => [model.id, model]));
-      const chatgpt = catalog.data.models.filter(
-        (model) => model.visibility === "list" && known.has(model.slug),
-      );
-      models = chatgpt.map((model) => ({
-        ...known.get(model.slug)!,
-        name: model.display_name,
-      }));
+    try { return { runtime, model: await resolveModel(runtime, id, signal, 15000) }; }
+    catch (error) {
+      if (error instanceof ModelAccessError) throw new ApiError(error.status, error.code, error.message);
+      throw error;
     }
-    return { runtime, models };
   }
 
   async list(): Promise<ModelCatalog> {
-    const runtime = await this.getRuntime();
-    const configurationError = runtime.getError();
-    const results = await Promise.all(
-      runtime
-        .getProviders()
-        .filter((provider) => runtime.hasConfiguredAuth(provider.id))
-        .map(async (provider): Promise<ModelCatalog> => {
-          try {
-            const { models } = await this.available(provider.id);
-            return {
-              models: models.map((model) => ({
-                id: `${model.provider}/${model.id}`,
-                name: model.name,
-                provider: model.provider,
-                input: model.input,
-              })),
-              issues: [],
-            };
-          } catch (error) {
-            return {
-              models: [],
-              issues: [
-                {
-                  provider: provider.id,
-                  message:
-                    error instanceof Error ? error.message : "模型列表获取失败",
-                },
-              ],
-            };
-          }
-        }),
-    );
-    return {
-      models: results.flatMap((result) => result.models),
-      issues: [
-        ...(configurationError
-          ? [{ provider: "configuration", message: configurationError }]
-          : []),
-        ...results.flatMap((result) => result.issues),
-      ],
-    };
+    const catalog = await modelCatalog(await this.getRuntime(), undefined, 15000);
+    return { ...catalog, models: catalog.models.map(model => ({
+      id: `${model.provider}/${model.id}`, name: model.name, provider: model.provider,
+      input: model.input, thinkingLevels: thinkingLevels(model) as ModelCatalog['models'][number]['thinkingLevels'],
+    })) };
   }
 
   async speechAuthorization() {
@@ -171,6 +112,7 @@ export class ModelProviders {
     const runtime = await this.getRuntime();
     const credentials = await runtime.listCredentials();
     return {
+      connections: listModelConnections(this.config, runtime),
       providers: runtime
         .getProviders()
         .filter(

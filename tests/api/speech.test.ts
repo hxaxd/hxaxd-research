@@ -32,6 +32,22 @@ function audio(connectionId: string) {
   return new Request('http://localhost/transcriptions', { method: 'POST', body: form });
 }
 
+test('the annotated speech configuration loads through the API without exposing its key', async () => {
+  const sample = await readFile(path.resolve('src/features/settings/skills/workbench-guide/references/speech.example.jsonc'), 'utf8');
+  const file = path.join(app.config.dataDir, 'speech.json');
+  await writeFile(file, '\uFEFF' + sample);
+  const response = await settings(request('/speech'));
+  expect(response.status).toBe(200);
+  const loaded = await response.json();
+  expect(loaded).toMatchObject({ activeId: 'chatgpt', connections: [expect.objectContaining({
+    protocol: 'file', baseUrl: 'https://api.example.com/v1', hasKey: true,
+  })] });
+  expect(JSON.stringify(loaded)).not.toContain('replace-with-your-key');
+  await writeFile(file, '// Incomplete edit\n{"connections":');
+  expect((await settings(request('/speech'))).status).toBe(500);
+  expect(await readFile(file, 'utf8')).toBe('// Incomplete edit\n{"connections":');
+});
+
 test('connections, selection and ChatGPT model persist; keys are retained, replaced or cleared without disclosure', async () => {
   expect(await state()).toMatchObject({ activeId: 'chatgpt', connections: [] });
   const id = await connection();

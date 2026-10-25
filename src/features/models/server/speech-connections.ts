@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { z } from 'zod';
+import stripJsonComments from 'strip-json-comments';
 
 import type { AppConfig } from '@/server/config';
 import { ApiError } from '@/shared/http/api-error';
@@ -74,7 +75,7 @@ export class SpeechConnections {
       };
     let parsed: unknown;
     try {
-      parsed = JSON.parse(readFileSync(this.file, 'utf8'));
+      parsed = JSON.parse(stripJsonComments(readFileSync(this.file, 'utf8').replace(/^\uFEFF/, '')));
     } catch {
       throw new ApiError(500, 'speech_config_invalid', '语音配置文件无法解析，请检查本机的 speech.json');
     }
@@ -128,7 +129,7 @@ export class SpeechConnections {
     const data = this.read();
     const connection: StoredConnection = {
       id: randomUUID(),
-      name: input.name,
+      name: input.name || new URL(input.baseUrl).hostname,
       protocol: input.protocol,
       baseUrl: normalizeBaseUrl(input.baseUrl),
       model: input.model,
@@ -153,7 +154,7 @@ export class SpeechConnections {
         : current.key;
     const connection: StoredConnection = {
       id,
-      name: input.name,
+      name: input.name || new URL(input.baseUrl).hostname,
       protocol: input.protocol,
       baseUrl: normalizeBaseUrl(input.baseUrl),
       model: input.model,

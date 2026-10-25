@@ -1,0 +1,29 @@
+// 语音配置全部字段，位于 <实际 dataDir>/speech.json；支持 JSON 注释。
+// 缺省文件：activeId="chatgpt"，chatgptModel="gpt-live-transcribe"，connections=[]。
+// 示例中的自定义连接是占位示例；未配置真实服务时不要直接启用。
+// 修改后按下一次请求读取，无需重启；已建立的录音连接不会因此切换。
+{
+  // 全部取值："chatgpt"、null（停用语音），或下方某个连接的 id。
+  "activeId": "chatgpt",
+  // 非空模型 ID 字符串，最多 200 字符。默认值如下；是否可调用由账号和服务决定。
+  "chatgptModel": "gpt-live-transcribe",
+  // 自定义连接数组，可为空，也可添加多个连接。
+  "connections": [
+    {
+      // 唯一 UUID；界面创建时自动生成。activeId 通过此 ID 引用连接。
+      "id": "6a8a8e66-9a31-4b8e-83b2-a3bf0b1566aa",
+      // 字符串，最多 160 字符；界面留空时以服务域名命名。
+      "name": "自定义语音",
+      // 全部取值："realtime"（实时转写）或 "file"（录音结束后上传转写）。
+      "protocol": "file",
+      // http(s) 地址，最多 2048 字符；不带账号、密码、查询参数或片段。
+      // 填接口根地址，不包含 /audio/transcriptions 等具体操作路径。
+      "baseUrl": "https://api.example.com/v1",
+      // 非空字符串，最多 200 字符；直接使用服务商提供的转写模型 ID。
+      "model": "your-transcription-model",
+      // 可选的密钥字符串，最多 4096 字符；不需要密钥时删除该字段。
+      // 此处是字面值，不解析 $ENV 或 !command；界面不会返回或显示已保存的值。
+      "key": "replace-with-your-key"
+    }
+  ]
+}

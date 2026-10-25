@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { ApiError, isApiError } from '@/shared/http/api-error';
 
-import type { SpeechTarget } from './connections';
+import type { SpeechTarget } from '@/features/models/server/speech-connections';
 
 const secretSchema = z.object({ value: z.string().min(1) });
 const transcriptSchema = z.object({ text: z.string() });

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
-import type { ActiveSpeech } from '@/features/speech/active';
+import type { ActiveSpeech } from '@/features/models/active-speech';
 import { requestJson } from '@/shared/http/request-json';
 
 import {

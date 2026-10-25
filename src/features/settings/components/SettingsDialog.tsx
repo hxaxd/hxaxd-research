@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ModelSettings } from '@/features/models/components/ModelSettings';
 import { notifyModelsChanged } from '@/features/models/components/model-events';
-import { notifySpeechChanged } from '@/features/speech/use-speech-settings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { settingsEvent, type SettingsTab } from './open-settings';
 import { useAppearance } from './use-appearance';
@@ -19,7 +18,6 @@ export function SettingsDialog() {
 
   const modelsChanged = useCallback(async () => {
     notifyModelsChanged();
-    notifySpeechChanged();
   }, []);
 
   useEffect(() => {

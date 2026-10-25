@@ -31,16 +31,20 @@ import {
   authorizationSchema,
   modelCatalogSchema,
   providerSettingsSchema,
-} from '@/features/models/schema';
-import {
+  modelConnectionInputSchema,
+  modelDiscoverySchema,
+  modelDiscoveryResultSchema,
+  modelConnectionIdSchema,
   speechChatgptSchema,
   speechConnectionInputSchema,
-  speechRealtimeResultSchema,
-  speechRealtimeSchema,
   speechSelectionSchema,
   speechSettingsSchema,
-  speechTestResultSchema,
   speechConnectionRefSchema,
+} from '@/features/models/schema';
+import {
+  speechRealtimeResultSchema,
+  speechRealtimeSchema,
+  speechTestResultSchema,
   speechTranscriptSchema,
 } from '@/features/speech/schema';
 import {
@@ -63,6 +67,10 @@ export function generateOpenapi() {
     body?: z.ZodType;
     status?: number;
   }[] = [
+    { method: 'post', path: '/api/model-providers/connections', body: modelConnectionInputSchema, response: providerSettingsSchema },
+    { method: 'patch', path: '/api/model-providers/connections/{id}', body: modelConnectionInputSchema, response: providerSettingsSchema },
+    { method: 'delete', path: '/api/model-providers/connections/{id}', response: providerSettingsSchema },
+    { method: 'post', path: '/api/model-providers/discover', body: modelDiscoverySchema, response: modelDiscoveryResultSchema },
     {
       method: 'get',
       path: '/api/workspaces',
@@ -200,7 +208,7 @@ export function generateOpenapi() {
     const params = Object.fromEntries(
       Array.from(route.path.matchAll(/\{(\w+)\}/g), (match) => [
         match[1],
-        idSchema,
+        route.path.startsWith('/api/model-providers/connections/') ? modelConnectionIdSchema : idSchema,
       ]),
     );
     registry.registerPath({

@@ -1,5 +1,5 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { speechConnectionRefSchema } from '@/features/speech/schema';
+import { speechConnectionRefSchema } from '@/features/models/schema';
 import { getAppRuntime } from '@/server/runtime';
 import { ApiError } from '@/shared/http/api-error';
 

@@ -12,7 +12,7 @@ import { getConversation, renameConversation } from './conversations';
 import { readConversationHistory } from './history';
 import { mapPiEvent } from './pi-events';
 import { buildReadingContext } from './reading-context';
-import { createPiSession, type ModelSelection } from './session';
+import { createPiSession } from './session';
 
 type LiveConversation = {
   snapshot: ConversationSnapshot;
@@ -31,17 +31,6 @@ export class PiSessionRegistry {
     private readonly providers: ModelProviders,
     private readonly reader: ReaderController,
   ) {}
-
-  private async resolveModel(id: string, signal: AbortSignal): Promise<ModelSelection> {
-    const { runtime, models } = await this.providers.available(
-      id.slice(0, id.indexOf('/')),
-      signal,
-    );
-    const model = models.find((model) => `${model.provider}/${model.id}` === id);
-    if (!model)
-      throw new ApiError(503, 'model_unavailable', '模型不可用，请在模型供应商中连接并刷新模型');
-    return { runtime, model };
-  }
 
   private record(workspaceId: string, id: string) {
     const key = `${workspaceId}/${id}`;
@@ -93,7 +82,7 @@ export class PiSessionRegistry {
   }
 
   private async sessionFor(record: LiveConversation, conversation: Conversation, input: SendMessage, signal: AbortSignal) {
-    const selection = await this.resolveModel(input.model, signal);
+    const selection = await this.providers.resolve(input.model, signal);
     if (input.clips?.length && !selection.model.input.includes('image'))
       throw new ApiError(400, 'image_not_supported', '当前模型不支持图片，请切换支持图片的模型');
     const session = record.session ?? (await createPiSession(
@@ -101,6 +90,7 @@ export class PiSessionRegistry {
     ));
     record.session = session;
     await session.setModel(selection.model);
+    if (input.thinkingLevel) session.setThinkingLevel(input.thinkingLevel);
     signal.throwIfAborted();
     return session;
   }
