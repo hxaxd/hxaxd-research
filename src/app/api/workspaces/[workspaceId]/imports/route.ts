@@ -1,7 +1,7 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { importWorkspaceFiles } from '@/features/files/server/import-files';
-import { getWorkspace } from '@/features/workspaces/server/workspaces';
-import { getAppRuntime } from '@/server/runtime';
+import { importWorkspaceFiles } from './import-files';
+import { getWorkspace } from '@/app/workspaces/workspaces';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -33,7 +33,7 @@ function audio(connectionId: string) {
 }
 
 test('the annotated speech configuration loads through the API without exposing its key', async () => {
-  const sample = await readFile(path.resolve('src/features/settings/skills/workbench-guide/references/speech.example.jsonc'), 'utf8');
+  const sample = await readFile(path.resolve('src/app/settings/skills/workbench-guide/references/speech.example.jsonc'), 'utf8');
   const file = path.join(app.config.dataDir, 'speech.json');
   await writeFile(file, '\uFEFF' + sample);
   const response = await settings(request('/speech'));

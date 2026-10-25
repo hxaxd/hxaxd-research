@@ -9,13 +9,13 @@ const execute = promisify(execFile);
 test('installation creates the annotated runtime configuration and preserves existing settings', async () => {
   await mkdir(path.resolve('.runtime/dev'), { recursive: true });
   const root = await mkdtemp(path.resolve('.runtime/dev/config-install-'));
-  const server = path.join(root, 'src/server');
-  const command = path.join(server, 'config.mjs');
+  const app = path.join(root, 'src/app');
+  const command = path.join(app, 'config.mjs');
   const template = path.resolve('config.default.jsonc');
   const env = { ...process.env, APP_CONFIG_FILE: '' };
   try {
-    await mkdir(server, { recursive: true });
-    await copyFile(path.resolve('src/server/config.mjs'), command);
+    await mkdir(app, { recursive: true });
+    await copyFile(path.resolve('src/app/config.mjs'), command);
     await copyFile(template, path.join(root, 'config.default.jsonc'));
     await execute(process.execPath, [command, '--init'], { env });
     const target = path.join(root, '.runtime/config.jsonc');
@@ -45,15 +45,15 @@ test('resource installation updates runtime templates while preserving personal 
   const templateDir = path.join(root, 'templates');
   const personal = '// Personal configuration\n' + JSON.stringify({ templateDir, agent: { maxRetries: 0 } });
   const env = { ...process.env, APP_CONFIG_FILE: file };
-  const command = path.resolve('src/server/install.mjs');
+  const command = path.resolve('src/app/install.mjs');
   try {
     await writeFile(file, personal);
     await execute(process.execPath, [command], { env });
-    const skill = path.join(templateDir, 'features/settings/skills/workbench-guide/SKILL.md');
-    const source = path.resolve('src/features/settings/skills/workbench-guide/SKILL.md');
+    const skill = path.join(templateDir, 'app/settings/skills/workbench-guide/SKILL.md');
+    const source = path.resolve('src/app/settings/skills/workbench-guide/SKILL.md');
     expect(await readFile(skill, 'utf8')).toBe(await readFile(source, 'utf8'));
-    const html = path.join(templateDir, 'features/translation/skills/paper-translation/assets/paper.html');
-    expect(await readFile(html, 'utf8')).toBe(await readFile('src/features/translation/skills/paper-translation/assets/paper.html', 'utf8'));
+    const html = path.join(templateDir, 'app/translation/skills/paper-translation/assets/paper.html');
+    expect(await readFile(html, 'utf8')).toBe(await readFile('src/app/translation/skills/paper-translation/assets/paper.html', 'utf8'));
     await writeFile(skill, 'temporary runtime change');
     await execute(process.execPath, [command], { env });
     expect(await readFile(skill, 'utf8')).toBe(await readFile(source, 'utf8'));
@@ -67,7 +67,7 @@ test('native configuration command resolves custom paths, preserves defaults and
   await mkdir(path.resolve('.runtime/dev'), { recursive: true });
   const root = await mkdtemp(path.resolve('.runtime/dev/config-'));
   const file = path.join(root, 'config.json');
-  const command = path.resolve('src/server/config.mjs');
+  const command = path.resolve('src/app/config.mjs');
   const env = { ...process.env, APP_CONFIG_FILE: file };
   const configuration = { dataDir: path.join(root, 'data'), envDir: path.relative(process.cwd(), path.join(root, 'env')),
     tempDir: path.join(root, 'temp'), agent: { maxRetries: 0 } };
@@ -88,7 +88,7 @@ test('native configuration command resolves custom paths, preserves defaults and
 });
 
 test('the annotated default template loads and JSON comments preserve literal command arguments', async () => {
-  const command = path.resolve('src/server/config.mjs');
+  const command = path.resolve('src/app/config.mjs');
   const example = path.resolve('config.default.jsonc');
   const env = { ...process.env, APP_CONFIG_FILE: example };
   const loaded = JSON.parse((await execute(process.execPath, [command], { env })).stdout);

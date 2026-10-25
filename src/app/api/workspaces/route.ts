@@ -1,10 +1,10 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { createWorkspaceSchema } from '@/features/workspaces/schema';
+import { createWorkspaceSchema } from '@/app/workspaces/schema';
 import {
   createWorkspace,
   listWorkspaces,
-} from '@/features/workspaces/server/workspaces';
-import { getAppRuntime } from '@/server/runtime';
+} from '@/app/workspaces/workspaces';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

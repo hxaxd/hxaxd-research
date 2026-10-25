@@ -1,11 +1,11 @@
 import { notFound } from 'next/navigation';
 
-import { listConversations } from '@/features/conversations/server/conversations';
+import { listConversations } from '@/app/conversations/server/conversations';
 import {
   getWorkspace,
   listWorkspaces,
-} from '@/features/workspaces/server/workspaces';
-import { getAppRuntime } from '@/server/runtime';
+} from '@/app/workspaces/workspaces';
+import { getAppRuntime } from '@/app/runtime';
 import { isApiError } from '@/shared/http/api-error';
 import { idSchema } from '@/shared/schema';
 

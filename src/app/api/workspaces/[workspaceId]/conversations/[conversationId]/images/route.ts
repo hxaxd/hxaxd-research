@@ -1,7 +1,7 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { conversationImageQuerySchema } from '@/features/conversations/schema';
-import { readConversationImage } from '@/features/conversations/server/history';
-import { getAppRuntime } from '@/server/runtime';
+import { conversationImageQuerySchema } from '@/app/conversations/schema';
+import { readConversationImage } from '@/app/conversations/server/history';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

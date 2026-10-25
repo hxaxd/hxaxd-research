@@ -6,7 +6,7 @@ export default defineConfig([
   ...nextTypescript,
   globalIgnores(['.runtime/**', 'public/pdf-assets/**']),
   {
-    files: ['src/features/files/components/ImagePreview.tsx', 'src/features/conversations/components/ImageAttachment.tsx'],
+    files: ['src/app/files/components/ImagePreview.tsx', 'src/app/conversations/components/ImageAttachment.tsx'],
     rules: { '@next/next/no-img-element': 'off' },
   },
 ]);

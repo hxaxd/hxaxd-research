@@ -1,6 +1,6 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { sendMessageSchema } from '@/features/conversations/schema';
-import { getAppRuntime } from '@/server/runtime';
+import { sendMessageSchema } from '@/app/conversations/schema';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

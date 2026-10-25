@@ -1,6 +1,6 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { speechConnectionInputSchema } from '@/features/models/schema';
-import { getAppRuntime } from '@/server/runtime';
+import { speechConnectionInputSchema } from '@/app/models/schema';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 

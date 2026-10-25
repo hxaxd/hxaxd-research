@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-PIPELINE = ROOT / "src/features/translation/pipeline.py"
+PIPELINE = ROOT / "src/app/translation/pipeline.py"
 
 
 class TranslationCommands(unittest.TestCase):
@@ -42,10 +42,10 @@ class TranslationCommands(unittest.TestCase):
 
     def test_commands_use_the_configured_runtime_prompt_and_html_template(self):
         templates = self.root / "templates"
-        prompt = templates / "features/translation/prompts/blocks.md"
+        prompt = templates / "app/translation/prompts/blocks.md"
         prompt.parent.mkdir(parents=True)
         prompt.write_text("Custom translation instructions: {{target}}", encoding="utf-8")
-        template = templates / "features/translation/skills/paper-translation/assets/paper.html"
+        template = templates / "app/translation/skills/paper-translation/assets/paper.html"
         template.parent.mkdir(parents=True)
         template.write_text("<html><body data-template='custom'>{{CONTENT}}</body></html>", encoding="utf-8")
         self.config.write_text(json.dumps({"templateDir": str(templates)}), encoding="utf-8")

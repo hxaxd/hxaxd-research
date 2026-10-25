@@ -9,11 +9,11 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 
-import { ConversationPanel } from '@/features/conversations/components/ConversationPanel';
-import { CreateConversationDialog } from '@/features/conversations/components/CreateConversationDialog';
-import type { Conversation } from '@/features/conversations/schema';
-import { FilePreview } from '@/features/files/components/FilePreview';
-import { FileBrowser } from '@/features/files/components/FileBrowser';
+import { ConversationPanel } from '@/app/conversations/components/ConversationPanel';
+import { CreateConversationDialog } from '@/app/conversations/components/CreateConversationDialog';
+import type { Conversation } from '@/app/conversations/schema';
+import { FilePreview } from '@/app/files/components/FilePreview';
+import { FileBrowser } from '@/app/files/components/FileBrowser';
 import {
   fileChangeSchema,
   maxImageClips,
@@ -25,16 +25,16 @@ import {
   type ViewMode,
   type ImageClip,
   type TextQuote,
-} from '@/features/files/schema';
-import { ModelSettingsButton } from '@/features/models/components/ModelSettingsButton';
-import { modelsChangedEvent } from '@/features/models/components/model-events';
-import type { ConfiguredModel, ModelCatalog } from '@/features/models/schema';
-import type { Workspace } from '@/features/workspaces/schema';
+} from '@/app/files/schema';
+import { ModelSettingsButton } from '@/app/models/components/ModelSettingsButton';
+import { modelsChangedEvent } from '@/app/models/components/model-events';
+import type { ConfiguredModel, ModelCatalog } from '@/app/models/schema';
+import type { Workspace } from '@/app/workspaces/schema';
 import { requestJson } from '@/shared/http/request-json';
 import { ChoiceSelect } from '@/shared/ui/ChoiceSelect';
 import { EditableText } from '@/shared/ui/EntityControls';
 
-import { WorkbenchHeader } from './WorkbenchHeader';
+import { WorkbenchHeader } from '@/app/WorkbenchHeader';
 import { useWorkbenchLayout } from './use-workbench-layout';
 
 type WorkbenchProps = {

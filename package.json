@@ -7,18 +7,18 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "postinstall": "node src/server/install.mjs",
-    "translation:setup": "node src/features/translation/setup.mjs",
-    "ocr:setup": "node src/features/ocr/setup.mjs",
-    "tex:setup": "node src/features/latex/setup.mjs",
+    "postinstall": "node src/app/install.mjs",
+    "translation:setup": "node src/app/translation/setup.mjs",
+    "ocr:setup": "node src/app/ocr/setup.mjs",
+    "tex:setup": "node src/app/latex/setup.mjs",
     "dev": "next dev --hostname 127.0.0.1 --port 8642",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 8642",
     "typecheck": "next typegen && tsc",
     "lint": "eslint .",
     "test": "vitest run",
-    "predev": "node src/features/files/copy-pdf-assets.mjs",
-    "prebuild": "node src/features/files/copy-pdf-assets.mjs",
+    "predev": "node src/app/files/copy-pdf-assets.mjs",
+    "prebuild": "node src/app/files/copy-pdf-assets.mjs",
     "test:coverage": "vitest run --coverage",
     "analyze": "knip"
   },
@@ -65,7 +65,7 @@
   },
   "knip": {
     "entry": [
-      "src/features/models/invoke.mjs"
+      "src/app/models/invoke.mjs"
     ],
     "ignoreBinaries": [
       "uv",

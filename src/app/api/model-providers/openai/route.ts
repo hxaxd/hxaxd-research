@@ -1,5 +1,5 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { getAppRuntime } from '@/server/runtime';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 

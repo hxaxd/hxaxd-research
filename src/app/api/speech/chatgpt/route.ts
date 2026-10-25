@@ -1,6 +1,6 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { speechChatgptSchema } from '@/features/models/schema';
-import { getAppRuntime } from '@/server/runtime';
+import { speechChatgptSchema } from '@/app/models/schema';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 

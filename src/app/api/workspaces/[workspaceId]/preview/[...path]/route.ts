@@ -1,6 +1,6 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { serveWorkspaceFile } from '@/features/files/server/serve-file';
-import { getAppRuntime } from '@/server/runtime';
+import { serveWorkspaceFile } from '../../serve-file';
+import { getAppRuntime } from '@/app/runtime';
 import { idSchema } from '@/shared/schema';
 
 export const runtime = 'nodejs';

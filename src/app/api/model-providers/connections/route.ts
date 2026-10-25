@@ -1,7 +1,7 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { modelConnectionInputSchema } from '@/features/models/schema';
-import { saveModelConnection } from '@/features/models/server/connections';
-import { getAppRuntime } from '@/server/runtime';
+import { modelConnectionInputSchema } from '@/app/models/schema';
+import { saveModelConnection } from '@/app/models/server/connections';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 

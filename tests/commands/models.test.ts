@@ -14,7 +14,7 @@ test('native model command uses registered providers without exposing credential
   const server = await startModelServer();
   try {
     await writeFile(path.join(app.config.piDir, 'models.json'), JSON.stringify(server.config));
-    const command = [path.resolve('src/features/models/invoke.mjs'), '--pi-dir', app.config.piDir];
+    const command = [path.resolve('src/app/models/invoke.mjs'), '--pi-dir', app.config.piDir];
     const catalog = JSON.parse((await execute(process.execPath, [...command, '--list'])).stdout);
     expect(catalog.models.some((model: { id: string }) => model.id === 'test/test-model')).toBe(true);
     expect(JSON.stringify(catalog)).not.toContain('test-only-key');

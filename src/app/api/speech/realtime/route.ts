@@ -1,6 +1,6 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { speechRealtimeSchema } from '@/features/speech/schema';
-import { getAppRuntime } from '@/server/runtime';
+import { speechRealtimeSchema } from '@/app/speech/schema';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 

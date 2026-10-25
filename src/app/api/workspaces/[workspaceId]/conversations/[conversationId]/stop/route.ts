@@ -1,6 +1,6 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { stopRunSchema } from '@/features/conversations/schema';
-import { getAppRuntime } from '@/server/runtime';
+import { stopRunSchema } from '@/app/conversations/schema';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

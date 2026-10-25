@@ -1,7 +1,7 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { modelConnectionIdSchema, modelConnectionInputSchema } from '@/features/models/schema';
-import { removeModelConnection, saveModelConnection } from '@/features/models/server/connections';
-import { getAppRuntime } from '@/server/runtime';
+import { modelConnectionIdSchema, modelConnectionInputSchema } from '@/app/models/schema';
+import { removeModelConnection, saveModelConnection } from '@/app/models/server/connections';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 type Context = { params: Promise<{ id: string }> };

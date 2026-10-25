@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { applyAppearance, paletteStyles } from '@/features/settings/appearance';
+import { applyAppearance, paletteStyles } from '@/app/settings/appearance';
 
 import './globals.css';
 

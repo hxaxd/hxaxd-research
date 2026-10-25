@@ -1,10 +1,10 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { createConversationSchema } from '@/features/conversations/schema';
+import { createConversationSchema } from '@/app/conversations/schema';
 import {
   createConversation,
   listConversations,
-} from '@/features/conversations/server/conversations';
-import { getAppRuntime } from '@/server/runtime';
+} from '@/app/conversations/server/conversations';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -2,8 +2,8 @@ import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
 import {
   getWorkspace,
   renameWorkspace,
-} from '@/features/workspaces/server/workspaces';
-import { getAppRuntime } from '@/server/runtime';
+} from '@/app/workspaces/workspaces';
+import { getAppRuntime } from '@/app/runtime';
 import { renameSchema } from '@/shared/schema';
 
 export const runtime = 'nodejs';

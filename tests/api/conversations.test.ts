@@ -10,7 +10,7 @@ import { POST as send } from '@/app/api/workspaces/[workspaceId]/conversations/[
 import { GET as events } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/events/route';
 import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/images/route';
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
-import type { ConversationSnapshot } from '@/features/conversations/schema';
+import type { ConversationSnapshot } from '@/app/conversations/schema';
 
 import { startModelServer } from '../model-server';
 import { createTestApp, request, restartApp, workspaceContext } from '../app';

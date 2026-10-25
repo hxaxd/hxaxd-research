@@ -90,7 +90,7 @@ test.each(['browser', 'manual'])('ChatGPT %s callback connects, survives reload 
       return Response.json({ models: [{ slug: 'gpt-6-luna', display_name: '账号可用模型', visibility: 'list' }] });
     };`;
     const args = ['--import', 'data:text/javascript,' + encodeURIComponent(upstream),
-      path.resolve('src/features/models/invoke.mjs'), '--pi-dir', app.config.piDir, '--list'];
+      path.resolve('src/app/models/invoke.mjs'), '--pi-dir', app.config.piDir, '--list'];
     const native = JSON.parse((await execute(process.execPath, args)).stdout);
     expect(native.models).toEqual([expect.objectContaining({ id: 'openai/gpt-6-luna', name: '账号可用模型' })]);
     expect(JSON.stringify(native)).not.toContain('private-');

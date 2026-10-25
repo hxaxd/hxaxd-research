@@ -16,7 +16,7 @@ import {
   runSchema,
   sendMessageSchema,
   stopRunSchema,
-} from '@/features/conversations/schema';
+} from '@/app/conversations/schema';
 import {
   fileEntrySchema,
   createDirectorySchema,
@@ -24,7 +24,7 @@ import {
   importResultSchema,
   textFileSchema,
   readerRequestSchema,
-} from '@/features/files/schema';
+} from '@/app/files/schema';
 import {
   authorizationCallbackSchema,
   authorizationRequestSchema,
@@ -40,17 +40,17 @@ import {
   speechSelectionSchema,
   speechSettingsSchema,
   speechConnectionRefSchema,
-} from '@/features/models/schema';
+} from '@/app/models/schema';
 import {
   speechRealtimeResultSchema,
   speechRealtimeSchema,
   speechTestResultSchema,
   speechTranscriptSchema,
-} from '@/features/speech/schema';
+} from '@/app/speech/schema';
 import {
   createWorkspaceSchema,
   workspaceSchema,
-} from '@/features/workspaces/schema';
+} from '@/app/workspaces/schema';
 import { apiErrorSchema } from '@/shared/http/api-error';
 import { idSchema, renameSchema } from '@/shared/schema';
 

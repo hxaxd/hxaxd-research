@@ -2,11 +2,11 @@ import { BookOpen } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { CreateWorkspaceDialog } from '@/features/workspaces/components/CreateWorkspaceDialog';
-import { listWorkspaces } from '@/features/workspaces/server/workspaces';
-import { getAppRuntime } from '@/server/runtime';
+import { CreateWorkspaceDialog } from '@/app/workspaces/CreateWorkspaceDialog';
+import { listWorkspaces } from '@/app/workspaces/workspaces';
+import { getAppRuntime } from '@/app/runtime';
 
-import { WorkbenchHeader } from './workspaces/[workspaceId]/WorkbenchHeader';
+import { WorkbenchHeader } from './WorkbenchHeader';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

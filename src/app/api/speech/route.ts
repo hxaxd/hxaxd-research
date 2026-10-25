@@ -1,6 +1,6 @@
 import { handleApiRequest } from '@/app/api/handle-request';
-import { speechSelectionSchema } from '@/features/models/schema';
-import { getAppRuntime } from '@/server/runtime';
+import { speechSelectionSchema } from '@/app/models/schema';
+import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

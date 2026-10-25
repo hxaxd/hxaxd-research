@@ -1,5 +1,5 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { getAppRuntime } from '@/server/runtime';
+import { getAppRuntime } from '@/app/runtime';
 import { renameSchema } from '@/shared/schema';
 
 export const runtime = 'nodejs';

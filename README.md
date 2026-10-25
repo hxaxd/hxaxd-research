@@ -121,7 +121,7 @@ npm start -- --hostname 127.0.0.1 --port 8642
 <summary><b>资料保存、模型调用与运行权限</b></summary>
 
 - **本地保存**：材料、对话与模型凭据默认保存在 `.runtime/data/`，可在 `.runtime/config.jsonc` 中修改 `dataDir`。备份时保留整个数据目录。
-- **高级配置**：安装时从 Git 中的[默认配置模板](config.default.jsonc)自动创建 `.runtime/config.jsonc`，已有配置不会覆盖。技能、提示词和 HTML 模板由 Git 源文件安装至 `.runtime/templates/`，重装会更新这些模板；长期修改请编辑对应源文件。在运行配置中调整数据、环境、暂存目录，以及文件大小限制、请求超时、重试和 OCR 设备；修改后重启。执行 `node src/server/config.mjs --defaults` 查看完整默认配置，执行 `node src/server/config.mjs` 查看实际路径。相对路径以项目根目录为准，仅需指定其他配置文件时使用 `APP_CONFIG_FILE`。改目录不搬迁已有资料或环境。
+- **高级配置**：安装时从 Git 中的[默认配置模板](config.default.jsonc)自动创建 `.runtime/config.jsonc`，已有配置不会覆盖。技能、提示词和 HTML 模板由 Git 源文件安装至 `.runtime/templates/`，重装会更新这些模板；长期修改请编辑对应源文件。在运行配置中调整数据、环境、暂存目录，以及文件大小限制、请求超时、重试和 OCR 设备；修改后重启。执行 `node src/app/config.mjs --defaults` 查看完整默认配置，执行 `node src/app/config.mjs` 查看实际路径。相对路径以项目根目录为准，仅需指定其他配置文件时使用 `APP_CONFIG_FILE`。改目录不搬迁已有资料或环境。
 - **模型调用**：使用云端服务时，相关上下文会发送给你选择的供应商。
 - **个人使用**：平台无需注册账号，默认仅监听本机。Agent 可访问运行账号有权操作的文件和程序。
 

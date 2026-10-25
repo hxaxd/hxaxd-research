@@ -4,7 +4,7 @@ import path from 'node:path';
 import { vi } from 'vitest';
 
 import { POST as createWorkspace } from '@/app/api/workspaces/route';
-import { getAppRuntime } from '@/server/runtime';
+import { getAppRuntime } from '@/app/runtime';
 
 export function restartApp() {
   delete (globalThis as typeof globalThis & { researchAppRuntime?: unknown }).researchAppRuntime;
