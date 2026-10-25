@@ -10,7 +10,7 @@ import {
   type CreateAgentSessionOptions,
 } from '@earendil-works/pi-coding-agent';
 
-import type { AppConfig } from '@/server/config';
+import type { AppConfig } from '@/server/config.mjs';
 import type { ReaderController } from '@/features/files/server/reader';
 
 import { openConversation } from './conversations';
@@ -32,13 +32,17 @@ export async function createPiSession(
 ) {
   const cwd = path.join(config.workspaceDir, workspaceId);
   const manager = openConversation(config.workspaceDir, workspaceId, id);
-  const tools = [workspaceContextTool(config.workspaceDir, workspaceId), readPdfPagesTool(cwd), openDocumentTool(config.workspaceDir, workspaceId, id, reader)];
+  const tools = [workspaceContextTool(config, workspaceId), readPdfPagesTool(cwd, config.files), openDocumentTool(config.workspaceDir, workspaceId, id, reader)];
   const resourceLoader = new DefaultResourceLoader({
     cwd,
     agentDir: config.piDir,
     noExtensions: true,
     noSkills: true,
-    additionalSkillPaths: [path.resolve('src/features/latex/skills'), path.resolve('src/features/translation/skills')],
+    additionalSkillPaths: [
+      path.join(config.templateDir, 'features/settings/skills'),
+      path.join(config.templateDir, 'features/latex/skills'),
+      path.join(config.templateDir, 'features/translation/skills'),
+    ],
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
@@ -53,7 +57,7 @@ export async function createPiSession(
       modelRuntime: runtime,
       model,
       sessionManager: manager,
-      settingsManager: SettingsManager.inMemory({ retry: { enabled: true, maxRetries: 2 } }),
+      settingsManager: SettingsManager.inMemory({ retry: { enabled: config.agent.retryEnabled, maxRetries: config.agent.maxRetries } }),
       resourceLoader,
       tools: [
         'read',

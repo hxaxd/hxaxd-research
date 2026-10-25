@@ -1,5 +1,6 @@
 """Run with the project's translation Python environment."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -38,6 +39,39 @@ class TranslationCommands(unittest.TestCase):
         request = json.loads(output.read_text(encoding="utf-8"))
         payload = json.loads(request["prompt"])
         self.assertEqual([block["id"] for block in payload["blocks"]], [block["id"] for block in self.blocks])
+
+    def test_commands_use_the_configured_runtime_prompt_and_html_template(self):
+        templates = self.root / "templates"
+        prompt = templates / "features/translation/prompts/blocks.md"
+        prompt.parent.mkdir(parents=True)
+        prompt.write_text("Custom translation instructions: {{target}}", encoding="utf-8")
+        template = templates / "features/translation/skills/paper-translation/assets/paper.html"
+        template.parent.mkdir(parents=True)
+        template.write_text("<html><body data-template='custom'>{{CONTENT}}</body></html>", encoding="utf-8")
+        self.config.write_text(json.dumps({"templateDir": str(templates)}), encoding="utf-8")
+        request = self.root / "request.json"
+        prepared = self.command("prepare", "--document", self.document, "--output", request, "--target", "zh-CN")
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        self.assertEqual(json.loads(request.read_text(encoding="utf-8"))["system"], "Custom translation instructions: zh-CN")
+        source = self.root / "source.md"
+        source.write_text("# Runtime template", encoding="utf-8")
+        output = self.root / "reading.html"
+        rendered = self.command("render-markdown", "--input", source, "--output", output, "--target", "zh-CN")
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        self.assertIn("data-template='custom'", output.read_text(encoding="utf-8"))
+
+    def test_render_markdown_uses_application_configuration_from_a_workspace_directory(self):
+        config = self.root / "app-config.json"
+        config.write_text(json.dumps({"envDir": str(self.root / "env")}), encoding="utf-8")
+        source = self.root / "source.md"
+        source.write_text("# 标题\n\n中文译稿。", encoding="utf-8")
+        output = self.root / "rendered.html"
+        result = subprocess.run([sys.executable, "-X", "utf8", str(PIPELINE), "render-markdown",
+                                 "--input", str(source), "--output", str(output), "--target", "zh-CN"],
+                                cwd=self.root, env={**os.environ, "APP_CONFIG_FILE": str(config)},
+                                capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("中文译稿", output.read_text(encoding="utf-8"))
 
     def test_render_accepts_complete_translations_and_reports_missing_duplicate_or_changed_formula(self):
         translated = [{"id": block["id"], "text": block["text"] if block["preserve"] else "译文"}

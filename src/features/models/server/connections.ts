@@ -7,7 +7,7 @@ import { z } from 'zod';
 import stripJsonComments from 'strip-json-comments';
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
 
-import type { AppConfig } from '@/server/config';
+import type { AppConfig } from '@/server/config.mjs';
 import { ApiError } from '@/shared/http/api-error';
 import { SpeechConnections } from './speech-connections';
 import type { DiscoveredModel, ModelConnectionInput, ModelDiscoveryInput } from '../schema';
@@ -113,7 +113,7 @@ export async function discoverModels(config: AppConfig, runtime: ModelRuntime, i
   let response: Response;
   try {
     response = await fetch(`${input.baseUrl.replace(/\/+$/, '')}/models`, {
-      headers, signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+      headers, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeouts.modelCatalogMs)]),
     });
   } catch {
     throw new ApiError(502, 'model_discovery_failed', '无法读取模型列表，请检查地址与网络，也可直接填写模型 ID');

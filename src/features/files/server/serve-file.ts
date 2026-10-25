@@ -5,6 +5,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 
+import type { AppConfig } from '@/server/config.mjs';
 import { ApiError } from '@/shared/http/api-error';
 
 import { resolveWorkspacePath } from './paths';
@@ -40,12 +41,12 @@ function requestedRange(value: string, size: number) {
   return start <= end && start < size ? { start, end } : null;
 }
 
-export async function serveWorkspaceFile(request: Request, root: string, workspaceId: string, previewPath?: string) {
+export async function serveWorkspaceFile(request: Request, config: AppConfig, workspaceId: string, previewPath?: string) {
   const url = new URL(request.url);
   const relative = previewPath ?? url.searchParams.get('path') ?? '';
   if (!previewPath && url.searchParams.get('format') === 'text')
-    return Response.json(await readWorkspaceText(root, workspaceId, relative, 0, 100000));
-  const target = await resolveWorkspacePath(root, workspaceId, relative);
+    return Response.json(await readWorkspaceText(config, workspaceId, relative, 0, config.files.previewBytes));
+  const target = await resolveWorkspacePath(config.workspaceDir, workspaceId, relative);
   const info = await stat(target);
   if (!info.isFile()) throw new ApiError(400, 'invalid_file', '请选择一个文件');
   const type = mime[path.extname(target).toLowerCase()] || 'application/octet-stream';

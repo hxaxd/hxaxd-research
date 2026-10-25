@@ -4,15 +4,17 @@ import { readFile, stat } from 'node:fs/promises';
 
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
+import type { AppConfig } from '@/server/config.mjs';
 import { ApiError } from '@/shared/http/api-error';
 
 export async function extractPdfText(
   file: string,
-  startPage = 1,
-  endPage = startPage + 4,
+  startPage: number,
+  endPage: number,
+  limits: AppConfig['files'],
   signal?: AbortSignal,
 ) {
-  if ((await stat(file)).size > 256 * 1024 * 1024)
+  if ((await stat(file)).size > limits.pdfBytes)
     throw new ApiError(413, 'too_large', 'PDF 超过读取上限');
   const bytes = await readFile(file);
   signal?.throwIfAborted();
@@ -23,9 +25,9 @@ export async function extractPdfText(
       startPage < 1 ||
       startPage > pdf.numPages ||
       endPage < startPage ||
-      endPage - startPage >= 20
+      endPage - startPage >= limits.pdfPages
     )
-      throw new ApiError(400, 'invalid_pages', '每次读取 1 至 20 页，请使用有效页码');
+      throw new ApiError(400, 'invalid_pages', `每次读取 1 至 ${limits.pdfPages} 页，请使用有效页码`);
     const pages: { page: number; text: string }[] = [];
     for (let page = startPage; page <= Math.min(endPage, pdf.numPages); page++) {
       signal?.throwIfAborted();
@@ -35,7 +37,7 @@ export async function extractPdfText(
         text: content.items
           .map((item) => ('str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : ''))
           .join('')
-          .slice(0, 60000),
+          .slice(0, limits.pdfPageCharacters),
       });
     }
     return {

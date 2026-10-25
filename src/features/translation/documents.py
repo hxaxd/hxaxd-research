@@ -10,8 +10,6 @@ from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
 import pymupdf
 
-ROOT = Path(__file__).resolve().parent
-TEMPLATE = ROOT / "skills/paper-translation/assets/paper.html"
 PRESERVED = {"image", "figure", "chart", "seal", "formula", "display_formula", "formula_number", "number"}
 HEADINGS = {"doc_title", "paragraph_title", "title", "section_title"}
 
@@ -158,7 +156,7 @@ def write_html(config, target, title, content, toc, language, source=""):
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     install_math(config, target.parent)
-    template = TEMPLATE.read_text(encoding="utf-8")
+    template = (Path(config["templateDir"]) / "features/translation/skills/paper-translation/assets/paper.html").read_text(encoding="utf-8")
     values = {"TITLE": html.escape(title), "LANG": html.escape(language),
               "CONTENT": content, "TOC": toc, "SOURCE": source}
     target.write_text(re.sub(r"\{\{(TITLE|LANG|CONTENT|TOC|SOURCE)\}\}",

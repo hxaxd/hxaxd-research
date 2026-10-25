@@ -19,6 +19,33 @@ let app: Awaited<ReturnType<typeof createTestApp>>;
 beforeEach(async () => { app = await createTestApp(); });
 afterEach(async () => { await app.cleanup(); });
 
+test('application configuration controls preview and upload limits through the file APIs', async () => {
+  await writeFile(app.config.configFile, JSON.stringify({
+    dataDir: app.config.dataDir,
+    tempDir: path.join(app.config.dataDir, 'uploads'),
+    files: { textBytes: 6, previewBytes: 3, uploadFileBytes: 6, uploadTotalBytes: 7 },
+  }));
+  restartApp();
+  const context = workspaceContext(app.workspace.id);
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  await writeFile(path.join(root, 'note.txt'), 'abcdef');
+  expect(await (await file(request('/file?path=note.txt&format=text'), context)).json()).toMatchObject({ text: 'abc', truncated: true });
+  await writeFile(path.join(root, 'large.txt'), 'abcdefg');
+  expect((await file(request('/file?path=large.txt&format=text'), context)).status).toBe(413);
+  expect(await (await file(request('/file?path=large.txt'), context)).text()).toBe('abcdefg');
+  async function upload(contents: string[]) {
+    const form = new FormData();
+    form.set('metadata', JSON.stringify({ target: '', folderName: 'imported' }));
+    contents.forEach((text, index) => form.append('files', new Blob([text]), `${index}.txt`));
+    return importFiles(new Request('http://localhost/imports', { method: 'POST', body: form }), context);
+  }
+  expect((await upload(['abcdefgh'])).status).toBe(413);
+  expect((await upload(['abcd', 'efgh'])).status).toBe(413);
+  const accepted = await upload(['abcd']);
+  expect(accepted.status).toBe(201);
+  expect(await (await file(request('/file?path=imported/0.txt'), context)).text()).toBe('abcd');
+});
+
 test('workspace identity persists while materials follow the filesystem without registration', async () => {
   const context = workspaceContext(app.workspace.id);
   const root = path.join(app.config.workspaceDir, app.workspace.id);

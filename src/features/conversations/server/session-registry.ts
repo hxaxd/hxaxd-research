@@ -3,7 +3,7 @@ import 'server-only';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
 
 import type { ModelProviders } from '@/features/models/server/providers';
-import type { AppConfig } from '@/server/config';
+import type { AppConfig } from '@/server/config.mjs';
 import type { ReaderController } from '@/features/files/server/reader';
 import { ApiError, isApiError } from '@/shared/http/api-error';
 

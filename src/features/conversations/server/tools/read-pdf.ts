@@ -4,15 +4,16 @@ import path from 'node:path';
 
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import type { AppConfig } from '@/server/config.mjs';
 
 import { extractPdfText } from '@/features/files/server/extract-pdf-text';
 
-export function readPdfPagesTool(cwd: string) {
+export function readPdfPagesTool(cwd: string, limits: AppConfig['files']) {
   return defineTool({
     name: 'read_pdf_pages',
     label: '读取 PDF',
     description:
-      '按页提取 PDF 文字，每次最多 20 页。接受绝对路径或相对当前工作区的路径；扫描页不进行 OCR。',
+      `按页提取 PDF 文字，每次最多 ${limits.pdfPages} 页。接受绝对路径或相对当前工作区的路径；扫描页不进行 OCR。`,
     parameters: Type.Object({
       path: Type.String({ minLength: 1 }),
       startPage: Type.Integer({ minimum: 1 }),
@@ -23,6 +24,7 @@ export function readPdfPagesTool(cwd: string) {
         path.resolve(cwd, args.path),
         args.startPage,
         args.endPage,
+        limits,
         signal,
       );
       return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };

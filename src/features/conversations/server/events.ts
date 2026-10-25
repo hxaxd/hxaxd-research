@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { AppConfig } from '@/server/config.mjs';
 import type { ConversationSnapshot } from '../schema';
 import type { PiSessionRegistry } from './session-registry';
 
@@ -8,6 +9,7 @@ export function streamConversationEvents(
   sessions: PiSessionRegistry,
   workspaceId: string,
   id: string,
+  events: AppConfig['events'],
 ) {
   const encoder = new TextEncoder();
   let cleanup: (() => void) | undefined;
@@ -28,12 +30,12 @@ export function streamConversationEvents(
       };
       const unsubscribe = sessions.subscribe(workspaceId, id, (snapshot) => {
         pending = snapshot;
-        timer ??= setTimeout(() => flush?.(), 30);
+        timer ??= setTimeout(() => flush?.(), events.conversationBatchMs);
       });
       const heartbeat = setInterval(() => {
         if (!closed && (controller.desiredSize ?? 0) > 0)
           controller.enqueue(encoder.encode(': keepalive\n\n'));
-      }, 15000);
+      }, events.heartbeatMs);
       const abort = () => {
         if (!closed) {
           controller.close();

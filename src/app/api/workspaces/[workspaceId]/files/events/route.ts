@@ -13,7 +13,7 @@ export function GET(
     const { workspaceId } = await validatedIds(context);
     return streamFileEvents(
       request,
-      getAppRuntime().config.workspaceDir,
+      getAppRuntime().config,
       workspaceId,
       getAppRuntime().reader,
     );

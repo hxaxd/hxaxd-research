@@ -10,7 +10,7 @@ import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import busboy from 'busboy';
 import type { z } from 'zod';
 
-import type { AppConfig } from '@/server/config';
+import type { AppConfig } from '@/server/config.mjs';
 import { ApiError } from '@/shared/http/api-error';
 
 import { importMetadataSchema, type ImportResult } from '../schema';
@@ -41,6 +41,7 @@ export async function importWorkspaceFiles(
   let metadata: z.infer<typeof importMetadataSchema> | undefined;
   let totalBytes = 0;
   const files: string[] = [];
+  const limits = config.files;
   const tasks: Promise<void>[] = [];
   const seen = new Set<string>();
   let parser: ReturnType<typeof busboy>;
@@ -49,7 +50,7 @@ export async function importWorkspaceFiles(
       headers: { 'content-type': request.headers.get('content-type') ?? '' },
       preservePath: true,
       defParamCharset: 'utf8',
-      limits: { fileSize: 256 * 1024 * 1024, files: 1000, fields: 1, fieldSize: 4096, parts: 1001 },
+      limits: { fileSize: limits.uploadFileBytes, files: limits.uploadFiles, fields: 1, fieldSize: 4096, parts: limits.uploadFiles + 1 },
     });
   } catch {
     throw new ApiError(400, 'invalid_input', '请使用有效的 multipart/form-data 上传文件');
@@ -75,7 +76,7 @@ export async function importWorkspaceFiles(
         parser.destroy(new ApiError(400, 'invalid_input', '导入参数过多')),
       );
       parser.on('filesLimit', () =>
-        parser.destroy(new ApiError(413, 'too_large', '每批最多 1000 个文件')),
+        parser.destroy(new ApiError(413, 'too_large', `每批最多 ${limits.uploadFiles} 个文件`)),
       );
       parser.on('partsLimit', () => parser.destroy(new ApiError(413, 'too_large', '导入内容过多')));
       parser.on('field', (name, value, info) => {
@@ -106,8 +107,8 @@ export async function importWorkspaceFiles(
             transform(chunk: Buffer, _encoding, callback) {
               totalBytes += chunk.length;
               callback(
-                totalBytes > 1024 * 1024 * 1024
-                  ? new ApiError(413, 'too_large', '每批导入不能超过 1 GiB')
+                totalBytes > limits.uploadTotalBytes
+                  ? new ApiError(413, 'too_large', '导入超过每批大小限制')
                   : null,
                 chunk,
               );
@@ -116,7 +117,7 @@ export async function importWorkspaceFiles(
           await pipeline(stream, meter, createWriteStream(target, { flags: 'wx' }), {
             signal: request.signal,
           });
-          if (stream.truncated) throw new ApiError(413, 'too_large', '单个文件不能超过 256 MiB');
+          if (stream.truncated) throw new ApiError(413, 'too_large', '文件超过单个文件大小限制');
           files.push(relative);
         })();
         tasks.push(task);

@@ -72,12 +72,19 @@ Install **Node.js 24+** and Git on the computer that will run the workbench.
 ```sh
 git clone https://github.com/hxaxd/hxaxd-research.git
 cd hxaxd-research
-npm ci
-npm run build
-npm start
 ```
 
-Open **<http://127.0.0.1:8642>**.
+| Windows (PowerShell) | macOS / Linux (Shell) |
+| --- | --- |
+| `powershell -ExecutionPolicy Bypass -File .\install.ps1` | `sh ./install.sh` |
+
+The script installs dependencies, prepares runtime configuration and templates, and builds the application. Start it with:
+
+```sh
+npm start -- --hostname 127.0.0.1 --port 8642
+```
+
+The default listening address is `127.0.0.1`, on port `8642`. Open **<http://127.0.0.1:8642>**.
 
 ## Start with a research question
 
@@ -113,7 +120,8 @@ Open **<http://127.0.0.1:8642>**.
 <details>
 <summary><b>Storage, model calls, and execution permissions</b></summary>
 
-- **Local storage:** Materials, conversations, and model credentials are saved in `.runtime/data/` by default. Change the location with `APP_DATA_DIR`. Back up the entire data directory.
+- **Local storage:** Materials, conversations, and model credentials are saved in `.runtime/data/` by default. Change `dataDir` in `.runtime/config.jsonc` to use another location. Back up the entire data directory.
+- **Advanced configuration**: installation creates `.runtime/config.jsonc` from the [version-controlled default template](config.default.jsonc) without overwriting an existing file. Skills, prompts, and HTML templates are installed from Git sources into `.runtime/templates/` and refreshed on reinstall; edit their source files for lasting changes. Edit the runtime configuration to override storage/environment/temp directories, file limits, timeouts, retries and OCR device, then restart. Run `node src/server/config.mjs --defaults` for all defaults, or `node src/server/config.mjs` for resolved paths. Relative paths use the project root; Use `APP_CONFIG_FILE` only to select another configuration file. Changing paths does not move existing data or environments.
 - **Model calls:** When using a cloud service, relevant context is sent to the provider you choose.
 - **Personal use:** No platform account is required. The workbench listens on the loopback interface by default. The agent can access files and programs permitted by the account running it.
 

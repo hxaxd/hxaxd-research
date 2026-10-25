@@ -7,7 +7,7 @@ import path from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
-import type { AppConfig } from "@/server/config";
+import type { AppConfig } from "@/server/config.mjs";
 import { ApiError } from "@/shared/http/api-error";
 
 import type { Authorization, ModelCatalog, ProviderSettings } from "../schema";
@@ -70,7 +70,7 @@ export class ModelProviders {
 
   async resolve(id: string, signal?: AbortSignal) {
     const runtime = await this.getRuntime();
-    try { return { runtime, model: await resolveModel(runtime, id, signal, 15000) }; }
+    try { return { runtime, model: await resolveModel(runtime, id, signal, this.config.timeouts.modelCatalogMs) }; }
     catch (error) {
       if (error instanceof ModelAccessError) throw new ApiError(error.status, error.code, error.message);
       throw error;
@@ -78,7 +78,7 @@ export class ModelProviders {
   }
 
   async list(): Promise<ModelCatalog> {
-    const catalog = await modelCatalog(await this.getRuntime(), undefined, 15000);
+    const catalog = await modelCatalog(await this.getRuntime(), undefined, this.config.timeouts.modelCatalogMs);
     return { ...catalog, models: catalog.models.map(model => ({
       id: `${model.provider}/${model.id}`, name: model.name, provider: model.provider,
       input: model.input, thinkingLevels: thinkingLevels(model) as ModelCatalog['models'][number]['thinkingLevels'],

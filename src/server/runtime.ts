@@ -7,7 +7,7 @@ import { ModelProviders } from '@/features/models/server/providers';
 import { ReaderController } from '@/features/files/server/reader';
 import { Speech } from '@/features/speech/server/speech';
 
-import { readAppConfig } from './config';
+import { readAppConfig } from './config.mjs';
 
 function createRuntime() {
   const config = readAppConfig();

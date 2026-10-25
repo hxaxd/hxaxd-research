@@ -7,7 +7,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import stripJsonComments from 'strip-json-comments';
 
-import type { AppConfig } from '@/server/config';
+import type { AppConfig } from '@/server/config.mjs';
 import { ApiError } from '@/shared/http/api-error';
 
 import {

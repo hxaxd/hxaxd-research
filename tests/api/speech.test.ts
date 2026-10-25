@@ -48,6 +48,22 @@ test('the annotated speech configuration loads through the API without exposing 
   expect(await readFile(file, 'utf8')).toBe('// Incomplete edit\n{"connections":');
 });
 
+test('configured audio limits and upstream timeout apply to speech requests', async () => {
+  await writeFile(app.config.configFile, JSON.stringify({ dataDir: app.config.dataDir, files: { audioBytes: 4 }, timeouts: { speechTranscriptionMs: 25 } }));
+  restartApp();
+  const id = await connection();
+  vi.stubGlobal('fetch', async (_input: unknown, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+  }));
+  expect((await transcribe(audio(id))).status).toBe(413);
+  const form = new FormData();
+  form.set('connectionId', id);
+  form.set('audio', new Blob(['ok']), 'recording.wav');
+  const response = await transcribe(new Request('http://localhost/transcriptions', { method: 'POST', body: form }));
+  expect(response.status).toBe(504);
+  expect(await response.json()).toMatchObject({ error: { code: 'speech_timeout' } });
+});
+
 test('connections, selection and ChatGPT model persist; keys are retained, replaced or cleared without disclosure', async () => {
   expect(await state()).toMatchObject({ activeId: 'chatgpt', connections: [] });
   const id = await connection();

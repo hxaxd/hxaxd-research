@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { vi } from 'vitest';
 
@@ -14,7 +14,9 @@ export async function createTestApp() {
   const root = path.resolve('.runtime/dev');
   await mkdir(root, { recursive: true });
   const dataDir = await mkdtemp(path.join(root, 'test-'));
-  vi.stubEnv('APP_DATA_DIR', dataDir);
+  const configFile = path.join(dataDir, 'config.jsonc');
+  await writeFile(configFile, JSON.stringify({ dataDir }));
+  vi.stubEnv('APP_CONFIG_FILE', configFile);
   const { config } = getAppRuntime();
   const workspace = await (await createWorkspace(request('/workspaces', 'POST', {
     id: randomUUID(), name: '测试工作区',

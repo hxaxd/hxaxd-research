@@ -5,9 +5,10 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { readAppConfig } from '../../server/config.mjs';
 
 const projectRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const texRoot = path.join(projectRoot, '.runtime/env/tex');
+const { texDir: texRoot } = readAppConfig(projectRoot);
 const texVersion = '0.17.0';
 const executable = path.join(texRoot, process.platform === 'win32' ? 'tectonic.exe' : 'tectonic');
 const fonts = path.join(texRoot, 'fonts');

@@ -62,7 +62,7 @@ TeX 按 `document-workbench` 处理工程、编译和展示。HTML 优先将论�
 
 读取 `response.json` 中的 `text`，保存为译稿。长工程按实际容量组织章节，保留术语与引用一致性；不能截断输入或忽略输出上限。
 
-重排阅读默认先完成 Markdown，再用 `<translation.command> render-markdown --input translated.md --output translated.html --title "论文标题" --target zh-CN` 生成 HTML，复用基础模板和本地数学渲染资源。模板支持目录、明暗外观、原文对照及打印。用户要求定制页面时，可读取并修改 `assets/paper.html`。
+重排阅读默认先完成 Markdown，再用 `<translation.command> render-markdown --input translated.md --output translated.html --title "论文标题" --target zh-CN` 生成 HTML，复用基础模板和本地数学渲染资源。模板支持目录、明暗外观、原文对照及打印。用户要求定制页面时，读取 `assets/paper.html` 并调整输出页面。长期修改默认模板时，编辑 `projectRoot/src/features/translation/skills/paper-translation/assets/paper.html`，再执行 `node <projectRoot>/src/server/install.mjs` 更新运行副本。
 
 ## PDF OCR 与块翻译
 

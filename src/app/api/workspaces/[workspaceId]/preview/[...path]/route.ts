@@ -9,6 +9,6 @@ export const dynamic = 'force-dynamic';
 export function GET(request: Request, context: { params: Promise<{ workspaceId: string; path: string[] }> }) {
   return handleApiRequest(request, async () => {
     const params = await context.params;
-    return serveWorkspaceFile(request, getAppRuntime().config.workspaceDir, idSchema.parse(params.workspaceId), params.path.join('/'));
+    return serveWorkspaceFile(request, getAppRuntime().config, idSchema.parse(params.workspaceId), params.path.join('/'));
   });
 }

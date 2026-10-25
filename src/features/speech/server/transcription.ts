@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { z } from 'zod';
+import type { AppConfig } from '@/server/config.mjs';
 
 import { ApiError, isApiError } from '@/shared/http/api-error';
 
@@ -70,6 +71,7 @@ async function readJson<T>(response: Response, schema: z.ZodType<T>) {
 async function mintSecret(
   target: Extract<SpeechTarget, { kind: 'custom' }>,
   signal: AbortSignal,
+  timeouts: AppConfig['timeouts'],
   key?: string,
 ) {
   const response = await send(
@@ -82,14 +84,14 @@ async function mintSecret(
         session: transcriptionSession(target.model),
       }),
     },
-    20_000,
+    timeouts.speechSecretMs,
     signal,
   );
   if (!response.ok) throw failure(response.status);
   return (await readJson(response, secretSchema)).value;
 }
 
-export async function realtimeAnswer(target: SpeechTarget, sdp: string, signal: AbortSignal) {
+export async function realtimeAnswer(target: SpeechTarget, sdp: string, signal: AbortSignal, timeouts: AppConfig['timeouts']) {
   if (target.kind === 'chatgpt') {
     const token = target.token;
     const secret = await send(
@@ -102,7 +104,7 @@ export async function realtimeAnswer(target: SpeechTarget, sdp: string, signal: 
           session: transcriptionSession(target.model),
         }),
       },
-      20_000,
+      timeouts.speechSecretMs,
       signal,
     );
     if (!secret.ok) throw failure(secret.status);
@@ -110,7 +112,7 @@ export async function realtimeAnswer(target: SpeechTarget, sdp: string, signal: 
     const answer = await send(
       'https://api.openai.com/v1/realtime/calls',
       { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/sdp' }, body: sdp },
-      30_000,
+      timeouts.speechRealtimeMs,
       signal,
     );
     if (!answer.ok) throw failure(answer.status);
@@ -122,7 +124,7 @@ export async function realtimeAnswer(target: SpeechTarget, sdp: string, signal: 
   const answer = await send(
     `${target.baseUrl}/realtime/calls`,
     { method: 'POST', headers: authorization(target.key), body: form },
-    30_000,
+    timeouts.speechRealtimeMs,
     signal,
   );
   if (!answer.ok) throw failure(answer.status);
@@ -134,6 +136,7 @@ export async function fileTranscript(
   audio: Blob,
   filename: string,
   signal: AbortSignal,
+  timeouts: AppConfig['timeouts'],
 ) {
   if (target.kind === 'chatgpt')
     throw new ApiError(409, 'speech_protocol_unsupported', 'ChatGPT 授权只用于实时转写，请配置文件转写服务');
@@ -143,7 +146,7 @@ export async function fileTranscript(
   const response = await send(
     `${target.baseUrl}/audio/transcriptions`,
     { method: 'POST', headers: authorization(target.key), body: form },
-    120_000,
+    timeouts.speechTranscriptionMs,
     signal,
   );
   if (!response.ok) throw failure(response.status);
@@ -170,7 +173,7 @@ function silentWav(seconds = 1) {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
-export async function testTarget(target: SpeechTarget, signal: AbortSignal) {
+export async function testTarget(target: SpeechTarget, signal: AbortSignal, timeouts: AppConfig['timeouts']) {
   if (target.kind === 'chatgpt') {
     const token = target.token;
     const response = await send(
@@ -183,7 +186,7 @@ export async function testTarget(target: SpeechTarget, signal: AbortSignal) {
           session: transcriptionSession(target.model),
         }),
       },
-      20_000,
+      timeouts.speechSecretMs,
       signal,
     );
     if (!response.ok) throw failure(response.status);
@@ -191,16 +194,16 @@ export async function testTarget(target: SpeechTarget, signal: AbortSignal) {
   }
   if (target.protocol === 'realtime') {
     try {
-      await mintSecret(target, signal, target.key);
+      await mintSecret(target, signal, timeouts, target.key);
       return '实时转写接口可用';
     } catch (error) {
       if (!isApiError(error) || error.code !== 'speech_endpoint_missing') throw error;
-      const reachable = await send(`${target.baseUrl}/realtime/calls`, { method: 'POST', body: '' }, 10_000, signal);
+      const reachable = await send(`${target.baseUrl}/realtime/calls`, { method: 'POST', body: '' }, timeouts.speechProbeMs, signal);
       if ([401, 403, 404, 429].includes(reachable.status) || reachable.status >= 500)
         throw failure(reachable.status);
       return '地址可访问；实时连接将在开始录音时建立';
     }
   }
-  await fileTranscript(target, silentWav(), 'silence.wav', signal);
+  await fileTranscript(target, silentWav(), 'silence.wav', signal, timeouts);
   return '文件转写接口可用';
 }

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createModelRuntime, modelCatalog, resolveModel, thinkingLevels } from './runtime.mjs';
+import { readAppConfig } from '../../server/config.mjs';
 import { z } from 'zod';
 
 const requestSchema = z.object({
@@ -33,7 +34,7 @@ async function main() {
     'pi-dir': { type: 'string' }, list: { type: 'boolean' },
     model: { type: 'string' }, input: { type: 'string' }, output: { type: 'string' },
   } });
-  const timeoutMs = 15000;
+  const timeoutMs = readAppConfig().timeouts.modelCatalogMs;
   if (!values['pi-dir']) throw new Error('请提供 --pi-dir');
   const controller = new AbortController();
   const cancel = () => controller.abort();

@@ -12,6 +12,6 @@ export function GET(request: Request, context: Context) {
     const app = getAppRuntime();
     const { workspaceId } = await validatedIds(context);
     getWorkspace(app.config.workspaceDir, workspaceId);
-    return serveWorkspaceFile(request, app.config.workspaceDir, workspaceId);
+    return serveWorkspaceFile(request, app.config, workspaceId);
   });
 }

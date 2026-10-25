@@ -16,6 +16,7 @@ export function GET(request: Request, context: Context) {
       getAppRuntime().sessions,
       workspaceId,
       conversationId,
+      getAppRuntime().config.events,
     );
   });
 }

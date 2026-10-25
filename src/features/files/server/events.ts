@@ -4,10 +4,11 @@ import { watch } from 'node:fs';
 import path from 'node:path';
 
 import { getWorkspace } from '@/features/workspaces/server/workspaces';
+import type { AppConfig } from '@/server/config.mjs';
 import type { ReaderController } from './reader';
 
-export function streamFileEvents(request: Request, root: string, workspaceId: string, reader: ReaderController) {
-  getWorkspace(root, workspaceId);
+export function streamFileEvents(request: Request, config: AppConfig, workspaceId: string, reader: ReaderController) {
+  getWorkspace(config.workspaceDir, workspaceId);
   const encoder = new TextEncoder();
   let cleanup = () => {};
   return new Response(
@@ -26,13 +27,13 @@ export function streamFileEvents(request: Request, root: string, workspaceId: st
           pending.clear();
         };
         const watcher = watch(
-          path.join(root, workspaceId),
+          path.join(config.workspaceDir, workspaceId),
           { recursive: true },
           (_event, filename) => {
             const name = filename?.toString().replaceAll('\\', '/') ?? '';
             if (name === '.pi' || name.startsWith('.pi/')) return;
             pending.add(name);
-            timer ??= setTimeout(send, 100);
+            timer ??= setTimeout(send, config.events.fileBatchMs);
           },
         );
         watcher.on('error', (error) => {
@@ -41,7 +42,7 @@ export function streamFileEvents(request: Request, root: string, workspaceId: st
         });
         const heartbeat = setInterval(
           () => controller.enqueue(encoder.encode(': keepalive\n\n')),
-          15000,
+          config.events.heartbeatMs,
         );
         const abort = () => {
           controller.close();

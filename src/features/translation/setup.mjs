@@ -1,12 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readAppConfig } from '../../server/config.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const resources = path.join(root, '.runtime/env/translation');
+const { translationDir: resources } = readAppConfig(root);
 const project = path.join(root, 'src/features/translation');
-const data = path.resolve(process.env.APP_DATA_DIR || path.join(root, '.runtime/data'));
 const environment = { ...process.env,
   UV_PROJECT_ENVIRONMENT: path.join(resources, 'python'),
   UV_CACHE_DIR: path.join(resources, 'cache'),
@@ -23,15 +23,6 @@ function execute(args, capture = false) {
 execute(['python', 'install', '3.12.10']);
 const interpreter = execute(['python', 'find', '--managed-python', '3.12.10'], true);
 execute(['sync', '--project', project, '--locked', '--python', interpreter]);
-const configPath = path.join(data, 'translation.json');
-const config = {
-  ocrRoot: path.join(root, '.runtime/env/ocr'),
-  modelsCommand: [process.execPath, path.join(root, 'src/features/models/invoke.mjs'), '--pi-dir', path.join(data, 'pi')],
-  texRoot: path.join(root, '.runtime/env/tex'),
-  katex: path.join(root, 'node_modules/katex/dist'),
-};
-await mkdir(data, { recursive: true });
-await writeFile(configPath, JSON.stringify(config, null, 2));
-console.log(JSON.stringify({ config: configPath,
+console.log(JSON.stringify({
   python: path.join(resources, 'python', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'),
 }));

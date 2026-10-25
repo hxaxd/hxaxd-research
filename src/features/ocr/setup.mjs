@@ -6,9 +6,10 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { readAppConfig } from '../../server/config.mjs';
 
 const projectRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const ocrRoot = path.join(projectRoot, '.runtime/env/ocr');
+const { ocrDir: ocrRoot, ocr } = readAppConfig(projectRoot);
 const ocrModel = 'PaddleOCR-VL-1.6';
 const uvVersion = '0.12.22';
 
@@ -30,7 +31,7 @@ function runLinux(distro, command, args, capture = false) {
 }
 
 const { values } = parseArgs({ options: {
-  distro: { type: 'string', default: 'Ubuntu' }, device: { type: 'string', default: 'gpu:0' },
+  distro: { type: 'string', default: ocr.distro }, device: { type: 'string', default: ocr.device },
 } });
 if (process.platform !== 'win32' && (process.platform !== 'linux' || process.arch !== 'x64'))
   throw new Error('OCR 安装当前支持 Linux x64 和 Windows WSL Linux x64');

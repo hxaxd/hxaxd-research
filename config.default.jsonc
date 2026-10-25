@@ -1,0 +1,100 @@
+// 平台默认配置，随源码纳入 Git。npm ci / npm install 首次安装时复制到 .runtime/config.jsonc。
+// 安装只创建缺失的运行配置，不覆盖已有配置；APP_CONFIG_FILE 可以指定复制目标。
+// 支持 // 与 /* */ 注释；保留标准 JSON 的引号和逗号规则，不支持尾随逗号。
+// 下方生效的值均为默认值；可删除不需要覆盖的字段，省略时使用默认值。
+// 未定义的字段会报错。修改后重启工作台；检查命令：node src/server/config.mjs。
+// 相对路径均相对于项目根目录。Windows 路径可写 C:/research 或 C:\\research。
+// 改路径不会搬迁已有文件。文件是否存在、目录是否可写由实际操作检查。
+{
+  // 非空路径字符串。保存工作区、Pi 配置/凭据和语音配置。
+  "dataDir": ".runtime/data",
+
+  // 非空路径字符串。TeX、OCR、翻译环境分别位于该目录的 tex/、ocr/、translation/。
+  "envDir": ".runtime/env",
+
+  // 非空路径字符串。上传文件的暂存目录。
+  "tempDir": ".runtime/temp",
+
+  // 非空路径字符串。安装时从 Git 源文件复制的技能、固定提示词和文档模板。
+  // 安装会更新此处的模板；长期修改应编辑 Git 中对应源文件，再执行安装资源准备。
+  "templateDir": ".runtime/templates",
+
+  // 以下均为正整数；没有预设的固定档位。
+  "files": {
+    // 单个上传文件上限，单位字节；默认 256 MiB。
+    "uploadFileBytes": 268435456,
+    // 一次导入的累计文件上限，单位字节；默认 1 GiB。
+    "uploadTotalBytes": 1073741824,
+    // 一次导入允许的文件数量。
+    "uploadFiles": 1000,
+    // 文本读取接口允许的完整文件上限，单位字节；默认 16 MiB。
+    "textBytes": 16777216,
+    // 一次文本预览读取的字节数；较大文本返回截断状态。
+    "previewBytes": 100000,
+    // Agent 按页读取 PDF 时允许的文件上限，单位字节；默认 256 MiB。
+    // 不限制浏览器直接打开 PDF 的总大小。
+    "pdfBytes": 268435456,
+    // Agent 一次 PDF 读取请求最多读取的页数，不限制 PDF 总页数。
+    "pdfPages": 20,
+    // Agent 从 PDF 每页提取的最大字符数。
+    "pdfPageCharacters": 60000,
+    // 录音文件转写接口的上传上限，单位字节；不是实时音频时长限制。
+    "audioBytes": 40000000
+  },
+
+  // 以下均为正整数，单位毫秒；不限制整个对话的运行时长。
+  "timeouts": {
+    // ChatGPT 可用模型列表及自定义服务的模型发现请求。
+    "modelCatalogMs": 15000,
+    // 获取 ChatGPT 实时转写的临时密钥。
+    "speechSecretMs": 20000,
+    // 建立实时转写连接的 SDP 协商请求。
+    "speechRealtimeMs": 30000,
+    // 上传录音并等待文件转写完成。
+    "speechTranscriptionMs": 120000,
+    // 语音连接测试。
+    "speechProbeMs": 10000
+  },
+
+  "agent": {
+    // true：启用 Pi 原生重试；false：关闭。是否可重试由 Pi 判断。
+    "retryEnabled": true,
+    // 非负整数；0 表示不重试，2 表示最多追加两次尝试。
+    "maxRetries": 2
+  },
+
+  // 以下均为正整数，单位毫秒。
+  "events": {
+    // 对话和文件事件流的保活间隔。
+    "heartbeatMs": 15000,
+    // 对话流更新的合并间隔。
+    "conversationBatchMs": 30,
+    // 文件系统变化通知的合并间隔。
+    "fileBatchMs": 100
+  },
+
+  "ocr": {
+    // 非空字符串；Windows 上已安装的 WSL 发行版名称，如 Ubuntu、Debian。
+    // Linux 原生运行时不使用此字段。安装命令 --distro 可以单次覆盖。
+    "distro": "Ubuntu",
+    // 全部取值形式："cpu" 或 "gpu:N"，N 为非负整数设备编号，如 gpu:0、gpu:1。
+    // 指定设备不代表已安装驱动或拥有该设备；安装命令 --device 可以单次覆盖。
+    "device": "gpu:0"
+  },
+
+  "translation": {
+    // 可选的非空字符串数组，第一个元素是程序，后续元素是独立参数，不是 shell 字符串。
+    // 省略时使用当前 Node + <项目根>/src/features/models/invoke.mjs
+    // + --pi-dir + <实际 dataDir>/pi，自动跟随项目位置和数据目录。
+    // 自定义程序需支持 --list、--model、--input、--output 约定，见配置说明。
+    // 相对程序路径由执行时的工作目录解析；自定义时建议使用绝对路径。
+    // "modelsCommand": ["/absolute/path/to/node", "/absolute/path/to/invoke.mjs", "--pi-dir", "/absolute/path/to/pi"]
+  }
+}
+
+// 其他入口（不是上面 JSON 对象的字段）：
+// APP_CONFIG_FILE：非空路径，指定要读取的配置文件；默认 .runtime/config.jsonc。
+// 监听地址与端口使用 Next 启动参数，未重复写入平台配置：
+// npm start -- --hostname 127.0.0.1 --port 8642
+// --hostname 是监听地址字符串，--port 是可用 TCP 端口；项目脚本默认如上。
+// 文字模型、语音及浏览器偏好见 src/features/settings/skills/workbench-guide/references/configuration.md。

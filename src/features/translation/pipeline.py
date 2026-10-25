@@ -9,9 +9,6 @@ import sys
 
 from documents import blocks, load, load_document, normalize, render_document, render_markdown, save, translations
 
-ROOT = Path(__file__).resolve().parent
-
-
 def run(command):
     subprocess.run([str(part) for part in command], check=True)
 
@@ -30,9 +27,9 @@ def ocr(config, source, output, title):
     return normalize(source, raw, output, title)
 
 
-def prepare(document, target, instructions="", glossary="", selected=None, context=None):
+def prepare(config, document, target, instructions="", glossary="", selected=None, context=None):
     selected = blocks(document) if selected is None else selected
-    system = (ROOT / "prompts/blocks.md").read_text(encoding="utf-8").replace("{{target}}", target)
+    system = (Path(config["templateDir"]) / "features/translation/prompts/blocks.md").read_text(encoding="utf-8").replace("{{target}}", target)
     payload = {"title": document["title"], "target": target, "instructions": instructions,
                "glossary": glossary, "blocks": [{key: block[key] for key in ["id", "label", "text", "preserve"]} for block in selected]}
     if context:
@@ -47,12 +44,12 @@ def estimate(request):
     return math.ceil(ascii_count / 3 + (len(text) - ascii_count) * 1.5)
 
 
-def plan_batches(document, target, instructions, glossary, model):
+def plan_batches(config, document, target, instructions, glossary, model):
     source = blocks(document)
     batches, current = [], []
     for block in source:
         proposed = current + [block]
-        request = prepare(document, target, instructions, glossary, proposed)
+        request = prepare(config, document, target, instructions, glossary, proposed)
         text = "".join(item["text"] for item in proposed)
         ascii_count = sum(char.isascii() for char in text)
         output_budget = math.ceil(ascii_count / 2 + (len(text) - ascii_count) * 2) + len(proposed) * 32 + 512
@@ -76,7 +73,7 @@ def translate(config, document, target, model_id, output, instructions, glossary
     model = next((item for item in models["models"] if item["id"] == model_id), None)
     if model is None:
         raise ValueError(f"所选模型不可用：{model_id}；供应商状态见 {catalog_file}")
-    batches = plan_batches(document, target, instructions, glossary, model)
+    batches = plan_batches(config, document, target, instructions, glossary, model)
     all_blocks = blocks(document)
     result = []
     save(output / "partial-translations.json", {"blocks": result})
@@ -84,7 +81,7 @@ def translate(config, document, target, model_id, output, instructions, glossary
         first = all_blocks.index(batch[0])
         last = first + len(batch)
         context = all_blocks[max(0, first - 2):first] + all_blocks[last:last + 2] if len(batches) > 1 else []
-        request = prepare(document, target, instructions, glossary, batch, context)
+        request = prepare(config, document, target, instructions, glossary, batch, context)
         if result:
             payload = json.loads(request["prompt"])
             payload["previousTranslations"] = result[-2:]
@@ -114,7 +111,7 @@ def translate(config, document, target, model_id, output, instructions, glossary
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--config", help="Explicit pipeline configuration; defaults to the application's configuration")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ["ocr", "pdf"]:
         command = commands.add_parser(name)
@@ -143,7 +140,15 @@ def main():
     command.add_argument("--title", default="")
     command.add_argument("--target", required=True)
     args = parser.parse_args()
-    config = load(args.config)
+    project = Path(__file__).resolve().parents[3]
+    resolved = subprocess.run(["node", str(project / "src/server/config.mjs")],
+                              check=True, capture_output=True, text=True, encoding="utf-8")
+    settings = json.loads(resolved.stdout)
+    config = {"ocrRoot": settings["ocrDir"], "texRoot": settings["texDir"],
+              "templateDir": settings["templateDir"], "katex": str(project / "node_modules/katex/dist"),
+              "modelsCommand": settings["translation"]["modelsCommand"]}
+    if args.config:
+        config.update(load(args.config))
     if args.command == "render-markdown":
         render_markdown(config, args.input, args.output, args.title, args.target)
         return
@@ -157,7 +162,7 @@ def main():
         instructions = Path(args.instructions).read_text(encoding="utf-8-sig") if args.instructions else ""
         glossary = Path(args.glossary).read_text(encoding="utf-8-sig") if args.glossary else ""
         if args.command == "prepare":
-            save(args.output, prepare(document, args.target, instructions, glossary))
+            save(args.output, prepare(config, document, args.target, instructions, glossary))
             return
         translated = translate(config, document, args.target, args.model, args.output, instructions, glossary)
         if args.command == "translate":

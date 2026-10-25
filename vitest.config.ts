@@ -14,7 +14,7 @@ export default defineConfig({
     coverage: {
       include: [
         'src/app/api/**/*.ts',
-        'src/server/**/*.ts',
+        'src/server/**/*.{ts,mjs}',
         'src/features/**/server/**/*.ts',
         'src/features/**/schema.ts',
         'src/features/translation/runtime.ts',
