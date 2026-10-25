@@ -27,7 +27,6 @@
 
 .composer-area {
   flex: none;
-  background: var(--paper);
   border-top: 0;
   padding: 10px 12px 12px;
 }

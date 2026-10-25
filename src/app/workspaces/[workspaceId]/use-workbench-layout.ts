@@ -123,7 +123,6 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
       onPointerDown(event: PointerEvent<HTMLDivElement>) {
         if (event.button !== 0) return;
         event.preventDefault();
-        event.currentTarget.focus();
         event.currentTarget.setPointerCapture(event.pointerId);
         const next = { side, width: widths[side], closing: false };
         dragRef.current = next;

@@ -31,15 +31,12 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
-  border-radius: 14px 14px 0 0;
-  background: var(--reader);
 }
 
 .document-markdown {
   flex: 1;
   padding: 28px clamp(20px, 5%, 60px);
   overflow: auto;
-  background: var(--paper);
 }
 
 .document-markdown img {
@@ -58,7 +55,6 @@
 .text-preview {
   overflow: auto;
   height: 100%;
-  background: var(--paper);
 }
 
 .text-preview pre {

@@ -8,10 +8,9 @@
   min-height: 0;
   height: calc(var(--viewport-height) - var(--header-height) - 12px);
   border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
-  border-radius: 22px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--reader);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--ink) 5%, transparent);
   transition: grid-template-columns 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -32,13 +31,12 @@
 .reader-panel {
   grid-area: reader;
   background: var(--paper);
-  border-radius: 16px;
   overflow: hidden;
 }
 
 .conversation-panel {
   grid-area: conversation;
-  background: var(--paper);
+  background: var(--sidebar);
 }
 
 .panel-heading {
@@ -116,7 +114,7 @@
   display: flex;
   height: calc(var(--viewport-height) - var(--header-height) - 12px);
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 12px;
   background: var(--paper);
 }
 
@@ -177,19 +175,25 @@
 .split-handle::before {
   content: '';
   position: absolute;
-  top: 12px;
-  bottom: 12px;
-  width: 2px;
-  left: calc(50% - 1px);
-  background: transparent;
-  border-radius: 2px;
-  transition: background-color 120ms;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  left: calc(50% - 0.5px);
+  background: var(--strong-line);
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
-.split-handle:hover::before,
 .split-handle:focus-visible::before,
 .is-resizing .split-handle:active::before {
   background: var(--accent);
+  opacity: 0.8;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .split-handle:hover::before {
+    opacity: 0.7;
+  }
 }
 
 .is-resizing {
@@ -214,7 +218,6 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--soft) 88%, transparent);
-  border-radius: 14px;
   color: var(--accent);
   font-size: 0.928571rem;
   font-weight: 600;

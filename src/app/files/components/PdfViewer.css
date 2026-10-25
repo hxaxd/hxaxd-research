@@ -105,10 +105,6 @@
   background: #fff;
 }
 
-.pdf-inverted .pdf-stage {
-  background: #16191e;
-}
-
 .pdf-inverted .pdfViewer .page {
   filter: invert(90%) hue-rotate(180deg);
 }
