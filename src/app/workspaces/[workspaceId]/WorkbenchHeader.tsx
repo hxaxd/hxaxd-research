@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { CreateWorkspaceDialog } from '@/features/workspaces/components/CreateWorkspaceDialog';
 import type { Workspace } from '@/features/workspaces/schema';
 import { requestJson } from '@/shared/http/request-json';
-import { InlineName } from '@/shared/ui/InlineName';
+import { EditableText } from '@/shared/ui/EntityControls';
 import { SettingsDialog } from '@/features/settings/components/SettingsDialog';
 
 export function WorkbenchHeader({
@@ -29,11 +29,11 @@ export function WorkbenchHeader({
       </span>
       <div className="workspace-navigation">
         {workspace ? (
-          <InlineName
+          <EditableText
             className="workspace-name"
-            name={workspace.name}
+            value={workspace.name}
             label="工作区名称"
-            onRename={async (name) => {
+            onSave={async (name) => {
               onRenamed!(
                 await requestJson<Workspace>(
                   `/api/workspaces/${workspace.id}`,
