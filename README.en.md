@@ -74,9 +74,17 @@ git clone https://github.com/hxaxd/hxaxd-research.git
 cd hxaxd-research
 ```
 
-| Windows (PowerShell) | macOS / Linux (Shell) |
-| --- | --- |
-| `powershell -ExecutionPolicy Bypass -File .\install.ps1` | `sh ./install.sh` |
+**Windows (PowerShell)**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+**macOS / Linux (Shell)**
+
+```sh
+sh ./install.sh
+```
 
 The script installs dependencies, prepares runtime configuration and templates, and builds the application. Start it with:
 
@@ -92,7 +100,7 @@ The default listening address is `127.0.0.1`, on port `8642`. Open **<http://127
 2. Open a document, select a passage or an image region, and ask a question. You can also tap the microphone and speak.
 3. Ask the assistant to turn the discussion into notes, a translation, or a draft, or take it further with experiment scripts. Review results, make changes, and keep working in the same workspace.
 
-<details open>
+<details>
 <summary><b>Find papers → Translate → Understand together</b></summary>
 
 > Find papers on small object detection, download them into the workspace, and open the one most worth reading first.

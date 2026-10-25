@@ -74,9 +74,17 @@ git clone https://github.com/hxaxd/hxaxd-research.git
 cd hxaxd-research
 ```
 
-| Windows（PowerShell） | macOS / Linux（Shell） |
-| --- | --- |
-| `powershell -ExecutionPolicy Bypass -File .\install.ps1` | `sh ./install.sh` |
+**Windows（PowerShell）**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+**macOS / Linux（Shell）**
+
+```sh
+sh ./install.sh
+```
 
 脚本安装依赖、初始化运行配置与模板，并完成生产构建。启动：
 
@@ -92,10 +100,10 @@ npm start -- --hostname 127.0.0.1 --port 8642
 2. 打开材料，选中一段话或框选图片，输入问题；也可以点麦克风说话。
 3. 让助手把讨论整理成笔记、译稿或写作草稿，或进一步编写实验脚本；在同一工作区查看结果、修改并继续推进。
 
-<details open>
+<details>
 <summary><b>找论文 → 翻译 → 一起读懂</b></summary>
 
-> 帮我找与这个小目标检测的论文，下载到工作区，挑一篇最值得先读的打开。
+> 帮我找与小目标检测相关的论文，下载到工作区，挑一篇最值得先读的打开。
 
 > 直接翻译这篇论文，然后我们从方法部分开始一节一节读。
 
