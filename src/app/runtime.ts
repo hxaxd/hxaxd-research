@@ -8,9 +8,11 @@ import { ReaderController } from '@/app/files/server/reader';
 import { Speech } from '@/app/speech/server/speech';
 
 import { readAppConfig } from './config.mjs';
+import { configureNetwork } from './network.mjs';
 
 function createRuntime() {
   const config = readAppConfig();
+  configureNetwork(config.network);
   for (const directory of [config.workspaceDir, config.piDir, config.stagingDir])
     mkdirSync(directory, { recursive: true });
   const models = new ModelProviders(config);

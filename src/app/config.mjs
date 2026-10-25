@@ -12,6 +12,10 @@ const configuration = z.strictObject({
   envDir: directory.default('.runtime/env'),
   tempDir: directory.default('.runtime/temp'),
   templateDir: directory.default('.runtime/templates'),
+  network: z.strictObject({
+    proxy: z.url({ protocol: /^https?$/ }).nullable().default(null),
+    noProxy: z.string().default('localhost,127.0.0.1,::1'),
+  }).prefault({}),
   files: z.strictObject({
     uploadFileBytes: positive.default(256 * 1024 * 1024),
     uploadTotalBytes: positive.default(1024 * 1024 * 1024),

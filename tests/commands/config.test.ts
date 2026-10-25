@@ -77,7 +77,7 @@ test('native configuration command resolves custom paths, preserves defaults and
     expect(resolved).toMatchObject({ dataDir: configuration.dataDir, stagingDir: configuration.tempDir,
       texDir: path.resolve(configuration.envDir, 'tex'), ocrDir: path.resolve(configuration.envDir, 'ocr'),
       translationDir: path.resolve(configuration.envDir, 'translation'), agent: { retryEnabled: true, maxRetries: 0 } });
-    for (const invalid of [{ files: { audioBytes: -1 } }, { envDr: 'misspelled' }, { ocr: { device: 'cuda:0' } }]) {
+    for (const invalid of [{ files: { audioBytes: -1 } }, { envDr: 'misspelled' }, { ocr: { device: 'cuda:0' } }, { network: { proxy: 'not-a-url' } }, { network: { proxy: 'socks5://localhost:1080' } }]) {
       await writeFile(file, JSON.stringify(invalid));
       await expect(execute(process.execPath, [command], { env })).rejects.toThrow();
       expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(invalid);

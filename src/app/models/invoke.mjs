@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createModelRuntime, modelCatalog, resolveModel, thinkingLevels } from './runtime.mjs';
 import { readAppConfig } from '../config.mjs';
+import { configureNetwork } from '../network.mjs';
 import { z } from 'zod';
 
 const requestSchema = z.object({
@@ -35,7 +36,9 @@ async function main() {
     'pi-dir': { type: 'string' }, list: { type: 'boolean' },
     model: { type: 'string' }, input: { type: 'string' }, output: { type: 'string' },
   } });
-  const timeoutMs = readAppConfig().timeouts.modelCatalogMs;
+  const config = readAppConfig();
+  configureNetwork(config.network);
+  const timeoutMs = config.timeouts.modelCatalogMs;
   if (!values['pi-dir']) throw new Error(t('errors.piDirectory'));
   const controller = new AbortController();
   const cancel = () => controller.abort();

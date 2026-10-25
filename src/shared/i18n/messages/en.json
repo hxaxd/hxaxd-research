@@ -74,6 +74,8 @@
     "callbackClient": "Authorization client ID mismatch",
     "callbackInvalid": "Invalid authorization callback",
     "tokenExchange": "Token exchange failed ({value0})",
+    "authorizationNetwork": "Cannot reach ChatGPT authorization service; check the workbench network and proxy configuration",
+    "authorizationRegion": "The current network or account region is not supported (unsupported_country_region_territory)",
     "identityToken": "Identity token mismatch",
     "accountMismatch": "Authorized account mismatch",
     "authorizationScope": "Authorization does not include model access",

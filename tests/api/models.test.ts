@@ -45,7 +45,7 @@ afterEach(async () => {
   await app.cleanup();
 });
 
-async function login(options: { invalidNonce?: boolean; catalogStatus?: number; tokenStatus?: number; scope?: string } = {}) {
+async function login(options: { invalidNonce?: boolean; catalogStatus?: number; tokenStatus?: number; tokenError?: string; networkFailure?: boolean; scope?: string } = {}) {
   const id = randomUUID();
   expect((await connect(request('/authorization', 'POST', { id }))).status).toBe(200);
   await expect.poll(async () => (await state()).authorization?.url).toBeTruthy();
@@ -68,7 +68,8 @@ async function login(options: { invalidNonce?: boolean; catalogStatus?: number; 
     const body = new URLSearchParams(init!.body as URLSearchParams);
     expect(body.get('redirect_uri')).toBe(authorization.searchParams.get('redirect_uri'));
     expect(createHash('sha256').update(body.get('code_verifier')!).digest('base64url')).toBe(authorization.searchParams.get('code_challenge'));
-    if (options.tokenStatus) return new Response(null, { status: options.tokenStatus });
+    if (options.networkFailure) throw new TypeError('fetch failed');
+    if (options.tokenStatus) return Response.json({ error: { code: options.tokenError } }, { status: options.tokenStatus });
     const identity = await new SignJWT({ nonce: options.invalidNonce ? 'wrong' : authorization.searchParams.get('nonce') })
       .setProtectedHeader({ alg: 'RS256', kid: publicKey.kid }).setIssuer('https://auth.openai.com')
       .setAudience('oaiapp_test').setSubject('test-account').setExpirationTime('1h').sign(signing.privateKey);
@@ -131,13 +132,19 @@ test('an existing ChatGPT connection can authorize again using its registered cl
 });
 
 test.each([
+  { options: { tokenStatus: 403, tokenError: 'unsupported_country_region_territory' }, reason: 'unsupported region' },
+  { options: { tokenStatus: 403, tokenError: 'access_denied' }, reason: 'upstream refusal' },
   { options: { tokenStatus: 503 }, reason: 'token exchange' },
+  { options: { networkFailure: true }, reason: 'network connection' },
   { options: { scope: 'openid profile email' }, reason: 'missing model scope' },
 ])('unsuccessful authorization ($reason) leaves the provider disconnected and allows retry', async ({ options }) => {
   const first = await login(options);
   await networkFetch(first.callback);
   await expect.poll(async () => (await state()).authorization.status).toBe('failed');
   expect((await state()).authorization.error).toBeTruthy();
+  if (options.tokenStatus) expect((await state()).authorization.error).toContain(String(options.tokenStatus));
+  if (options.tokenError) expect((await state()).authorization.error).toContain(options.tokenError);
+  if (options.networkFailure) expect((await state()).authorization.error).toContain('网络与代理');
   expect((await state()).providers).not.toContainEqual(expect.objectContaining({ id: 'openai' }));
   const retry = await login();
   await networkFetch(retry.callback);

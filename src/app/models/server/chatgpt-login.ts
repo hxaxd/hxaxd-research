@@ -29,6 +29,9 @@ const tokenSchema = z.object({
   expires_in: z.number().positive(),
   scope: z.string(),
 });
+const tokenErrorSchema = z.object({
+  error: z.union([z.string(), z.object({ code: z.string() })]),
+});
 
 export function chatgptLogin(authPath: string): OAuth["login"] {
   return async (interaction, options) => {
@@ -144,7 +147,7 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
         new URL("/api/accounts/oauth/token", issuer),
         {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             grant_type: "authorization_code",
             client_id: result.clientId,
@@ -155,11 +158,19 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
           }),
           signal: interaction.signal,
         },
-      );
-      if (!response.ok)
-        throw new Error(
-          t('errors.tokenExchange', {value0: response.status}),
-        );
+      ).catch(error => {
+        if (interaction.signal.aborted) throw error;
+        throw new Error(t('errors.authorizationNetwork'), { cause: error });
+      });
+      if (!response.ok) {
+        const failure = tokenErrorSchema.safeParse(await response.json().catch(() => null));
+        const code = failure.success
+          ? typeof failure.data.error === 'string' ? failure.data.error : failure.data.error.code
+          : '';
+        const reason = code === 'unsupported_country_region_territory'
+          ? t('errors.authorizationRegion') : code;
+        throw new Error(t('errors.tokenExchange', {value0: response.status}) + (reason ? ` · ${reason}` : ''));
+      }
       const token = tokenSchema.parse(await response.json());
       const { payload } = await jwtVerify(token.id_token, keys, {
         issuer,

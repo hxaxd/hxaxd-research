@@ -2,7 +2,7 @@
 // 安装只创建缺失的运行配置，不覆盖已有配置；APP_CONFIG_FILE 可以指定复制目标。
 // 支持 // 与 /* */ 注释；保留标准 JSON 的引号和逗号规则，不支持尾随逗号。
 // 下方生效的值均为默认值；可删除不需要覆盖的字段，省略时使用默认值。
-// 未定义的字段会报错。修改后重启工作台；检查命令：node src/server/config.mjs。
+// 未定义的字段会报错。修改后重启工作台；检查命令：node src/app/config.mjs。
 // 相对路径均相对于项目根目录。Windows 路径可写 C:/research 或 C:\\research。
 // 改路径不会搬迁已有文件。文件是否存在、目录是否可写由实际操作检查。
 {
@@ -18,6 +18,15 @@
   // 非空路径字符串。安装时从 Git 源文件复制的技能、固定提示词和文档模板。
   // 安装会更新此处的模板；长期修改应编辑 Git 中对应源文件，再执行安装资源准备。
   "templateDir": ".runtime/templates",
+
+  "network": {
+    // HTTP/HTTPS 代理 URL，例如 "http://127.0.0.1:7890"；使用实际代理端口。
+    // null：读取 HTTP_PROXY / HTTPS_PROXY（也支持小写），均未设置时直连。
+    // 浏览器和 Windows 系统代理不会自动应用到 Node 后台。
+    "proxy": null,
+    // 不走代理的主机，以逗号分隔；支持 *，并与环境中的 NO_PROXY 合并。
+    "noProxy": "localhost,127.0.0.1,::1"
+  },
 
   // 以下均为正整数；没有预设的固定档位。
   "files": {
@@ -84,7 +93,7 @@
 
   "translation": {
     // 可选的非空字符串数组，第一个元素是程序，后续元素是独立参数，不是 shell 字符串。
-    // 省略时使用当前 Node + <项目根>/src/features/models/invoke.mjs
+    // 省略时使用当前 Node + <项目根>/src/app/models/invoke.mjs
     // + --pi-dir + <实际 dataDir>/pi，自动跟随项目位置和数据目录。
     // 自定义程序需支持 --list、--model、--input、--output 约定，见配置说明。
     // 相对程序路径由执行时的工作目录解析；自定义时建议使用绝对路径。

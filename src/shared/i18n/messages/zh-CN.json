@@ -74,6 +74,8 @@
     "callbackClient": "授权客户端身份不匹配",
     "callbackInvalid": "授权回调无效",
     "tokenExchange": "令牌交换失败（{value0}）",
+    "authorizationNetwork": "无法连接 ChatGPT 授权服务，请检查工作台的网络与代理配置",
+    "authorizationRegion": "当前网络或账号所在地区不在服务支持范围内（unsupported_country_region_territory）",
     "identityToken": "身份令牌不匹配",
     "accountMismatch": "授权账号不匹配",
     "authorizationScope": "授权缺少模型调用权限",
