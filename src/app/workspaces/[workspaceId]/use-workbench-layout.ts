@@ -18,6 +18,7 @@ type Panel = { open: boolean; width: number };
 type Preferences = Partial<Record<Side, Panel>>;
 type Drag = { side: Side; width: number; closing: boolean };
 const minimum = { materials: 200, conversation: 300 };
+const railWidth = 44;
 const key = 'research-layout';
 
 function subscribe(listener: () => void) {
@@ -69,14 +70,14 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     Math.min(
       widths.conversation,
       available * 0.6,
-      available - (panels.materials.open ? widths.materials : 34) - 320,
+      available - (panels.materials.open ? widths.materials : railWidth) - 320,
     ),
   );
   if (drag) widths[drag.side] = drag.width;
 
   function maximum(side: Side) {
     const other = side === 'materials' ? 'conversation' : 'materials';
-    const room = available - (panels[other].open ? widths[other] : 34) - 320;
+    const room = available - (panels[other].open ? widths[other] : railWidth) - 320;
     return Math.max(
       minimum[side],
       Math.min(side === 'materials' ? 320 : available * 0.6, room),
@@ -184,8 +185,10 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     closing: drag?.closing ? drag.side : null,
     dragging: Boolean(drag),
     style: {
-      '--materials-width': `${panels.materials.open ? widths.materials : 34}px`,
-      '--conversation-width': `${panels.conversation.open ? widths.conversation : 34}px`,
+      '--materials-width': `${panels.materials.open ? widths.materials : railWidth}px`,
+      '--conversation-width': `${panels.conversation.open ? widths.conversation : railWidth}px`,
+      '--materials-content-width': `${widths.materials}px`,
+      '--conversation-content-width': `${widths.conversation}px`,
     } as CSSProperties,
   };
 }

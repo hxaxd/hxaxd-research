@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -99,6 +99,32 @@ test('directory creation checks paths and reports conflicts without replacing ex
   expect((await createDirectory(request('/files', 'POST', { path: '' }), context)).status).toBe(400);
   expect((await createDirectory(request('/files', 'POST', { path: '不存在/子目录' }), context)).status).toBe(404);
   expect((await createDirectory(request('/files', 'POST', { path: '目录' }), workspaceContext(randomUUID()))).status).toBe(404);
+});
+
+test('paper view finds PDFs in arbitrary folders and follows filesystem changes without registration', async () => {
+  const context = workspaceContext(app.workspace.id);
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  await mkdir(path.join(root, 'research', 'sources'), { recursive: true });
+  await mkdir(path.join(root, '.pi'));
+  await writeFile(path.join(root, 'first.pdf'), 'first');
+  await writeFile(path.join(root, 'research', 'sources', 'second.PDF'), 'second');
+  await writeFile(path.join(root, 'research', 'note.md'), '# Notes');
+  await writeFile(path.join(root, '.pi', 'internal.pdf'), 'internal');
+  await symlink(root, path.join(root, 'loop'), process.platform === 'win32' ? 'junction' : 'dir');
+  async function papers(query = '') {
+    const response = await files(request(`/files?view=papers${query}`), context);
+    expect(response.status).toBe(200);
+    return (await response.json()).map((entry: { path: string }) => entry.path);
+  }
+  expect(await papers()).toEqual(['first.pdf', 'research/sources/second.PDF']);
+  expect(await papers('&path=research')).toEqual(['research/sources/second.PDF']);
+  expect(await (await files(request('/files?path=research'), context)).json())
+    .toContainEqual(expect.objectContaining({ path: 'research/note.md', kind: 'file' }));
+  await rename(path.join(root, 'research'), path.join(root, 'renamed'));
+  await unlink(path.join(root, 'first.pdf'));
+  expect(await papers()).toEqual(['renamed/sources/second.PDF']);
+  expect((await files(request('/files?view=papers&path=..'), context)).status).toBe(400);
+  expect((await files(request('/files?view=unknown'), context)).status).toBe(400);
 });
 
 test('metadata writes reject duplicate identities and malformed requests without replacing the workspace', async () => {

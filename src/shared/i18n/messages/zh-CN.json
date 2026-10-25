@@ -117,6 +117,10 @@
   "files": {
     "importCancelled": "导入已取消",
     "materials": "材料",
+    "papers": "论文",
+    "files": "文件",
+    "noPapers": "暂无 PDF",
+    "openFolder": "打开 {name} 所在文件夹",
     "current": "当前材料",
     "pageSuffix": " · 第 {value0} 页",
     "sourceSuffix": " · 源码",

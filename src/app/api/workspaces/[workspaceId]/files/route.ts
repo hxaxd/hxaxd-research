@@ -2,7 +2,7 @@ import { text as t } from '@/app/i18n/server.mjs';
 import { mkdir, readdir, stat } from 'node:fs/promises';
 
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { createDirectorySchema, type FileEntry } from '@/app/files/schema';
+import { createDirectorySchema, fileListQuerySchema, type FileEntry } from '@/app/files/schema';
 import { resolveWorkspacePath, validateRelativePath } from '@/app/files/server/paths';
 import { getWorkspace } from '@/app/workspaces/workspaces';
 import { getAppRuntime } from '@/app/runtime';
@@ -17,29 +17,36 @@ export function GET(request: Request, context: Context) {
     const app = getAppRuntime();
     const { workspaceId } = await validatedIds(context);
     getWorkspace(app.config.workspaceDir, workspaceId);
-    const relative = new URL(request.url).searchParams.get('path') ?? '';
+    const { path: relative, view } = fileListQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
     const directory = await resolveWorkspacePath(app.config.workspaceDir, workspaceId, relative);
-    const entries = await readdir(directory, { withFileTypes: true });
     const result: FileEntry[] = [];
-    for (const entry of entries) {
-      const filePath = relative ? `${relative}/${entry.name}` : entry.name;
-      try {
-        const resolved = await resolveWorkspacePath(app.config.workspaceDir, workspaceId, filePath);
-        const info = await stat(resolved);
-        if (info.isFile() || info.isDirectory())
-          result.push({
-            path: filePath,
-            name: entry.name,
-            kind: info.isDirectory() ? 'directory' : 'file',
-            size: info.size,
-            modifiedAt: info.mtime.toISOString(),
-          });
-      } catch (error) {
-        const code = (error as { code?: string }).code;
-        if (code === 'invalid_path' || code === 'file_missing') continue;
-        throw error;
+    async function collect(directory: string, relative: string) {
+      const entries = await readdir(directory, { withFileTypes: true });
+      for (const entry of entries) {
+        if (view === 'papers' && (entry.isSymbolicLink() || entry.name === '.pi')) continue;
+        const filePath = relative ? `${relative}/${entry.name}` : entry.name;
+        try {
+          const resolved = await resolveWorkspacePath(app.config.workspaceDir, workspaceId, filePath);
+          const info = await stat(resolved);
+          if (view === 'papers' && info.isDirectory()) {
+            await collect(resolved, filePath);
+          } else if (view === 'papers' ? info.isFile() && /\.pdf$/i.test(entry.name) : info.isFile() || info.isDirectory()) {
+            result.push({
+              path: filePath,
+              name: entry.name,
+              kind: info.isDirectory() ? 'directory' : 'file',
+              size: info.size,
+              modifiedAt: info.mtime.toISOString(),
+            });
+          }
+        } catch (error) {
+          const code = (error as { code?: string }).code;
+          if (code === 'invalid_path' || code === 'file_missing') continue;
+          throw error;
+        }
       }
     }
+    await collect(directory, relative);
     return result.sort((a, b) =>
       a.kind === b.kind
         ? a.name.localeCompare(b.name, 'zh-CN', { numeric: true })

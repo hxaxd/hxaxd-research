@@ -31,6 +31,8 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
+  border-radius: 14px 14px 0 0;
+  background: var(--reader);
 }
 
 .document-markdown {

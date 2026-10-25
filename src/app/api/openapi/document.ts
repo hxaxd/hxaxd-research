@@ -19,6 +19,7 @@ import {
 } from '@/app/conversations/schema';
 import {
   fileEntrySchema,
+  fileListQuerySchema,
   createDirectorySchema,
   directoryResultSchema,
   importResultSchema,
@@ -65,6 +66,7 @@ export function generateOpenapi() {
     path: string;
     response: z.ZodType;
     body?: z.ZodType;
+    query?: z.ZodObject;
     status?: number;
   }[] = [
     { method: 'post', path: '/api/model-providers/connections', body: modelConnectionInputSchema, response: providerSettingsSchema },
@@ -95,6 +97,7 @@ export function generateOpenapi() {
       method: 'get',
       path: `${prefix}/files`,
       response: z.array(fileEntrySchema),
+      query: fileListQuerySchema,
     },
     {
       method: 'get',
@@ -216,9 +219,7 @@ export function generateOpenapi() {
       path: route.path,
       request: {
         params: z.object(params),
-        ...(route.path.endsWith('/files')
-          ? { query: z.object({ path: z.string().optional() }) }
-          : {}),
+        ...(route.query ? { query: route.query } : {}),
         ...(route.body
           ? {
               body: { content: { 'application/json': { schema: route.body } } },

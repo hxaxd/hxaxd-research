@@ -117,6 +117,10 @@
   "files": {
     "importCancelled": "Import cancelled",
     "materials": "Materials",
+    "papers": "Papers",
+    "files": "Files",
+    "noPapers": "No PDFs",
+    "openFolder": "Open folder containing {name}",
     "current": "Current document",
     "pageSuffix": " · Page {value0}",
     "sourceSuffix": " · Source",

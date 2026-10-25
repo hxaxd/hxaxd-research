@@ -243,53 +243,57 @@ export function Workbench({
         style={layout.style}
         className={`workbench${layout.dragging ? ' is-resizing' : ''}`}
       >
-        {!materialsOpen && (
-          <div className="collapsed-rail materials-rail">
-            <button
-              className="icon-button"
-              aria-label={t('workspaces.expandMaterials')}
-              title={t('workspaces.expandMaterials')}
-              onClick={() => layout.setOpen('materials', true)}
-            >
-              <PanelLeftOpen size={18} />
-            </button>
-          </div>
-        )}
         <aside
           className={`materials-panel${layout.closing === 'materials' ? ' collapse-pending' : ''}`}
           id="materials-panel"
           data-collapse-label={t('workspaces.collapseMaterials')}
           aria-label={t('files.materials')}
-          hidden={!materialsOpen}
+          data-open={materialsOpen}
         >
-          {fileError && (
-            <p className="error-message" role="alert">
-              {fileError}
-            </p>
-          )}
-          <div className="panel-heading">
-            <span>
-              {t('files.materials')}
-            </span>
-            <div className="toolbar">
-              <button
-                className="icon-button"
-                aria-label={t('workspaces.collapseMaterials')}
-                title={t('workspaces.collapseMaterials')}
-                onClick={() => layout.setOpen('materials', false)}
-              >
-                <PanelLeftClose size={16} />
-              </button>
-            </div>
+          <div className="collapsed-rail" inert={materialsOpen} aria-hidden={materialsOpen}>
+            <button
+              className="icon-button"
+              aria-label={t('workspaces.expandMaterials')}
+              title={t('workspaces.expandMaterials')}
+              aria-expanded={materialsOpen}
+              aria-controls="materials-panel"
+              onClick={() => layout.setOpen('materials', true)}
+            >
+              <PanelLeftOpen size={18} />
+            </button>
           </div>
-          <FileBrowser
-            workspaceId={workspaceId}
-            directory={directory}
-            onDirectoryChange={setDirectory}
-            revision={filesRevision}
-            activePath={file}
-            onOpenFile={openFile}
-          />
+          <div className="panel-content" inert={!materialsOpen} aria-hidden={!materialsOpen}>
+            {fileError && (
+              <p className="error-message" role="alert">
+                {fileError}
+              </p>
+            )}
+            <div className="panel-heading">
+              <span>
+                {t('files.materials')}
+              </span>
+              <div className="toolbar">
+                <button
+                  className="icon-button"
+                  aria-label={t('workspaces.collapseMaterials')}
+                  title={t('workspaces.collapseMaterials')}
+                  aria-expanded={materialsOpen}
+                  aria-controls="materials-panel"
+                  onClick={() => layout.setOpen('materials', false)}
+                >
+                  <PanelLeftClose size={16} />
+                </button>
+              </div>
+            </div>
+            <FileBrowser
+              workspaceId={workspaceId}
+              directory={directory}
+              onDirectoryChange={setDirectory}
+              revision={filesRevision}
+              activePath={file}
+              onOpenFile={openFile}
+            />
+          </div>
         </aside>
         <div
           className="split-handle materials-handle"
@@ -323,108 +327,112 @@ export function Workbench({
           className="split-handle conversation-handle"
           {...layout.separator('conversation')}
         />
-        {!conversationOpen && (
-          <div className="collapsed-rail conversation-rail">
-            <button
-              className="icon-button"
-              aria-label={t('workspaces.expandConversation')}
-              title={t('workspaces.expandConversation')}
-              onClick={() => layout.setOpen('conversation', true)}
-            >
-              <PanelRightOpen size={18} />
-            </button>
-          </div>
-        )}
         <section
           className={`conversation-panel${layout.closing === 'conversation' ? ' collapse-pending' : ''}`}
           id="conversation-panel"
           data-collapse-label={t('workspaces.collapseConversation')}
           aria-label={t('conversations.title')}
-          hidden={!conversationOpen}
+          data-open={conversationOpen}
         >
-          <div className="panel-heading conversation-heading">
-            <MessageSquare
-              size={16}
-              className="panel-icon"
-              aria-hidden="true"
-            />
-            {currentConversation && (
-              <EditableText
-                className="conversation-name"
-                value={currentConversation.name}
-                label={t('conversations.name')}
-                onSave={async (name) => {
-                  const renamed = await requestJson<Conversation>(
-                    `/api/workspaces/${workspaceId}/conversations/${currentConversation.id}`,
-                    { method: 'PATCH', body: JSON.stringify({ name }) },
-                  );
-                  setConversations((current) =>
-                    current.map((item) =>
-                      item.id === renamed.id ? renamed : item,
-                    ),
-                  );
-                }}
-              />
-            )}
-            {conversations.length ? (
-              <ChoiceSelect
-                label={t('conversations.switch')}
-                value={conversationId ?? ''}
-                items={conversations}
-                onChange={selectConversation}
-                iconOnly
-              />
-            ) : (
-              <span className="conversation-heading-label">{t('conversations.title')}</span>
-            )}
-            <CreateConversationDialog
-              workspaceId={workspaceId}
-              onCreated={createdConversation}
-            />
+          <div className="collapsed-rail" inert={conversationOpen} aria-hidden={conversationOpen}>
             <button
               className="icon-button"
-              aria-label={t('workspaces.collapseConversation')}
-              title={t('workspaces.collapseConversation')}
-              onClick={() => layout.setOpen('conversation', false)}
+              aria-label={t('workspaces.expandConversation')}
+              title={t('workspaces.expandConversation')}
+              aria-expanded={conversationOpen}
+              aria-controls="conversation-panel"
+              onClick={() => layout.setOpen('conversation', true)}
             >
-              <PanelRightClose size={16} />
+              <PanelRightOpen size={18} />
             </button>
           </div>
-          {modelError && (
-            <p className="error-message" role="alert">
-              {modelError}
-            </p>
-          )}
-          {modelIssues.map((issue) => (
-            <p className="error-message" role="alert" key={issue.provider}>
-              {issue.provider}：{issue.message}
-            </p>
-          ))}
-          {currentConversation ? (
-            <ConversationPanel
-              key={currentConversation.id}
-              workspaceId={workspaceId}
-              conversation={currentConversation}
-              models={models}
-              model={model}
-              onModelChange={selectModel}
-              reading={reading}
-              clips={clips[currentConversation.id] ?? []}
-              onClipsChange={value => setClips(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
-              quotes={quotes[currentConversation.id] ?? []}
-              onQuotesChange={value => setQuotes(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
-              onOpenQuote={quote => {
-                openDocument(quote);
-                if (layout.tablet) layout.setOpen('materials', false);
-              }}
-            />
-          ) : (
-            <div className="chat-empty">
-              <MessageSquare size={27} strokeWidth={1.3} />
-              <h3>{t('conversations.none')}</h3>
-              <ModelSettingsButton showLabel />
+          <div className="panel-content" inert={!conversationOpen} aria-hidden={!conversationOpen}>
+            <div className="panel-heading conversation-heading">
+              <button
+                className="icon-button"
+                aria-label={t('workspaces.collapseConversation')}
+                title={t('workspaces.collapseConversation')}
+                aria-expanded={conversationOpen}
+                aria-controls="conversation-panel"
+                onClick={() => layout.setOpen('conversation', false)}
+              >
+                <PanelRightClose size={16} />
+              </button>
+              <MessageSquare
+                size={16}
+                className="panel-icon"
+                aria-hidden="true"
+              />
+              {currentConversation && (
+                <EditableText
+                  className="conversation-name"
+                  value={currentConversation.name}
+                  label={t('conversations.name')}
+                  onSave={async (name) => {
+                    const renamed = await requestJson<Conversation>(
+                      `/api/workspaces/${workspaceId}/conversations/${currentConversation.id}`,
+                      { method: 'PATCH', body: JSON.stringify({ name }) },
+                    );
+                    setConversations((current) =>
+                      current.map((item) =>
+                        item.id === renamed.id ? renamed : item,
+                      ),
+                    );
+                  }}
+                />
+              )}
+              {conversations.length ? (
+                <ChoiceSelect
+                  label={t('conversations.switch')}
+                  value={conversationId ?? ''}
+                  items={conversations}
+                  onChange={selectConversation}
+                  iconOnly
+                />
+              ) : (
+                <span className="conversation-heading-label">{t('conversations.title')}</span>
+              )}
+              <CreateConversationDialog
+                workspaceId={workspaceId}
+                onCreated={createdConversation}
+              />
             </div>
-          )}
+            {modelError && (
+              <p className="error-message" role="alert">
+                {modelError}
+              </p>
+            )}
+            {modelIssues.map((issue) => (
+              <p className="error-message" role="alert" key={issue.provider}>
+                {issue.provider}：{issue.message}
+              </p>
+            ))}
+            {currentConversation ? (
+              <ConversationPanel
+                key={currentConversation.id}
+                workspaceId={workspaceId}
+                conversation={currentConversation}
+                models={models}
+                model={model}
+                onModelChange={selectModel}
+                reading={reading}
+                clips={clips[currentConversation.id] ?? []}
+                onClipsChange={value => setClips(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
+                quotes={quotes[currentConversation.id] ?? []}
+                onQuotesChange={value => setQuotes(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
+                onOpenQuote={quote => {
+                  openDocument(quote);
+                  if (layout.tablet) layout.setOpen('materials', false);
+                }}
+              />
+            ) : (
+              <div className="chat-empty">
+                <MessageSquare size={27} strokeWidth={1.3} />
+                <h3>{t('conversations.none')}</h3>
+                <ModelSettingsButton showLabel />
+              </div>
+            )}
+          </div>
         </section>
       </main>
     </div>

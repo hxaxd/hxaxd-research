@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
 const relativePathSchema = z.string().max(2048);
+export const fileListQuerySchema = z.object({
+  path: relativePathSchema.default(''),
+  view: z.enum(['files', 'papers']).default('files'),
+});
 export const createDirectorySchema = z.object({ path: relativePathSchema.min(1) });
 export const directoryResultSchema = z.object({ path: relativePathSchema });
 export const importMetadataSchema = z.object({
