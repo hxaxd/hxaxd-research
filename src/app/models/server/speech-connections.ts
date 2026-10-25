@@ -70,7 +70,7 @@ export class SpeechConnections {
   private read(): Stored {
     if (!existsSync(this.file))
       return {
-        activeId: 'chatgpt',
+        activeId: null,
         chatgptModel: defaultChatgptModel,
         connections: [],
       };
@@ -174,7 +174,7 @@ export class SpeechConnections {
     this.write({
       ...data,
       connections: data.connections.filter((item) => item.id !== id),
-      activeId: data.activeId === id ? 'chatgpt' : data.activeId,
+      activeId: data.activeId === id ? null : data.activeId,
     });
   }
 }

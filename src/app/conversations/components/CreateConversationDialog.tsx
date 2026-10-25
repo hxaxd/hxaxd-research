@@ -22,7 +22,6 @@ export function CreateConversationDialog({
   return (
     <CreateEntityDialog
       title={t('conversations.create')}
-      label={t('conversations.description')}
       initialName={t('conversations.untitled')}
       onSubmit={async (name) => {
         const id = submissionId.current ??= crypto.randomUUID();

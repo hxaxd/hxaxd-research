@@ -1,0 +1,18 @@
+.provider-trigger {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--muted);
+}
+
+.provider-trigger:hover {
+  color: var(--accent);
+  background: var(--soft);
+}
+
+@media (pointer: coarse) {
+  .provider-trigger {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

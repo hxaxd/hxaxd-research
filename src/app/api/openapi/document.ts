@@ -136,24 +136,24 @@ export function generateOpenapi() {
     },
     {
       method: 'delete',
-      path: '/api/model-providers/openai',
+      path: '/api/model-providers/{providerId}',
       response: providerSettingsSchema,
     },
     {
       method: 'post',
-      path: '/api/model-providers/openai/authorization',
+      path: '/api/model-providers/{providerId}/authorization',
       body: authorizationRequestSchema,
       response: authorizationSchema,
     },
     {
       method: 'delete',
-      path: '/api/model-providers/openai/authorization',
+      path: '/api/model-providers/{providerId}/authorization',
       body: authorizationRequestSchema,
       response: authorizationSchema,
     },
     {
       method: 'post',
-      path: '/api/model-providers/openai/authorization/callback',
+      path: '/api/model-providers/{providerId}/authorization/callback',
       body: authorizationCallbackSchema,
       response: authorizationSchema,
     },
@@ -208,7 +208,7 @@ export function generateOpenapi() {
     const params = Object.fromEntries(
       Array.from(route.path.matchAll(/\{(\w+)\}/g), (match) => [
         match[1],
-        route.path.startsWith('/api/model-providers/connections/') ? modelConnectionIdSchema : idSchema,
+        match[1] === 'providerId' || route.path.startsWith('/api/model-providers/connections/') ? modelConnectionIdSchema : idSchema,
       ]),
     );
     registry.registerPath({

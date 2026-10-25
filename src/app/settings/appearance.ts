@@ -148,6 +148,8 @@ export const paletteStyles = `@layer research-theme {${palettes
 
 // Self-contained so the same function can run before hydration and on preference changes.
 export function applyAppearance() {
+  document.documentElement.style.setProperty('--font-size', `${localStorage.getItem('research-font-size') ?? 14}px`);
+  document.documentElement.style.setProperty('--ui-scale', String(Number(localStorage.getItem('research-ui-scale') ?? 100) / 100));
   const mode = localStorage.getItem('research-theme') ?? 'system';
   document.documentElement.dataset.theme =
     mode === 'system'

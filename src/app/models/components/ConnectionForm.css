@@ -1,0 +1,127 @@
+.connection-model-heading,
+.connection-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connection-model-heading {
+  justify-content: space-between;
+}
+
+.connection-chosen-model strong {
+  font-size: 0.928571rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.connection-model-option small {
+  color: var(--muted);
+  font-size: 0.785714rem;
+  overflow-wrap: anywhere;
+}
+
+.connection-model-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connection-model-add input {
+  min-width: 0;
+}
+
+.connection-model-add .icon-button {
+  flex: none;
+}
+
+.connection-model-list {
+  display: grid;
+  max-height: 210px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 3px;
+}
+
+.connection-model-option {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 7px;
+  min-height: 44px;
+}
+
+.connection-model-option span {
+  overflow-wrap: anywhere;
+  font-size: 0.928571rem;
+}
+
+.connection-model-option:hover {
+  background: var(--hover);
+}
+
+.connection-model-option[aria-pressed='true'] {
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.connection-chosen-model {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.connection-chosen-model > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.connection-chosen-model summary,
+.connection-options summary {
+  cursor: pointer;
+  padding: 9px 0;
+  color: var(--muted);
+  font-size: 0.857143rem;
+  min-height: 40px;
+}
+
+.connection-model-parameters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.connection-model-parameters > label {
+  font-size: 0.857143rem;
+  color: var(--muted);
+}
+
+.connection-model-parameters input {
+  margin-top: 5px;
+}
+
+.connection-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 0.857143rem;
+}
+
+.connection-check input {
+  flex: none;
+}
+
+.connection-options > input,
+.connection-options > .choice-trigger {
+  margin: 5px 0 10px;
+  width: 100%;
+}
+
+.connection-form-actions {
+  margin-top: 8px;
+}

@@ -1,5 +1,8 @@
 'use client';
 
+import './WorkbenchHeader.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import * as Menu from '@radix-ui/react-dropdown-menu';
@@ -48,7 +51,7 @@ export function WorkbenchHeader({
         ) : (
           <span className="workspace-name">{t('app.name')}</span>
         )}
-        <Menu.Root modal={false}>
+        {workspaces.length > 0 && <Menu.Root modal={false}>
           <Menu.Trigger
             className="workspace-menu-trigger icon-button"
             aria-label={t('workspaces.switch')}
@@ -58,7 +61,7 @@ export function WorkbenchHeader({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content
-              className="workspace-menu"
+              className="workspace-menu menu-surface"
               align="end"
               sideOffset={10}
               collisionPadding={12}
@@ -67,7 +70,7 @@ export function WorkbenchHeader({
               <div className="workspace-menu-list">
                 {workspaces.map((item) => (
                   <Menu.Item
-                    className="workspace-menu-item"
+                    className="workspace-menu-item menu-item"
                     key={item.id}
                     onSelect={() => router.push(`/workspaces/${item.id}`)}
                   >
@@ -83,7 +86,7 @@ export function WorkbenchHeader({
               </div>
               <Menu.Separator className="menu-separator" />
               <Menu.Item
-                className="workspace-menu-item create-workspace-item"
+                className="workspace-menu-item menu-item create-workspace-item"
                 onSelect={() => setCreating(true)}
               >
                 <Plus size={16} aria-hidden="true" />
@@ -91,7 +94,7 @@ export function WorkbenchHeader({
               </Menu.Item>
             </Menu.Content>
           </Menu.Portal>
-        </Menu.Root>
+        </Menu.Root>}
       </div>
       <div className="header-spacer" />
       <SettingsDialog />

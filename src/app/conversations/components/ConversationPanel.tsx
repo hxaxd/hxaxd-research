@@ -1,5 +1,9 @@
 'use client';
 
+import '../conversations.css';
+import './ConversationPanel.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import { useState, type Dispatch, type SetStateAction } from 'react';
@@ -66,7 +70,6 @@ export function ConversationPanel({
         >
           <span className={`status-dot${connected ? ' connected' : ''}`} />
         </span>
-        <span className="model-label">{t('models.model')}</span>
         <ChoiceSelect
           label={t('models.select')}
           value={model}

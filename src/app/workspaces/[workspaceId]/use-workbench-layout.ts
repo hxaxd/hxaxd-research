@@ -21,14 +21,11 @@ const minimum = { materials: 200, conversation: 300 };
 const key = 'research-layout';
 
 function subscribe(listener: () => void) {
-  const media = window.matchMedia('(max-width: 1180px)');
   window.addEventListener('research-layout', listener);
   window.addEventListener('storage', listener);
-  media.addEventListener('change', listener);
   return () => {
     window.removeEventListener('research-layout', listener);
     window.removeEventListener('storage', listener);
-    media.removeEventListener('change', listener);
   };
 }
 
@@ -39,11 +36,8 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     () => localStorage.getItem(key),
     () => null,
   );
-  const tablet = useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia('(max-width: 1180px)').matches,
-    () => false,
-  );
+  const [available, setAvailable] = useState(1400);
+  const tablet = available <= 1180;
   const preferences: Preferences = saved ? JSON.parse(saved) : {};
   const panels = {
     materials: preferences.materials ?? { open: !tablet, width: 248 },
@@ -52,7 +46,6 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
       width: tablet ? 340 : 384,
     },
   };
-  const [available, setAvailable] = useState(1400);
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
   useEffect(() => {
@@ -137,11 +130,13 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
       },
       onPointerMove(event: PointerEvent<HTMLDivElement>) {
         if (dragRef.current?.side !== side) return;
-        const rect = ref.current!.getBoundingClientRect();
+        const element = ref.current!;
+        const rect = element.getBoundingClientRect();
+        const scale = rect.width / element.offsetWidth;
         const requested =
           side === 'materials'
-            ? event.clientX - rect.left
-            : rect.right - event.clientX;
+            ? (event.clientX - rect.left) / scale
+            : (rect.right - event.clientX) / scale;
         const next = {
           side,
           width: Math.max(minimum[side], Math.min(maximum(side), requested)),

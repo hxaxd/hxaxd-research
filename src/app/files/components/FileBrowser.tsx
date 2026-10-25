@@ -1,5 +1,8 @@
 'use client';
 
+import './FileBrowser.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import {
@@ -60,33 +63,28 @@ export function FileBrowser({
   };
   return (
     <section className="file-browser">
-      <div className="section-heading">
-        <span>
-          {t('files.files')} <small>{files?.length ?? '—'}</small>
-        </span>
-        <div className="toolbar">
-          <CreateEntityDialog title={t('files.createFolder')} label={t('files.folderName')} onSubmit={async name => {
-            const result = await requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
-              method: 'POST', body: JSON.stringify({ path: directory ? `${directory}/${name}` : name }),
-            });
-            navigate(result.path);
-          }}>
-            <button className="icon-button" aria-label={t('files.createFolder')} title={t('files.createFolder')}><FolderPlus size={15} /></button>
-          </CreateEntityDialog>
-          <ImportFilesDialog
-            workspaceId={workspaceId}
-            target={directory}
-            onImported={() => setRefresh((value) => value + 1)}
-          />
-          <button
-            className="icon-button"
-            aria-label={t('files.refresh')}
-            title={t('files.refresh')}
-            onClick={() => setRefresh((value) => value + 1)}
-          >
-            <RefreshCw size={15} />
-          </button>
-        </div>
+      <div className="file-actions">
+        <CreateEntityDialog title={t('files.createFolder')} onSubmit={async name => {
+          const result = await requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
+            method: 'POST', body: JSON.stringify({ path: directory ? `${directory}/${name}` : name }),
+          });
+          navigate(result.path);
+        }}>
+          <button className="icon-button" aria-label={t('files.createFolder')} title={t('files.createFolder')}><FolderPlus size={15} /></button>
+        </CreateEntityDialog>
+        <ImportFilesDialog
+          workspaceId={workspaceId}
+          target={directory}
+          onImported={() => setRefresh((value) => value + 1)}
+        />
+        <button
+          className="icon-button"
+          aria-label={t('files.refresh')}
+          title={t('files.refresh')}
+          onClick={() => setRefresh((value) => value + 1)}
+        >
+          <RefreshCw size={15} />
+        </button>
       </div>
       {directory !== '' && (
         <button
@@ -109,11 +107,10 @@ export function FileBrowser({
           {error}
         </p>
       )}
-      {!error && files === null && <p className="empty-small">{t('files.loading')}</p>}
+      {!error && files === null && <p className="empty-small" role="status">{t('common.loading')}</p>}
       {!error && files?.length === 0 && (
         <div className="empty-small">
           {t('files.empty')}
-          <br />
         </div>
       )}
       <div>

@@ -7,7 +7,6 @@ export default function ErrorPage({ reset }: { reset: () => void }) {
   return (
     <div className="loading-screen">
       <h2>{t('workspaces.unavailable')}</h2>
-      <p>{t('workspaces.errorDescription')}</p>
       <button className="button primary" onClick={reset}>
         {t('common.reopen')}
       </button>

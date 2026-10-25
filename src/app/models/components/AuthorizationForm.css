@@ -1,0 +1,51 @@
+.provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.provider-actions .button {
+  font-size: 0.857143rem;
+  min-height: 36px;
+}
+
+.provider-authorization {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 0.928571rem;
+}
+
+.provider-manual {
+  margin-top: 18px;
+  font-size: 0.857143rem;
+}
+
+.provider-manual summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.provider-manual .button {
+  margin-top: 10px;
+}
+
+@media (pointer: coarse) {
+  .provider-actions .button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.authorization-capabilities {
+  color: var(--muted);
+  font-size: 0.928571rem;
+  padding-block: 8px;
+}
+
+.authorization-capabilities ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--ink);
+}

@@ -41,6 +41,8 @@ function snapshot() {
     resolvedMode: document.documentElement.dataset.theme,
     light: readTheme('light'),
     dark: readTheme('dark'),
+    fontSize: Number(localStorage.getItem('research-font-size') ?? 14),
+    interfaceScale: Number(localStorage.getItem('research-ui-scale') ?? 100),
   });
 }
 
@@ -49,6 +51,8 @@ const initialSnapshot = JSON.stringify({
   resolvedMode: 'light',
   light: { palette: 'paper', custom: false, css: '' },
   dark: { palette: 'graphite', custom: false, css: '' },
+  fontSize: 14,
+  interfaceScale: 100,
 });
 
 export function useAppearance() {
@@ -62,6 +66,8 @@ export function useAppearance() {
     resolvedMode: ColorMode;
     light: ThemeSettings;
     dark: ThemeSettings;
+    fontSize: number;
+    interfaceScale: number;
   };
   function notify() {
     applyAppearance();
@@ -81,5 +87,13 @@ export function useAppearance() {
       localStorage.setItem(`${prefix}-custom-css`, changes.css);
     notify();
   }
-  return { ...appearance, setMode, setTheme };
+  function setFontSize(value: number) {
+    localStorage.setItem('research-font-size', String(value));
+    notify();
+  }
+  function setInterfaceScale(value: number) {
+    localStorage.setItem('research-ui-scale', String(value));
+    notify();
+  }
+  return { ...appearance, setMode, setTheme, setFontSize, setInterfaceScale };
 }

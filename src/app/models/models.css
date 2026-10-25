@@ -1,0 +1,27 @@
+.connection-form-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.connection-form {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--ground);
+  min-width: 0;
+}
+
+.connection-form .field-label {
+  margin: 3px 0 0;
+}
+
+@media (pointer: coarse) {
+  .connection-form .icon-button,
+  .connection-form .button,
+  .connection-form .text-action {
+    min-height: 44px;
+  }
+}

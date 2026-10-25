@@ -1,0 +1,148 @@
+.model-settings {
+  display: grid;
+  gap: 26px;
+}
+
+.model-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.connection-section-heading,
+.connection-row-main,
+.connection-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connection-section-heading {
+  justify-content: space-between;
+}
+
+.connection-section-heading h3 {
+  font-size: 1.071429rem;
+  font-weight: 600;
+}
+
+.connection-row {
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.connection-row.is-active {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+.connection-row-title {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.connection-row-title strong {
+  font-size: 0.928571rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.connection-row-title small,
+.connection-model-names {
+  color: var(--muted);
+  font-size: 0.785714rem;
+  overflow-wrap: anywhere;
+}
+
+.connection-row-actions {
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.connection-row-actions .icon-button,
+.connection-row-actions .text-action {
+  min-height: 40px;
+}
+
+.connection-row-actions .icon-button {
+  min-width: 40px;
+}
+
+.connection-model-names {
+  margin-top: 6px;
+  line-height: 1.7;
+  max-height: 3.4em;
+  overflow: hidden;
+}
+
+.connection-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.connection-inline-form .field-label {
+  grid-column: 1 / -1;
+}
+
+.connection-result {
+  color: var(--accent);
+  font-size: 0.857143rem;
+  margin-top: 7px;
+}
+
+.connection-row .error-message {
+  margin-top: 8px;
+}
+
+@media (pointer: coarse) {
+  .connection-row .icon-button,
+  .connection-row .text-action,
+  .connection-section-heading .text-action {
+    min-height: 44px;
+  }
+}
+
+.connection-methods {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.connection-methods .button {
+  flex: 1;
+  min-height: 44px;
+}
+
+.connection-empty {
+  color: var(--muted);
+  padding-block: 12px;
+  font-size: 0.928571rem;
+}
+
+.connection-source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.connection-source input {
+  flex: none;
+}
+
+.connection-row-main {
+  flex-wrap: wrap;
+}

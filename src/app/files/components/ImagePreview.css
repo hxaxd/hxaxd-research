@@ -1,0 +1,52 @@
+.image-preview {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+}
+
+.image-preview img {
+  max-width: 100%;
+  height: auto;
+  box-shadow: var(--shadow);
+}
+
+.image-reader {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-reference-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.image-reference-toolbar button {
+  min-height: 44px;
+}
+
+.image-reference-toolbar > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.857143rem;
+}
+
+.image-selection-surface {
+  position: relative;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.image-selection-overlay {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: crosshair;
+}

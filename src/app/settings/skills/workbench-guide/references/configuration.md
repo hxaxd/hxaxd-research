@@ -89,6 +89,8 @@ Pi 把缺失的 `models.json` 视为没有自定义模型。检查修改结果�
 
 | 配置 | 全部取值与默认值 | 保存位置 |
 | --- | --- | --- |
+| 界面字体大小 | 12..22 px，步长 1，默认 14；常规设置中调整 | `research-font-size` |
+| 界面缩放 | 75..150%，步长 5，默认 100%；常规设置中调整 | `research-ui-scale` |
 | 外观模式 | `system`、`light`、`dark`；默认 `system` | `research-theme` |
 | 浅色预设 | `paper`、`snow`、`latte`；默认 `paper` | `research-light-palette` |
 | 暗色预设 | `graphite`、`nord`、`mocha`；默认 `graphite` | `research-palette` |

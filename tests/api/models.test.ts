@@ -9,15 +9,16 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { GET as settings } from '@/app/api/model-providers/route';
 import { GET as catalog } from '@/app/api/models/route';
-import { POST as connect, DELETE as cancel } from '@/app/api/model-providers/openai/authorization/route';
-import { POST as submit } from '@/app/api/model-providers/openai/authorization/callback/route';
-import { DELETE as disconnect } from '@/app/api/model-providers/openai/route';
+import { POST as connectRoute, DELETE as cancelRoute } from '@/app/api/model-providers/[providerId]/authorization/route';
+import { POST as submitRoute } from '@/app/api/model-providers/[providerId]/authorization/callback/route';
+import { DELETE as disconnectRoute } from '@/app/api/model-providers/[providerId]/route';
 import { POST as realtime } from '@/app/api/speech/realtime/route';
 import { POST as testSpeech } from '@/app/api/speech/test/route';
 import { POST as transcribe } from '@/app/api/speech/transcriptions/route';
 import { POST as createConnection } from '@/app/api/model-providers/connections/route';
 import { PATCH as updateConnection, DELETE as removeConnection } from '@/app/api/model-providers/connections/[id]/route';
 import { POST as discover } from '@/app/api/model-providers/discover/route';
+import { GET as speechSettings, PATCH as selectSpeech } from '@/app/api/speech/route';
 import { POST as createSpeech } from '@/app/api/speech/connections/route';
 import { POST as createConversation } from '@/app/api/workspaces/[workspaceId]/conversations/route';
 import { POST as send } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/messages/route';
@@ -32,6 +33,11 @@ const signing = await generateKeyPair('RS256');
 const publicKey = { ...(await exportJWK(signing.publicKey)), kid: 'test-key' };
 let app: Awaited<ReturnType<typeof createTestApp>>;
 beforeEach(async () => { app = await createTestApp(); });
+const providerContext = (providerId = 'openai') => ({ params: Promise.resolve({ providerId }) });
+const connect = (request: Request) => connectRoute(request, providerContext());
+const cancel = (request: Request) => cancelRoute(request, providerContext());
+const submit = (request: Request) => submitRoute(request, providerContext());
+const disconnect = (request: Request) => disconnectRoute(request, providerContext());
 async function state() { return (await settings(request('/model-providers'))).json(); }
 afterEach(async () => {
   const { authorization } = await state();
@@ -80,6 +86,10 @@ test.each(['browser', 'manual'])('ChatGPT %s callback connects, survives reload 
   if (method === 'browser') expect((await networkFetch(callback)).status).toBe(200);
   else expect((await submit(request('/callback', 'POST', { id, url: String(callback) }))).status).toBe(200);
   await expect.poll(async () => (await state()).authorization.status).toBe('connected');
+  expect((await state()).authorization.providerId).toBe('openai');
+  expect(await (await speechSettings(request('/speech'))).json()).toMatchObject({
+    activeId: 'chatgpt', chatgpt: { connected: true },
+  });
   expect(JSON.stringify(await state())).not.toContain('private-');
   const models = await (await catalog(request('/models'))).json();
   expect(models.models).toContainEqual(expect.objectContaining({ id: 'openai/gpt-6-luna', name: '账号可用模型' }));
@@ -99,7 +109,10 @@ test.each(['browser', 'manual'])('ChatGPT %s callback connects, survives reload 
   restartApp();
   expect((await state()).providers).toContainEqual(expect.objectContaining({ id: 'openai', subscription: true, connected: true }));
   await disconnect(request('/openai', 'DELETE'));
-  expect((await state()).providers).toContainEqual(expect.objectContaining({ id: 'openai', subscription: false }));
+  expect(await (await speechSettings(request('/speech'))).json()).toMatchObject({
+    activeId: null, chatgpt: { connected: false },
+  });
+  expect((await state()).providers).not.toContainEqual(expect.objectContaining({ id: 'openai' }));
 });
 
 test('an existing ChatGPT connection can authorize again using its registered client', async () => {
@@ -125,7 +138,7 @@ test.each([
   await networkFetch(first.callback);
   await expect.poll(async () => (await state()).authorization.status).toBe('failed');
   expect((await state()).authorization.error).toBeTruthy();
-  expect((await state()).providers).toContainEqual(expect.objectContaining({ id: 'openai', connected: false }));
+  expect((await state()).providers).not.toContainEqual(expect.objectContaining({ id: 'openai' }));
   const retry = await login();
   await networkFetch(retry.callback);
   await expect.poll(async () => (await state()).authorization.status).toBe('connected');
@@ -138,7 +151,7 @@ test('denying ChatGPT authorization reports the refusal and allows a new attempt
   expect((await networkFetch(first.callback)).status).toBe(400);
   await expect.poll(async () => (await state()).authorization.status).toBe('failed');
   expect((await state()).authorization.error).toContain('access_denied');
-  expect((await state()).providers).toContainEqual(expect.objectContaining({ id: 'openai', connected: false }));
+  expect((await state()).providers).not.toContainEqual(expect.objectContaining({ id: 'openai' }));
   const retry = await login();
   await networkFetch(retry.callback);
   await expect.poll(async () => (await state()).authorization.status).toBe('connected');
@@ -154,7 +167,7 @@ test('competing authorization is rejected, cancellation permits retry, and inval
   expect((await networkFetch(invalid.callback)).status).toBe(200);
   await expect.poll(async () => (await state()).authorization.status).toBe('failed');
   expect((await state()).authorization.error).toContain('身份令牌');
-  expect((await state()).providers).toContainEqual(expect.objectContaining({ id: 'openai', subscription: false }));
+  expect((await state()).providers).not.toContainEqual(expect.objectContaining({ id: 'openai' }));
 });
 
 test('a failed account catalog leaves other configured providers usable', async () => {
@@ -334,4 +347,34 @@ test('invalid connection inputs and failed upstream discovery do not overwrite m
     expect(JSON.stringify(await response.json())).not.toContain('private-key');
   }
   expect(await readFile(file, 'utf8')).toBe(original);
+});
+
+test('an empty installation lists available authorization methods without registering connections', async () => {
+  expect(await state()).toMatchObject({
+    providers: [], connections: [], authorization: null,
+    authorizationProviders: expect.arrayContaining([{ id: 'openai', name: 'ChatGPT', capabilities: ['text', 'speech'] }]),
+  });
+  expect(await (await speechSettings(request('/speech'))).json()).toMatchObject({
+    activeId: null, connections: [], chatgpt: { connected: false },
+  });
+  expect((await selectSpeech(request('/speech', 'PATCH', { activeId: 'chatgpt' }))).status).toBe(409);
+  expect((await connectRoute(request('/authorization', 'POST', { id: randomUUID() }), providerContext('unknown'))).status).toBe(404);
+  expect((await state()).authorization).toBeNull();
+});
+
+test('adding and removing account authorization preserves a selected API speech connection', async () => {
+  const created = await createSpeech(request('/speech/connections', 'POST', {
+    name: 'API speech', baseUrl: 'https://api.example.com/v1', protocol: 'file', model: 'transcribe',
+  }));
+  const { activeId } = await created.json();
+  const { callback } = await login();
+  await networkFetch(callback);
+  await expect.poll(async () => (await state()).authorization.status).toBe('connected');
+  expect(await (await speechSettings(request('/speech'))).json()).toMatchObject({
+    activeId, chatgpt: { connected: true },
+  });
+  await disconnect(request('/openai', 'DELETE'));
+  expect(await (await speechSettings(request('/speech'))).json()).toMatchObject({
+    activeId, chatgpt: { connected: false },
+  });
 });

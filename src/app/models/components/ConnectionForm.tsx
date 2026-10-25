@@ -1,5 +1,9 @@
 'use client';
 
+import '../models.css';
+import './ConnectionForm.css';
+
+
 import { useFormatter, useTranslations } from 'use-intl';
 
 import { useId, useState } from 'react';
@@ -101,7 +105,8 @@ export function ConnectionForm(props: Props) {
       {available.length > 0 && <div className="connection-model-list" role="group" aria-label={t('models.available')}>
         {available.map(item => <button type="button" key={item.id} className="connection-model-option"
           aria-pressed={props.kind === 'text' ? models.some(model => model.id === item.id) : model === item.id} onClick={() => select(item)}>
-          <span>{item.name}</span><small>{item.recognized ? t('models.summary', {value0: item.contextWindow === undefined ? '—' : format.number(item.contextWindow), value1: item.vision ? t('models.imageSuffix') : '', value2: item.reasoning ? t('models.reasoningSuffix') : ''}) : item.id}</small>
+          <span>{item.name}</span>
+          {item.recognized ? <small>{t('models.summary', {value0: item.contextWindow === undefined ? '—' : format.number(item.contextWindow), value1: item.vision ? t('models.imageSuffix') : '', value2: item.reasoning ? t('models.reasoningSuffix') : ''})}</small> : item.name !== item.id && <small>{item.id}</small>}
         </button>)}
       </div>}
       {props.kind === 'text' && models.map(item => <div className="connection-chosen-model" key={item.id}>
@@ -127,7 +132,7 @@ export function ConnectionForm(props: Props) {
       </div>)}
       <details className="connection-options"><summary>{t('models.connectionOptions')}</summary>
         <label className="field-label" htmlFor={`${prefix}-name`}>{t('common.name')}</label>
-        <input id={`${prefix}-name`} value={name} maxLength={160} placeholder={t('models.nameDefault')} onChange={event => setName(event.target.value)} />
+        <input id={`${prefix}-name`} value={name} maxLength={160} onChange={event => setName(event.target.value)} />
         {props.kind === 'text' && <><label className="field-label">{t('models.api')}</label><ChoiceSelect label={t('models.api')} value={api} items={apis} onChange={setApi} /></>}
         {props.connection && <label className="connection-check"><input type="checkbox" checked={clearKey} onChange={event => setClearKey(event.target.checked)} />{t('models.clearKey')}</label>}
       </details>

@@ -26,7 +26,6 @@ export function CreateWorkspaceDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={t('workspaces.create')}
-      label={t('workspaces.description')}
       onSubmit={async (name) => {
         const id = submissionId.current ??= crypto.randomUUID();
         const workspace = await requestJson<Workspace>('/api/workspaces', {

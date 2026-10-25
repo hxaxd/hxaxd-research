@@ -1,5 +1,9 @@
 'use client';
 
+import '../conversations.css';
+import './ConversationComposer.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import {
@@ -172,7 +176,6 @@ export function ConversationComposer({
           </button>
         </div>
       )}
-      {!model && <p className="model-notice">{t('models.noneConfigured')}</p>}
       {!!quotes.length && <div className="composer-quotes" aria-label={t('conversations.pendingQuotes')}>
         {quotes.map((quote, index) => <div className="quote-card" key={index}>
           <div><small>{quote.path.split('/').pop()}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}</small>
@@ -196,7 +199,7 @@ export function ConversationComposer({
         <textarea
           ref={textarea}
           aria-label={t('conversations.message')}
-          placeholder={reading ? t('conversations.placeholder') : t('conversations.placeholder')}
+          placeholder={t('conversations.message')}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -208,23 +211,13 @@ export function ConversationComposer({
           maxLength={100000}
         />
         <div className="composer-bottom">
-          {voice.pending ? (
+          {voice.pending && (
             <span
               className="composer-voice-preview"
               title={voice.pending}
               aria-live="polite"
             >
               {voice.pending}
-            </span>
-          ) : (
-            <span className="composer-keyboard-hint">
-              {connected ? (
-                <>
-                  <kbd>Enter</kbd> {t('common.send')} <span className="composer-hint">{t('conversations.newline')}</span>
-                </>
-              ) : (
-                t('common.connecting')
-              )}
             </span>
           )}
           <div className="voice-control">

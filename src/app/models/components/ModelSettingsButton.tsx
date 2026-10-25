@@ -1,5 +1,8 @@
 'use client';
 
+import './ModelSettingsButton.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import { Settings2 } from 'lucide-react';

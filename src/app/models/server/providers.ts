@@ -25,6 +25,16 @@ type Login = {
   submit?: (url: string) => void;
 };
 
+const authorizationProviders: ProviderSettings['authorizationProviders'] = [
+  { id: 'openai', name: 'ChatGPT', capabilities: ['text', 'speech'] },
+];
+
+function authorizationProvider(id: string) {
+  const provider = authorizationProviders.find(provider => provider.id === id);
+  if (!provider) throw new ApiError(404, 'authorization_provider_missing', t('errors.authorizationProviderMissing'));
+  return provider;
+}
+
 export class ModelProviders {
   private runtime?: Promise<ModelRuntime>;
   private login?: Login;
@@ -44,7 +54,12 @@ export class ModelProviders {
     return target.kind === 'chatgpt' ? { ...target, token: await this.speechAccessToken(signal) } : target;
   }
 
-  async selectSpeech(id: string | null) { this.speech.select(id); return this.speechSettings(); }
+  async selectSpeech(id: string | null) {
+    if (id === 'chatgpt' && !await this.speechAuthorization())
+      throw new ApiError(409, 'chatgpt_not_connected', t('errors.chatgptDisconnected'));
+    this.speech.select(id);
+    return this.speechSettings();
+  }
   async createSpeech(input: SpeechConnectionInput) { this.speech.create(input); return this.speechSettings(); }
   async updateSpeech(id: string, input: SpeechConnectionInput) { this.speech.update(id, input); return this.speechSettings(); }
   async removeSpeech(id: string) { this.speech.remove(id); return this.speechSettings(); }
@@ -113,12 +128,13 @@ export class ModelProviders {
     const runtime = await this.getRuntime();
     const credentials = await runtime.listCredentials();
     return {
+      authorizationProviders,
       connections: listModelConnections(this.config, runtime),
       providers: runtime
         .getProviders()
         .filter(
           (provider) =>
-            provider.id === "openai" || runtime.hasConfiguredAuth(provider.id),
+            runtime.hasConfiguredAuth(provider.id),
         )
         .map((provider) => ({
           id: provider.id,
@@ -151,9 +167,10 @@ export class ModelProviders {
     return id;
   }
 
-  async connect(id: string) {
+  async connect(providerId: string, id: string) {
+    authorizationProvider(providerId);
     const runtime = await this.getRuntime();
-    if (this.login?.snapshot.id === id) return this.login.snapshot;
+    if (this.login?.snapshot.id === id && this.login.snapshot.providerId === providerId) return this.login.snapshot;
     if (this.active())
       throw new ApiError(
         409,
@@ -165,6 +182,7 @@ export class ModelProviders {
     const login: Login = {
       snapshot: {
         id,
+        providerId,
         status: "starting",
         url: null,
         manualInput: false,
@@ -176,7 +194,7 @@ export class ModelProviders {
     this.login = login;
     login.done = runtime
       .login(
-        "openai",
+        providerId,
         "oauth",
         {
           signal: login.controller.signal,
@@ -217,6 +235,8 @@ export class ModelProviders {
         { getDeviceId: () => deviceId },
       )
       .then(() => {
+        if (providerId === 'openai' && this.speech.readSettings().activeId === null)
+          this.speech.select('chatgpt');
         login.snapshot = {
           ...login.snapshot,
           status: "connected",
@@ -240,8 +260,8 @@ export class ModelProviders {
     return login.snapshot;
   }
 
-  async cancel(id: string) {
-    if (this.login?.snapshot.id !== id)
+  async cancel(providerId: string, id: string) {
+    if (this.login?.snapshot.id !== id || this.login.snapshot.providerId !== providerId)
       throw new ApiError(
         409,
         "authorization_changed",
@@ -252,8 +272,8 @@ export class ModelProviders {
     return this.login.snapshot;
   }
 
-  submit(id: string, url: string) {
-    if (this.login?.snapshot.id !== id || !this.login.submit)
+  submit(providerId: string, id: string, url: string) {
+    if (this.login?.snapshot.id !== id || this.login.snapshot.providerId !== providerId || !this.login.submit)
       throw new ApiError(
         409,
         "authorization_not_waiting",
@@ -263,11 +283,15 @@ export class ModelProviders {
     return this.login.snapshot;
   }
 
-  async disconnect() {
-    if (this.active()) await this.cancel(this.login!.snapshot.id);
+  async disconnect(providerId: string) {
+    authorizationProvider(providerId);
+    if (this.active() && this.login!.snapshot.providerId === providerId)
+      await this.cancel(providerId, this.login!.snapshot.id);
     const runtime = await this.getRuntime();
-    await runtime.logout("openai");
-    this.login = undefined;
+    await runtime.logout(providerId);
+    if (providerId === 'openai' && this.speech.readSettings().activeId === 'chatgpt')
+      this.speech.select(null);
+    if (this.login?.snapshot.providerId === providerId) this.login = undefined;
     return this.settings();
   }
 }

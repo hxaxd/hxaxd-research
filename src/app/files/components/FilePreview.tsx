@@ -1,5 +1,8 @@
 'use client';
 
+import './FilePreview.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import {

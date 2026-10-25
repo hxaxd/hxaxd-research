@@ -48,16 +48,13 @@ export function ImportFilesDialog({
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content">
+        <Dialog.Content className="dialog-content" aria-describedby={undefined}>
           <div className="dialog-heading">
             <Dialog.Title>{t('files.importMaterials')}</Dialog.Title>
             <Dialog.Close className="icon-button" aria-label={t('common.close')}>
               <X size={18} />
             </Dialog.Close>
           </div>
-          <Dialog.Description className="muted">
-            {t('files.importDescription')}
-          </Dialog.Description>
           <input
             ref={picker}
             type="file"

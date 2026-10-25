@@ -1,5 +1,8 @@
 'use client';
 
+import './ImagePreview.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import { Check, Quote, Scan, X } from 'lucide-react';

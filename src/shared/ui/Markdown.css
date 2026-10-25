@@ -1,0 +1,110 @@
+@import 'katex/dist/katex.min.css';
+
+.markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown {
+  overflow-wrap: anywhere;
+  line-height: 1.9;
+}
+
+.markdown p + p {
+  margin-top: 12px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 1.142857rem;
+  font-weight: 600;
+  margin: 18px 0 9px;
+  line-height: 1.6;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 10px 0;
+  padding-left: 22px;
+}
+
+.markdown ul {
+  list-style: disc;
+}
+
+.markdown ol {
+  list-style: decimal;
+}
+
+.markdown li + li {
+  margin-top: 5px;
+}
+
+.markdown pre {
+  overflow-x: auto;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 13px;
+  margin: 12px 0;
+  font-size: 0.857143rem;
+}
+
+.markdown code {
+  font-family: Consolas, monospace;
+}
+
+.markdown :not(pre) > code {
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--ground);
+  font-size: 0.9em;
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.markdown th,
+.markdown td {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  font-size: 0.857143rem;
+}
+
+.markdown blockquote {
+  margin: 12px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--strong-line);
+  color: var(--muted);
+}
+
+.markdown {
+  min-width: 0;
+}
+
+.markdown pre,
+.markdown table {
+  max-width: 100%;
+}
+
+.markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown pre code {
+  overflow-wrap: normal;
+  white-space: pre;
+}

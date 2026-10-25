@@ -39,7 +39,7 @@ test('the annotated speech configuration loads through the API without exposing 
   const response = await settings(request('/speech'));
   expect(response.status).toBe(200);
   const loaded = await response.json();
-  expect(loaded).toMatchObject({ activeId: 'chatgpt', connections: [expect.objectContaining({
+  expect(loaded).toMatchObject({ activeId: null, connections: [expect.objectContaining({
     protocol: 'file', baseUrl: 'https://api.example.com/v1', hasKey: true,
   })] });
   expect(JSON.stringify(loaded)).not.toContain('replace-with-your-key');
@@ -65,7 +65,7 @@ test('configured audio limits and upstream timeout apply to speech requests', as
 });
 
 test('connections, selection and ChatGPT model persist; keys are retained, replaced or cleared without disclosure', async () => {
-  expect(await state()).toMatchObject({ activeId: 'chatgpt', connections: [] });
+  expect(await state()).toMatchObject({ activeId: null, connections: [] });
   const id = await connection();
   expect((await state()).connections).toContainEqual(expect.objectContaining({ id, hasKey: true, baseUrl: 'http://127.0.0.1:8000/v1' }));
   await update(request('/connection', 'PATCH', { ...input, name: '改名', key: '' }), context(id));
@@ -83,7 +83,7 @@ test('connections, selection and ChatGPT model persist; keys are retained, repla
   expect((await state()).activeId).toBeNull();
   await select(request('/speech', 'PATCH', { activeId: id }));
   await remove(request('/connection', 'DELETE'), context(id));
-  expect(await state()).toMatchObject({ activeId: 'chatgpt', connections: [] });
+  expect(await state()).toMatchObject({ activeId: null, connections: [] });
   expect((await select(request('/speech', 'PATCH', { activeId: id }))).status).toBe(404);
   expect((await remove(request('/connection', 'DELETE'), context(randomUUID()))).status).toBe(404);
   expect((await update(request('/connection', 'PATCH', input), context(id))).status).toBe(404);

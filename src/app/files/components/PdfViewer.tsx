@@ -1,5 +1,8 @@
 'use client';
 
+import './PdfViewer.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import { ChevronLeft, ChevronRight, Contrast, FileText, ListTree, Minus, Plus, Scan } from 'lucide-react';

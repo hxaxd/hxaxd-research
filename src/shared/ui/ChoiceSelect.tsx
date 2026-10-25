@@ -1,5 +1,8 @@
 'use client';
 
+import './ChoiceSelect.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import * as Select from '@radix-ui/react-select';
@@ -36,7 +39,7 @@ export function ChoiceSelect({
       </Select.Trigger>
       <Select.Portal>
         <Select.Content
-          className="choice-menu"
+          className="choice-menu menu-surface"
           position="popper"
           sideOffset={6}
           collisionPadding={12}
@@ -47,7 +50,7 @@ export function ChoiceSelect({
           <Select.Viewport className="choice-viewport">
             {items.map((item) => (
               <Select.Item
-                className="choice-item"
+                className="choice-item menu-item"
                 key={item.id}
                 value={item.id}
               >

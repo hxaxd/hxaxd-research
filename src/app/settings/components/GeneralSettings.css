@@ -1,0 +1,55 @@
+.general-settings {
+  display: grid;
+  gap: 20px;
+}
+
+.general-settings h3 {
+  font-size: 1.071429rem;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-row .choice-trigger {
+  min-width: 160px;
+  justify-content: space-between;
+}
+
+.settings-size-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: min(100%, 330px);
+}
+
+.settings-size-control input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  width: 80px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-size-control .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.settings-size-control output {
+  min-width: 4ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.928571rem;
+}

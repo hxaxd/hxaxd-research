@@ -1,5 +1,8 @@
 'use client';
 
+import './AppearanceSettings.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import {
@@ -32,7 +35,7 @@ function CssEditor({
 }) {
   const t = useTranslations();
   const [draft, setDraft] = useState(theme.css);
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const label = mode === 'light' ? t('settings.lightCss') : t('settings.darkCss');
 
@@ -62,7 +65,7 @@ function CssEditor({
         value={draft}
         onChange={(event) => {
           setDraft(event.target.value);
-          setMessage('');
+          setError('');
         }}
         placeholder={
           ':root {\n  --accent: #a5b4fc;\n}\n\n.workbench { border-radius: 18px; }'
@@ -79,9 +82,9 @@ function CssEditor({
           if (file) {
             try {
               setDraft(await file.text());
-              setMessage(t('common.loaded'));
+              setError('');
             } catch (error) {
-              setMessage(t('errors.readDetail', {value0: (error as Error).message}));
+              setError(t('errors.readDetail', {value0: (error as Error).message}));
             }
           }
           event.target.value = '';
@@ -92,7 +95,7 @@ function CssEditor({
           className="button primary"
           onClick={() => {
             onChange({ css: draft });
-            setMessage(t('common.applied'));
+            setError('');
           }}
         >
           {t('settings.applyCss')}
@@ -102,7 +105,7 @@ function CssEditor({
           onClick={() => {
             setDraft('');
             onChange({ css: '' });
-            setMessage(t('common.cleared'));
+            setError('');
           }}
         >
           {t('settings.clearCss')}
@@ -120,9 +123,9 @@ function CssEditor({
           {t('settings.exportTheme')}
         </button>
       </div>
-      {message && (
-        <p className="settings-feedback" role="status">
-          {message}
+      {error && (
+        <p className="error-message" role="alert">
+          {error}
         </p>
       )}
     </div>

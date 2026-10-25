@@ -4,9 +4,10 @@ import { getAppRuntime } from '@/app/runtime';
 
 export const runtime = 'nodejs';
 
-export function POST(request: Request) {
+export function POST(request: Request, context: { params: Promise<{ providerId: string }> }) {
   return handleApiRequest(request, async () => {
+    const { providerId } = await context.params;
     const { id, url } = authorizationCallbackSchema.parse(await request.json());
-    return getAppRuntime().models.submit(id, url);
+    return getAppRuntime().models.submit(providerId, id, url);
   });
 }

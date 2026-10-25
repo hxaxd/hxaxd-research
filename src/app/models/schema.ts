@@ -15,6 +15,7 @@ export const authorizationCallbackSchema = authorizationRequestSchema.extend({
 });
 export const authorizationSchema = z.object({
   id: idSchema,
+  providerId: z.string(),
   status: z.enum(['starting', 'waiting', 'exchanging', 'connected', 'cancelled', 'failed']),
   url: z.string().nullable(),
   manualInput: z.boolean(),
@@ -61,6 +62,11 @@ const modelConnectionSchema = z.object({
 });
 export const modelConnectionIdSchema = z.string().regex(/^[\w.-]+$/).max(160);
 export const providerSettingsSchema = z.object({
+  authorizationProviders: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    capabilities: z.array(z.enum(['text', 'speech'])),
+  })),
   providers: z.array(
     z.object({
       id: z.string(),

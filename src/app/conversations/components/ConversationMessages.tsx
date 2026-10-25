@@ -1,5 +1,9 @@
 'use client';
 
+import '../conversations.css';
+import './ConversationMessages.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import { Bot, MessageCircle, UserRound } from 'lucide-react';

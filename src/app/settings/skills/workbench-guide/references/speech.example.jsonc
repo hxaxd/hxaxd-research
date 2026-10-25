@@ -1,10 +1,10 @@
 // 语音配置全部字段，位于 <实际 dataDir>/speech.json；支持 JSON 注释。
-// 缺省文件：activeId="chatgpt"，chatgptModel="gpt-live-transcribe"，connections=[]。
+// 缺省文件：activeId=null，chatgptModel="gpt-live-transcribe"，connections=[]。
 // 示例中的自定义连接是占位示例；未配置真实服务时不要直接启用。
 // 修改后按下一次请求读取，无需重启；已建立的录音连接不会因此切换。
 {
   // 全部取值："chatgpt"、null（停用语音），或下方某个连接的 id。
-  "activeId": "chatgpt",
+  "activeId": null,
   // 非空模型 ID 字符串，最多 200 字符。默认值如下；是否可调用由账号和服务决定。
   "chatgptModel": "gpt-live-transcribe",
   // 自定义连接数组，可为空，也可添加多个连接。

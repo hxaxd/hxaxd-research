@@ -50,9 +50,10 @@ export function PdfRegionSelection({ getPage, scroll, onCapture, onClose }: {
 
   function position(event: PointerEvent<HTMLDivElement>, bounds: Selection['bounds']): Point {
     const overlay = event.currentTarget.getBoundingClientRect();
+    const scale = overlay.width / event.currentTarget.offsetWidth;
     return {
-      x: Math.max(0, Math.min(1, (event.clientX - overlay.left - bounds.left) / bounds.width)),
-      y: Math.max(0, Math.min(1, (event.clientY - overlay.top - bounds.top) / bounds.height)),
+      x: Math.max(0, Math.min(1, ((event.clientX - overlay.left) / scale - bounds.left) / bounds.width)),
+      y: Math.max(0, Math.min(1, ((event.clientY - overlay.top) / scale - bounds.top) / bounds.height)),
     };
   }
 
@@ -100,7 +101,8 @@ export function PdfRegionSelection({ getPage, scroll, onCapture, onClose }: {
           if (!page) return;
           const rect = page.getBoundingClientRect();
           const overlay = event.currentTarget.getBoundingClientRect();
-          const bounds = { left: rect.left - overlay.left, top: rect.top - overlay.top, width: rect.width, height: rect.height };
+          const scale = overlay.width / event.currentTarget.offsetWidth;
+          const bounds = { left: (rect.left - overlay.left) / scale, top: (rect.top - overlay.top) / scale, width: rect.width / scale, height: rect.height / scale };
           const point = position(event, bounds);
           const pageNumber = Number(page.dataset.pageNumber);
           const next = selection && !hasArea(selection) && selection.page === pageNumber

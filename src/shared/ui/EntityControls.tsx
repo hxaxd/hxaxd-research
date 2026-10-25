@@ -1,5 +1,8 @@
 'use client';
 
+import './EntityControls.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import * as Dialog from '@radix-ui/react-dialog';
@@ -8,7 +11,6 @@ import { useRef, useState, type ReactNode } from 'react';
 
 export function CreateEntityDialog({
   title,
-  label,
   initialName = '',
   onSubmit,
   children,
@@ -16,7 +18,6 @@ export function CreateEntityDialog({
   onOpenChange,
 }: {
   title: string;
-  label: string;
   initialName?: string;
   onSubmit: (name: string) => Promise<void>;
   children?: ReactNode;
@@ -44,14 +45,13 @@ export function CreateEntityDialog({
       {children && <Dialog.Trigger asChild>{children}</Dialog.Trigger>}
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content">
+        <Dialog.Content className="dialog-content" aria-describedby={undefined}>
           <div className="dialog-heading">
             <Dialog.Title>{title}</Dialog.Title>
             <Dialog.Close className="icon-button" aria-label={t('common.close')}>
               <X size={18} />
             </Dialog.Close>
           </div>
-          <Dialog.Description className="muted">{label}</Dialog.Description>
           <form
             onSubmit={async (event) => {
               event.preventDefault();

@@ -1,5 +1,9 @@
 'use client';
 
+import '../conversations.css';
+import './ToolExecutionMessage.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import { CheckCircle2, ChevronDown, LoaderCircle, TriangleAlert } from 'lucide-react';

@@ -1,5 +1,9 @@
 'use client';
 
+import '../workbench.css';
+import '@/app/conversations/conversations.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import {
@@ -254,6 +258,7 @@ export function Workbench({
         <aside
           className={`materials-panel${layout.closing === 'materials' ? ' collapse-pending' : ''}`}
           id="materials-panel"
+          data-collapse-label={t('workspaces.collapseMaterials')}
           aria-label={t('files.materials')}
           hidden={!materialsOpen}
         >
@@ -333,6 +338,7 @@ export function Workbench({
         <section
           className={`conversation-panel${layout.closing === 'conversation' ? ' collapse-pending' : ''}`}
           id="conversation-panel"
+          data-collapse-label={t('workspaces.collapseConversation')}
           aria-label={t('conversations.title')}
           hidden={!conversationOpen}
         >

@@ -1,0 +1,91 @@
+.chat-empty > .button {
+  margin-top: 18px;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot.connected,
+.status-dot.running {
+  background: var(--accent);
+}
+
+.chat-empty {
+  margin: auto;
+  max-width: 340px;
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.928571rem;
+  line-height: 1.9;
+}
+
+.chat-empty > svg {
+  display: block;
+  margin: 0 auto 18px;
+  color: var(--accent);
+}
+
+.chat-empty h3 {
+  color: var(--ink);
+  font-size: 1.214286rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.status-dot.running {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@container (max-width: 350px) {
+  .chat-empty {
+    padding-inline: 16px;
+  }
+}
+
+.quote-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--soft);
+  text-align: left;
+}
+
+.quote-card > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.quote-card small {
+  display: block;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  font-size: 0.785714rem;
+}
+
+.quote-card blockquote {
+  margin: 5px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.857143rem;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.quote-card .icon-button {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+}

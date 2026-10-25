@@ -1,5 +1,8 @@
 'use client';
 
+import './ImageAttachment.css';
+
+
 import { useTranslations } from 'use-intl';
 
 import * as Dialog from '@radix-ui/react-dialog';

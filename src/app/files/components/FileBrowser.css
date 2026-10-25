@@ -1,0 +1,143 @@
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 5px;
+}
+
+.file-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.file-row + .file-row {
+  margin-top: 3px;
+}
+
+.file-row:hover {
+  background: var(--hover);
+}
+
+.selected {
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.file-row.selected::before {
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 3px;
+  border-radius: 2px;
+  content: '';
+  background: var(--accent);
+}
+
+.file-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  text-align: left;
+  font-size: 0.928571rem;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.file-open span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.file-open svg {
+  color: var(--muted);
+}
+
+.selected .file-open svg {
+  color: var(--accent);
+}
+
+.file-browser {
+  flex: 1;
+  padding: 12px 8px;
+}
+
+.file-open {
+  font-size: 0.857143rem;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.directory-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 8px;
+  margin-bottom: 3px;
+  color: var(--accent);
+  font-size: 0.857143rem;
+  border-radius: 5px;
+}
+
+.directory-back:hover {
+  background: var(--soft);
+}
+
+.directory-path {
+  margin: 2px 8px 10px;
+  padding: 6px 8px;
+  background: var(--ground);
+  color: var(--muted);
+  border-radius: 4px;
+  font: 11px/1.6 Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+
+.empty-small {
+  padding: 20px 10px;
+  color: var(--muted);
+  font-size: 0.928571rem;
+  line-height: 1.9;
+}
+
+.import-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.import-choices .button {
+  min-height: 62px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.import-summary {
+  color: var(--accent);
+  font-size: 0.857143rem;
+  margin: 14px 0;
+  padding: 9px 11px;
+  border-radius: 5px;
+  background: var(--soft);
+}
+
+@media (max-width: 1180px) {
+  .file-open {
+    min-height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  .file-open {
+    min-height: 44px;
+  }
+}

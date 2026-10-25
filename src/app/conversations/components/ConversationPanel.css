@@ -1,0 +1,21 @@
+.model-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 6px 16px;
+  gap: 7px;
+  min-height: 34px;
+}
+
+.model-toolbar .choice-trigger {
+  flex: 1;
+  font-size: 0.857143rem;
+}
+
+.connection-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  flex-shrink: 0;
+}

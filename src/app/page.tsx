@@ -1,4 +1,5 @@
 import { BookOpen } from 'lucide-react';
+import '@/app/workspaces/workbench.css';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { localeCookie, resolveLocale, translator } from '@/shared/i18n/config.mjs';
@@ -35,7 +36,6 @@ export default async function Home() {
             <BookOpen size={36} strokeWidth={1.4} aria-hidden="true" />
           </div>
           <h1>{t('workspaces.createTopic')}</h1>
-          <p>{t('workspaces.description')}</p>
           <CreateWorkspaceDialog />
         </div>
       </main>
