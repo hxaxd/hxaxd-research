@@ -1,3 +1,4 @@
+import { text as t } from '../i18n/server.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createModelRuntime, modelCatalog, resolveModel, thinkingLevels } from './runtime.mjs';
@@ -35,7 +36,7 @@ async function main() {
     model: { type: 'string' }, input: { type: 'string' }, output: { type: 'string' },
   } });
   const timeoutMs = readAppConfig().timeouts.modelCatalogMs;
-  if (!values['pi-dir']) throw new Error('请提供 --pi-dir');
+  if (!values['pi-dir']) throw new Error(t('errors.piDirectory'));
   const controller = new AbortController();
   const cancel = () => controller.abort();
   process.once('SIGINT', cancel);
@@ -49,12 +50,12 @@ async function main() {
     return;
   }
   if (!values.model || !values.input || !values.output)
-    throw new Error('请提供 --model、--input 和 --output，或使用 --list');
+    throw new Error(t('errors.modelArguments'));
   const result = await invokeModel(runtime, values.model,
     JSON.parse(await readFile(values.input, 'utf8')), controller.signal, timeoutMs);
   await writeFile(values.output, JSON.stringify(result, null, 2));
   if (['error', 'aborted', 'length'].includes(result.stopReason))
-    throw new Error(`模型请求未完整完成（${result.stopReason}）：${result.error ?? ''}。已保存响应：${values.output}`);
+    throw new Error(t('errors.modelIncomplete', {value0: result.stopReason, value1: result.error ?? '', value2: values.output}));
   console.log(JSON.stringify({ output: values.output, stopReason: result.stopReason, usage: result.usage }));
 }
 

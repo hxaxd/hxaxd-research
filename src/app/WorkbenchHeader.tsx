@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronDown, FolderOpen, Layers2, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -20,11 +22,12 @@ export function WorkbenchHeader({
   onRenamed?: (workspace: Workspace) => void;
   workspaces: Workspace[];
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   return (
     <header className="app-header">
-      <span className="brand-mark" title="科研工作台">
+      <span className="brand-mark" title="HX">
         <Layers2 size={18} aria-hidden="true" />
       </span>
       <div className="workspace-navigation">
@@ -32,7 +35,7 @@ export function WorkbenchHeader({
           <EditableText
             className="workspace-name"
             value={workspace.name}
-            label="工作区名称"
+            label={t('workspaces.name')}
             onSave={async (name) => {
               onRenamed!(
                 await requestJson<Workspace>(
@@ -43,13 +46,13 @@ export function WorkbenchHeader({
             }}
           />
         ) : (
-          <span className="workspace-name">科研工作台</span>
+          <span className="workspace-name">{t('app.name')}</span>
         )}
         <Menu.Root modal={false}>
           <Menu.Trigger
             className="workspace-menu-trigger icon-button"
-            aria-label="切换工作区"
-            title="切换工作区"
+            aria-label={t('workspaces.switch')}
+            title={t('workspaces.switch')}
           >
             <ChevronDown size={15} />
           </Menu.Trigger>
@@ -60,7 +63,7 @@ export function WorkbenchHeader({
               sideOffset={10}
               collisionPadding={12}
             >
-              <Menu.Label className="menu-label">工作区</Menu.Label>
+              <Menu.Label className="menu-label">{t('workspaces.title')}</Menu.Label>
               <div className="workspace-menu-list">
                 {workspaces.map((item) => (
                   <Menu.Item
@@ -84,7 +87,7 @@ export function WorkbenchHeader({
                 onSelect={() => setCreating(true)}
               >
                 <Plus size={16} aria-hidden="true" />
-                <span>新建工作区</span>
+                <span>{t('workspaces.create')}</span>
               </Menu.Item>
             </Menu.Content>
           </Menu.Portal>

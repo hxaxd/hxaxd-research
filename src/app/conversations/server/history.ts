@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { ApiError } from '@/shared/http/api-error';
 
@@ -31,7 +32,7 @@ export function readConversationImage(root: string, workspaceId: string, id: str
   );
   const content = entry?.type === 'message' && entry.message.role === 'user' ? entry.message.content : null;
   const image = Array.isArray(content) ? content.filter(item => item.type === 'image')[index] : undefined;
-  if (!image) throw new ApiError(404, 'image_not_found', '截图不存在');
+  if (!image) throw new ApiError(404, 'image_not_found', t('errors.imageMissing'));
   return new Response(Buffer.from(image.data, 'base64'), { headers: {
     'Content-Type': image.mimeType,
     'Cache-Control': 'private, max-age=31536000, immutable',

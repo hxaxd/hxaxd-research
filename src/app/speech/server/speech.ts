@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import type { ModelProviders } from '@/app/models/server/providers';
 import type { AppConfig } from '@/app/config.mjs';
@@ -15,14 +16,14 @@ export class Speech {
   async answer(connectionId: string, sdp: string, signal: AbortSignal) {
     const target = await this.models.speechTarget(connectionId, signal);
     if (target.kind === 'custom' && target.protocol === 'file')
-      throw new ApiError(409, 'speech_protocol_unsupported', '该连接在录音结束后转写，不支持实时录音');
+      throw new ApiError(409, 'speech_protocol_unsupported', t('errors.fileSpeechProtocol'));
     return realtimeAnswer(target, sdp, signal, this.config.timeouts);
   }
 
   async transcribe(connectionId: string, audio: Blob, filename: string, signal: AbortSignal) {
     const target = await this.models.speechTarget(connectionId, signal);
     if (target.kind === 'custom' && target.protocol === 'realtime')
-      throw new ApiError(409, 'speech_protocol_unsupported', '该连接使用实时转写，请在录音过程中连接');
+      throw new ApiError(409, 'speech_protocol_unsupported', t('errors.realtimeSpeechProtocol'));
     return fileTranscript(target, audio, filename, signal, this.config.timeouts);
   }
 

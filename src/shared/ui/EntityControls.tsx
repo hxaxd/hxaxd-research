@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
@@ -21,6 +23,7 @@ export function CreateEntityDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const t = useTranslations();
   const [localOpen, setLocalOpen] = useState(false);
   const open = controlledOpen ?? localOpen;
   const setOpen = onOpenChange ?? setLocalOpen;
@@ -44,7 +47,7 @@ export function CreateEntityDialog({
         <Dialog.Content className="dialog-content">
           <div className="dialog-heading">
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close className="icon-button" aria-label="关闭">
+            <Dialog.Close className="icon-button" aria-label={t('common.close')}>
               <X size={18} />
             </Dialog.Close>
           </div>
@@ -66,7 +69,7 @@ export function CreateEntityDialog({
             }}
           >
             <label className="field-label" htmlFor="entity-name">
-              名称
+              {t('common.name')}
             </label>
             <input
               id="entity-name"
@@ -74,7 +77,7 @@ export function CreateEntityDialog({
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={160}
-              placeholder="输入名称"
+              placeholder={t('common.name')}
               disabled={busy}
             />
             {error && (
@@ -84,13 +87,13 @@ export function CreateEntityDialog({
             )}
             <div className="dialog-actions">
               <Dialog.Close className="button secondary" disabled={busy}>
-                取消
+                {t('common.cancel')}
               </Dialog.Close>
               <button
                 className="button primary"
                 disabled={busy || !name.trim()}
               >
-                {busy ? '保存中…' : '保存'}
+                {busy ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </form>
@@ -111,6 +114,7 @@ export function EditableText({
   onSave: (value: string) => Promise<void>;
   className?: string;
 }) {
+  const t = useTranslations();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [busy, setBusy] = useState(false);
@@ -125,7 +129,7 @@ export function EditableText({
     }
     const next = draft.trim();
     if (!next) {
-      setError('名称不能为空');
+      setError(t('errors.nameRequired'));
       return;
     }
     if (next === value) {
@@ -167,7 +171,7 @@ export function EditableText({
         />
       ) : (
         <button
-          title={`${value} · 点击重命名`}
+          title={t('common.renameItem', {value0: value})}
           onClick={() => {
             setDraft(value);
             setError('');

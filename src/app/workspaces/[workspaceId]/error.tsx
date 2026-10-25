@@ -1,12 +1,15 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 export default function ErrorPage({ reset }: { reset: () => void }) {
+  const t = useTranslations();
   return (
     <div className="loading-screen">
-      <h2>工作区暂时无法打开</h2>
-      <p>请检查本地服务日志与资料目录。</p>
+      <h2>{t('workspaces.unavailable')}</h2>
+      <p>{t('workspaces.errorDescription')}</p>
       <button className="button primary" onClick={reset}>
-        重新打开
+        {t('common.reopen')}
       </button>
     </div>
   );

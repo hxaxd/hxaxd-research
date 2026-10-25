@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { useEffect, useState } from 'react';
 import type { z } from 'zod';
 import { defaultUrlTransform } from 'react-markdown';
@@ -10,6 +12,7 @@ import { Markdown } from '@/shared/ui/Markdown';
 import { textFileSchema } from '../schema';
 
 export function TextPreview({ url, markdown, onOpenFile }: { url: string; markdown?: { workspaceId: string; path: string }; onOpenFile?: (path: string) => void }) {
+  const t = useTranslations();
   const [file, setFile] = useState<z.infer<typeof textFileSchema> | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -29,12 +32,12 @@ export function TextPreview({ url, markdown, onOpenFile }: { url: string; markdo
         {error}
       </p>
     );
-  if (!file) return <p className="empty-small">读取文本…</p>;
+  if (!file) return <p className="empty-small">{t('files.textLoading')}</p>;
   const previewRoot = markdown ? `/api/workspaces/${markdown.workspaceId}/preview/` : '';
   const base = markdown ? `http://workspace.local${previewRoot}${markdown.path.split('/').map(encodeURIComponent).join('/')}` : '';
   return (
     <div className={markdown ? 'document-markdown markdown' : 'text-preview'}>
-      {file.truncated && <p className="preview-notice">显示前 100,000 字节，完整内容可下载。</p>}
+      {file.truncated && <p className="preview-notice">{t('files.truncated')}</p>}
       {markdown ? (
         <Markdown
           urlTransform={(url) => {

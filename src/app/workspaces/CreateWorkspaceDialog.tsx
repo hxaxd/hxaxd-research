@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -16,14 +18,15 @@ export function CreateWorkspaceDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const submissionId = useRef<string | null>(null);
   return (
     <CreateEntityDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="新建工作区"
-      label="为一个研究主题建立独立的材料与对话空间。"
+      title={t('workspaces.create')}
+      label={t('workspaces.description')}
       onSubmit={async (name) => {
         const id = submissionId.current ??= crypto.randomUUID();
         const workspace = await requestJson<Workspace>('/api/workspaces', {
@@ -38,11 +41,11 @@ export function CreateWorkspaceDialog({
       {open === undefined && (
         <button
           className="button primary"
-          aria-label="新建工作区"
-          title="新建工作区"
+          aria-label={t('workspaces.create')}
+          title={t('workspaces.create')}
         >
           <Plus size={18} />
-          新建工作区
+          {t('workspaces.create')}
         </button>
       )}
     </CreateEntityDialog>

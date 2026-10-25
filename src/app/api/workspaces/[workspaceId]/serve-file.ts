@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -48,7 +49,7 @@ export async function serveWorkspaceFile(request: Request, config: AppConfig, wo
     return Response.json(await readWorkspaceText(config, workspaceId, relative, 0, config.files.previewBytes));
   const target = await resolveWorkspacePath(config.workspaceDir, workspaceId, relative);
   const info = await stat(target);
-  if (!info.isFile()) throw new ApiError(400, 'invalid_file', '请选择一个文件');
+  if (!info.isFile()) throw new ApiError(400, 'invalid_file', t('errors.fileRequired'));
   const type = mime[path.extname(target).toLowerCase()] || 'application/octet-stream';
   const headers = new Headers({
     'Content-Type': type,

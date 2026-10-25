@@ -1,13 +1,16 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 
 export function ImageAttachment({ src, label }: { src: string; label: string }) {
+  const t = useTranslations();
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
-        <button className="image-attachment" aria-label={`查看${label}`}>
+        <button className="image-attachment" aria-label={t('common.viewItem', {value0: label})}>
           <img src={src} alt={label} />
           <span>{label}</span>
         </button>
@@ -17,7 +20,7 @@ export function ImageAttachment({ src, label }: { src: string; label: string }) 
         <Dialog.Content className="dialog-content image-lightbox" aria-describedby={undefined}>
           <div className="dialog-heading">
             <Dialog.Title>{label}</Dialog.Title>
-            <Dialog.Close className="icon-button" aria-label="关闭截图预览"><X size={18} /></Dialog.Close>
+            <Dialog.Close className="icon-button" aria-label={t('conversations.closeImage')}><X size={18} /></Dialog.Close>
           </div>
           <img src={src} alt={label} />
         </Dialog.Content>

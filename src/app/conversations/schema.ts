@@ -40,6 +40,7 @@ const chatMessageSchema = z.object({
   images: z.array(z.object({ url: z.string() })).optional(),
   quotes: textQuotesSchema.optional(),
   toolName: z.string().optional(),
+  pending: z.boolean().optional(),
   isError: z.boolean().optional(),
 });
 export const conversationSnapshotSchema = z.object({

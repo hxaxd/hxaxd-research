@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { Check, Quote, Scan, X } from 'lucide-react';
 import { useRef, useState, type PointerEvent } from 'react';
 
@@ -10,6 +12,7 @@ type Point = { x: number; y: number };
 export function ImagePreview({ url, path, onCapture }: {
   url: string; path: string; onCapture: (clip: ImageClip) => Promise<void>;
 }) {
+  const t = useTranslations();
   const image = useRef<HTMLImageElement>(null);
   const [selecting, setSelecting] = useState(false);
   const [from, setFrom] = useState<Point | null>(null);
@@ -31,7 +34,7 @@ export function ImagePreview({ url, path, onCapture }: {
     setError('');
     try {
       const source = image.current!;
-      if (!source.naturalWidth) throw new Error('图片尚未加载完成');
+      if (!source.naturalWidth) throw new Error(t('errors.imageLoading'));
       const width = region.width * source.naturalWidth;
       const height = region.height * source.naturalHeight;
       const scale = Math.min(1, 2048 / Math.max(width, height));
@@ -51,12 +54,12 @@ export function ImagePreview({ url, path, onCapture }: {
     <div className="image-reference-toolbar">
       {error && <span role="alert">{error}</span>}
       <button className="button secondary" disabled={busy} onClick={() => { setSelecting(!selecting); setFrom(null); setTo(null); }}>
-        <Scan size={16} aria-hidden="true" />{selecting ? '取消框选' : '框选引用'}</button>
-      <button className="button secondary" disabled={busy} onClick={() => void capture()}><Quote size={16} aria-hidden="true" />引用图片</button>
+        <Scan size={16} aria-hidden="true" />{selecting ? t('files.cancelRegion') : t('files.selectRegion')}</button>
+      <button className="button secondary" disabled={busy} onClick={() => void capture()}><Quote size={16} aria-hidden="true" />{t('files.quoteImage')}</button>
     </div>
     <div className="image-preview"><div className="image-selection-surface">
       <img ref={image} src={url} alt={path.split('/').pop()} draggable={false} />
-      {selecting && <div className="image-selection-overlay" aria-label="图片框选区域"
+      {selecting && <div className="image-selection-overlay" aria-label={t('files.imageRegion')}
         onPointerDown={event => {
           if (!event.isPrimary || event.button !== 0 || busy) return;
           const next = point(event);
@@ -71,10 +74,10 @@ export function ImagePreview({ url, path, onCapture }: {
         {box && <div className="pdf-selection-box" style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.width * 100}%`, height: `${box.height * 100}%` }} />}
       </div>}
     </div></div>
-    {selecting && <div className="image-reference-toolbar" role="group" aria-label="图片引用操作">
-      <span>拖动框选，或点按两个对角</span>
-      <button className="button secondary" disabled={busy} onClick={() => setSelecting(false)}><X size={16} />取消</button>
-      <button className="button" disabled={busy || !box || box.width < 0.01 || box.height < 0.01} onClick={() => void capture(box!)}><Check size={16} />加入提问</button>
+    {selecting && <div className="image-reference-toolbar" role="group" aria-label={t('files.imageActions')}>
+      <span>{t('files.regionHint')}</span>
+      <button className="button secondary" disabled={busy} onClick={() => setSelecting(false)}><X size={16} />{t('common.cancel')}</button>
+      <button className="button" disabled={busy || !box || box.width < 0.01 || box.height < 0.01} onClick={() => void capture(box!)}><Check size={16} />{t('files.attach')}</button>
     </div>}
   </div>;
 }

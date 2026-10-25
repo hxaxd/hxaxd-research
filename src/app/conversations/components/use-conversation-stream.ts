@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { useEffect, useState } from 'react';
 
 import { requestJson } from '@/shared/http/request-json';
@@ -7,6 +9,7 @@ import { requestJson } from '@/shared/http/request-json';
 import { conversationEventSchema, type ConversationSnapshot } from '../schema';
 
 export function useConversationStream(url: string) {
+  const t = useTranslations();
   const [snapshot, setSnapshot] = useState<ConversationSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +24,7 @@ export function useConversationStream(url: string) {
       try {
         setSnapshot(conversationEventSchema.parse(JSON.parse(event.data)).snapshot);
       } catch {
-        setError('对话数据无法读取，请刷新页面');
+        setError(t('errors.conversationData'));
       }
     };
     stream.onerror = () => {
@@ -36,6 +39,6 @@ export function useConversationStream(url: string) {
       controller.abort();
       stream.close();
     };
-  }, [url]);
+  }, [url, t]);
   return { snapshot, connected, error };
 }

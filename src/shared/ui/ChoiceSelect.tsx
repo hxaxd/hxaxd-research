@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import * as Select from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -10,7 +12,7 @@ export function ChoiceSelect({
   onChange,
   disabled,
   iconOnly = false,
-  placeholder = '请选择',
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -20,13 +22,14 @@ export function ChoiceSelect({
   iconOnly?: boolean;
   placeholder?: string;
 }) {
+  const t = useTranslations();
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
         className={`choice-trigger${iconOnly ? ' icon-only' : ''}`}
         aria-label={label}
       >
-        {!iconOnly && <Select.Value placeholder={placeholder} />}
+        {!iconOnly && <Select.Value placeholder={placeholder ?? t('common.select')} />}
         <Select.Icon>
           <ChevronDown size={14} aria-hidden="true" />
         </Select.Icon>

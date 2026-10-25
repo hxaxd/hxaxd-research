@@ -56,12 +56,12 @@ export function mapPiEvent(
   if (event.type === 'tool_execution_start')
     return [
       ...messages.filter((message) => message.id !== `tool:${event.toolCallId}`),
-      { id: `tool:${event.toolCallId}`, role: 'tool', toolName: event.toolName, text: '正在执行…' },
+      { id: `tool:${event.toolCallId}`, role: 'tool', toolName: event.toolName, pending: true, text: '' },
     ];
   if (event.type === 'tool_execution_end')
     return messages.map((message) =>
       message.id === `tool:${event.toolCallId}`
-        ? { ...message, text: textOf(event.result.content), isError: event.isError }
+        ? { ...message, pending: false, text: textOf(event.result.content), isError: event.isError }
         : message,
     );
   return messages;

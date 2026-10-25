@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { Check, RotateCcw, X } from 'lucide-react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
@@ -34,6 +36,7 @@ export function PdfRegionSelection({ getPage, scroll, onCapture, onClose }: {
   onCapture: (clip: Omit<ImageClip, 'path'>) => Promise<void>;
   onClose: () => void;
 }) {
+  const t = useTranslations();
   const [selection, setSelection] = useState<Selection | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -87,7 +90,7 @@ export function PdfRegionSelection({ getPage, scroll, onCapture, onClose }: {
   const box = selection && region(selection);
   return (
     <>
-      <div className="pdf-selection-overlay" aria-label="PDF 框选区域"
+      <div className="pdf-selection-overlay" aria-label={t('files.pdfRegion')}
         onPointerDown={event => {
           if (busy || !event.isPrimary || event.button !== 0) return;
           const page = Array.from(scroll.current!.querySelectorAll<HTMLElement>('.page')).find(element => {
@@ -130,12 +133,12 @@ export function PdfRegionSelection({ getPage, scroll, onCapture, onClose }: {
           }} />
         )}
       </div>
-      <div className="pdf-selection-actions" role="group" aria-label="框选操作">
-        <span role="status">{error || (busy ? '正在生成截图…' : selection && hasArea(selection) ? `第 ${selection.page} 页` : '拖动框选，或点按两个对角')}</span>
+      <div className="pdf-selection-actions" role="group" aria-label={t('files.regionActions')}>
+        <span role="status">{error || (busy ? t('files.capturing') : selection && hasArea(selection) ? t('files.pageNumber', {value0: selection.page}) : t('files.regionHint'))}</span>
         <div>
-          {selection && <button className="button secondary" disabled={busy} onClick={() => setSelection(null)}><RotateCcw size={16} aria-hidden="true" />重选</button>}
-          <button className="button secondary" autoFocus disabled={busy} onClick={onClose}><X size={16} aria-hidden="true" />取消</button>
-          <button className="button" disabled={busy || !selection || !hasArea(selection)} onClick={() => void capture()}><Check size={16} aria-hidden="true" />加入提问</button>
+          {selection && <button className="button secondary" disabled={busy} onClick={() => setSelection(null)}><RotateCcw size={16} aria-hidden="true" />{t('files.reselect')}</button>}
+          <button className="button secondary" autoFocus disabled={busy} onClick={onClose}><X size={16} aria-hidden="true" />{t('common.cancel')}</button>
+          <button className="button" disabled={busy || !selection || !hasArea(selection)} onClick={() => void capture()}><Check size={16} aria-hidden="true" />{t('files.attach')}</button>
         </div>
       </div>
     </>

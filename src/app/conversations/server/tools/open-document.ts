@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { stat } from 'node:fs/promises';
 import { defineTool } from '@earendil-works/pi-coding-agent';
@@ -11,7 +12,7 @@ import { ApiError } from '@/shared/http/api-error';
 export function openDocumentTool(root: string, workspaceId: string, conversationId: string, reader: ReaderController) {
   return defineTool({
     name: 'open_document',
-    label: '打开阅读材料',
+    label: t('tools.openDocument'),
     description: '请求当前对话的中间阅读区显示一个已存在的工作区文件。path 是相对路径，不接受网页 URL；不会生成、编译或检查页面运行结果。Markdown／HTML 可选择源码或预览，HTML 预览执行页面脚本；PDF 可指定页码。HTML 运行边界见 document-workbench 技能。',
     parameters: Type.Object({
       path: Type.String(),
@@ -22,10 +23,10 @@ export function openDocumentTool(root: string, workspaceId: string, conversation
       signal?.throwIfAborted();
       const relative = args.path.replaceAll('\\', '/');
       const file = await resolveWorkspacePath(root, workspaceId, relative);
-      if (!(await stat(file)).isFile()) throw new ApiError(400, 'invalid_file', '请选择要打开的文件');
+      if (!(await stat(file)).isFile()) throw new ApiError(400, 'invalid_file', t('errors.fileRequired'));
       const result = { ...args, path: relative };
       reader.open(workspaceId, { ...result, id: callId, conversationId });
-      return { content: [{ type: 'text', text: `已请求在阅读区打开 ${relative}` }], details: result };
+      return { content: [{ type: 'text', text: t('tools.documentRequested', {value0: relative}) }], details: result };
     },
   });
 }

@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { readFile, stat } from 'node:fs/promises';
 
@@ -15,7 +16,7 @@ export async function extractPdfText(
   signal?: AbortSignal,
 ) {
   if ((await stat(file)).size > limits.pdfBytes)
-    throw new ApiError(413, 'too_large', 'PDF 超过读取上限');
+    throw new ApiError(413, 'too_large', t('errors.pdfSize'));
   const bytes = await readFile(file);
   signal?.throwIfAborted();
   const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
@@ -27,7 +28,7 @@ export async function extractPdfText(
       endPage < startPage ||
       endPage - startPage >= limits.pdfPages
     )
-      throw new ApiError(400, 'invalid_pages', `每次读取 1 至 ${limits.pdfPages} 页，请使用有效页码`);
+      throw new ApiError(400, 'invalid_pages', t('errors.pdfPages', {value0: limits.pdfPages}));
     const pages: { page: number; text: string }[] = [];
     for (let page = startPage; page <= Math.min(endPage, pdf.numPages); page++) {
       signal?.throwIfAborted();
@@ -45,7 +46,7 @@ export async function extractPdfText(
       totalPages: pdf.numPages,
       pages,
       notice: pages.every((page) => !page.text.trim())
-        ? '这些页面没有可提取文字；扫描材料需要 OCR。'
+        ? t('files.noText')
         : null,
     };
   } finally {

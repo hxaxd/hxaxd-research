@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 import type { ActiveSpeech } from '@/app/models/active-speech';
@@ -31,24 +33,24 @@ type Session = {
   timeout?: ReturnType<typeof setTimeout>;
 };
 
-function microphoneError(error: unknown) {
+function microphoneError(error: unknown, t: ReturnType<typeof useTranslations>) {
   const name = error instanceof DOMException ? error.name : '';
   if (name === 'NotAllowedError' || name === 'SecurityError')
-    return '浏览器未授予麦克风权限，请在站点设置中允许后重试';
+    return t('errors.microphonePermission');
   if (name === 'NotFoundError' || name === 'OverconstrainedError')
-    return '没有找到可用的麦克风';
+    return t('errors.microphoneMissing');
   if (name === 'NotReadableError' || name === 'AbortError')
-    return '麦克风正被其他应用占用，请关闭后重试';
-  return '无法打开麦克风，请检查浏览器权限与设备';
+    return t('errors.microphoneBusy');
+  return t('errors.microphoneOpen');
 }
 
-async function openMicrophone() {
+async function openMicrophone(t: ReturnType<typeof useTranslations>) {
   if (!window.isSecureContext)
     throw new Error(
-      '当前页面不是安全上下文；请通过 127.0.0.1 或 HTTPS 打开后使用语音输入',
+      t('errors.secureContext'),
     );
   if (!navigator.mediaDevices?.getUserMedia)
-    throw new Error('当前浏览器不支持麦克风访问，请更换浏览器或使用 HTTPS');
+    throw new Error(t('errors.microphoneUnsupported'));
   try {
     return await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -59,14 +61,14 @@ async function openMicrophone() {
       },
     });
   } catch (error) {
-    throw new Error(microphoneError(error));
+    throw new Error(microphoneError(error, t));
   }
 }
 
-function waitForChannel(dc: RTCDataChannel, signal: AbortSignal) {
+function waitForChannel(dc: RTCDataChannel, signal: AbortSignal, t: ReturnType<typeof useTranslations>) {
   if (dc.readyState === 'open') return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => finish(new Error('连接语音服务超时')), 15000);
+    const timer = setTimeout(() => finish(new Error(t('errors.speechConnectTimeout'))), 15000);
     function cleanup() {
       clearTimeout(timer);
       dc.removeEventListener('open', opened);
@@ -82,10 +84,10 @@ function waitForChannel(dc: RTCDataChannel, signal: AbortSignal) {
       finish();
     }
     function closed() {
-      finish(new Error('语音连接已关闭'));
+      finish(new Error(t('errors.speechClosed')));
     }
     function aborted() {
-      finish(new DOMException('已取消', 'AbortError'));
+      finish(new DOMException(t('common.cancelled'), 'AbortError'));
     }
     dc.addEventListener('open', opened);
     dc.addEventListener('close', closed);
@@ -103,6 +105,7 @@ export function useVoiceInput({
   onTextChange: (next: string) => void;
   textarea: RefObject<HTMLTextAreaElement | null>;
 }) {
+  const t = useTranslations();
   const [state, setState] = useState<VoiceState>('idle');
   const [error, setError] = useState('');
   const [pending, setPending] = useState('');
@@ -217,7 +220,7 @@ export function useVoiceInput({
   function handleEvent(event: VoiceServerEvent) {
     const session = sessionRef.current;
     if (!session || session.canceled) return;
-    const result = applyVoiceEvent(itemsRef.current, event);
+    const result = applyVoiceEvent(itemsRef.current, event, t);
     if (result.error) {
       fail(result.error);
       return;
@@ -244,7 +247,7 @@ export function useVoiceInput({
 
   async function connectRealtime(active: ActiveSpeech, session: Session) {
     if (typeof RTCPeerConnection === 'undefined')
-      throw new Error('当前浏览器不支持实时音频连接，请更换浏览器');
+      throw new Error(t('errors.realtimeUnsupported'));
     const stream = streamRef.current!;
     const controller = new AbortController();
     abortRef.current = controller;
@@ -253,7 +256,7 @@ export function useVoiceInput({
     pc.onconnectionstatechange = () => {
       if (sessionRef.current !== session || session.canceled) return;
       if (pc.connectionState === 'failed')
-        fail('语音连接已中断，已确认的文字保留');
+        fail(t('errors.speechInterrupted'));
     };
     const channel = pc.createDataChannel('oai-events');
     channelRef.current = channel;
@@ -262,7 +265,7 @@ export function useVoiceInput({
       try {
         handleEvent(JSON.parse(event.data));
       } catch {
-        fail('无法解析语音服务返回的识别结果');
+        fail(t('errors.speechEvent'));
       }
     };
     pc.addTrack(stream.getAudioTracks()[0], stream);
@@ -275,12 +278,12 @@ export function useVoiceInput({
     });
     if (session.canceled) return;
     await pc.setRemoteDescription({ type: 'answer', sdp: result.sdp });
-    await waitForChannel(channel, controller.signal);
+    await waitForChannel(channel, controller.signal, t);
   }
 
   async function startFile() {
     if (typeof MediaRecorder === 'undefined')
-      throw new Error('当前浏览器不支持录音，请更换浏览器');
+      throw new Error(t('errors.recordingUnsupported'));
     const stream = streamRef.current!;
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
@@ -318,7 +321,7 @@ export function useVoiceInput({
       sessionRef.current = session;
       try {
         setState('permission');
-        const stream = await openMicrophone();
+        const stream = await openMicrophone(t);
         if (session.canceled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -362,18 +365,18 @@ export function useVoiceInput({
         streamRef.current?.getTracks().forEach((track) => track.stop());
         session.timeout = setTimeout(() => {
           if (sessionRef.current !== session) return;
-          setError('等待识别结果超时，已确认的文字保留');
+          setError(t('errors.transcriptionTimeout'));
           finish();
         }, 20000);
       } catch {
-        fail('语音连接已中断，已确认的文字保留');
+        fail(t('errors.speechInterrupted'));
       }
       return;
     }
     try {
       const recorder = recorderRef.current;
       if (!recorder || recorder.state === 'inactive')
-        throw new Error('录音已经结束');
+        throw new Error(t('speech.ended'));
       const stopped = new Promise<void>((resolve) =>
         recorder.addEventListener('stop', () => resolve(), { once: true }),
       );
@@ -385,7 +388,7 @@ export function useVoiceInput({
         type: recorder.mimeType || 'audio/webm',
       });
       chunksRef.current = [];
-      if (!blob.size) throw new Error('没有录到音频，请重试');
+      if (!blob.size) throw new Error(t('errors.recordingEmpty'));
       const filename = blob.type.includes('mp4')
         ? 'recording.mp4'
         : blob.type.includes('ogg')

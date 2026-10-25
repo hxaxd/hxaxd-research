@@ -1,19 +1,23 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { applyAppearance, paletteStyles } from '@/app/settings/appearance';
+import { localeCookie, resolveLocale, translator } from '@/shared/i18n/config.mjs';
+import { LocaleProvider } from './i18n/LocaleProvider';
 
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: '科研工作台',
-  description: '围绕论文、真实材料与 AI 对话的本地科研工作台。',
-};
-export default function RootLayout({
+export async function generateMetadata(): Promise<Metadata> {
+  const t = translator(resolveLocale((await cookies()).get(localeCookie)?.value));
+  return { title: 'hxaxd-research', description: t('app.description') };
+}
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = resolveLocale((await cookies()).get(localeCookie)?.value);
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <style>{paletteStyles}</style>
         <script
@@ -22,7 +26,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>{children}</body>
+      <body><LocaleProvider locale={locale}>{children}</LocaleProvider></body>
     </html>
   );
 }

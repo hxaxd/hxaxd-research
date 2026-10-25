@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -24,9 +25,9 @@ function read(config: AppConfig) {
   const text = readFileSync(file, 'utf8');
   let value: unknown;
   try { value = JSON.parse(stripJsonComments(text.replace(/^\uFEFF/, ''))); }
-  catch { throw new ApiError(422, 'model_config_invalid', '模型配置无法解析，请检查 models.json'); }
+  catch { throw new ApiError(422, 'model_config_invalid', t('errors.modelsParse')); }
   const result = storedConfiguration.safeParse(value);
-  if (!result.success) throw new ApiError(422, 'model_config_invalid', '模型配置格式无效，请检查 models.json');
+  if (!result.success) throw new ApiError(422, 'model_config_invalid', t('errors.modelsFormat'));
   return result.data;
 }
 
@@ -62,7 +63,7 @@ export async function saveModelConnection(config: AppConfig, runtime: ModelRunti
   const document = read(config);
   const connectionId = id ?? `custom-${randomUUID()}`;
   const current = document.providers[connectionId];
-  if (id && !current) throw new ApiError(404, 'model_connection_missing', '模型服务不存在');
+  if (id && !current) throw new ApiError(404, 'model_connection_missing', t('errors.connectionMissing'));
   document.providers[connectionId] = {
     ...current, name: input.name || new URL(input.baseUrl).hostname,
     baseUrl: input.baseUrl.replace(/\/+$/, ''), api: input.api,
@@ -90,7 +91,7 @@ export async function saveModelConnection(config: AppConfig, runtime: ModelRunti
 
 export async function removeModelConnection(config: AppConfig, runtime: ModelRuntime, id: string) {
   const document = read(config);
-  if (!document.providers[id]) throw new ApiError(404, 'model_connection_missing', '模型服务不存在');
+  if (!document.providers[id]) throw new ApiError(404, 'model_connection_missing', t('errors.connectionMissing'));
   delete document.providers[id];
   writeFileSync(path.join(config.piDir, 'models.json'), `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 });
   await runtime.refresh({ allowNetwork: false, providers: [id] });
@@ -116,13 +117,13 @@ export async function discoverModels(config: AppConfig, runtime: ModelRuntime, i
       headers, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeouts.modelCatalogMs)]),
     });
   } catch {
-    throw new ApiError(502, 'model_discovery_failed', '无法读取模型列表，请检查地址与网络，也可直接填写模型 ID');
+    throw new ApiError(502, 'model_discovery_failed', t('errors.discoveryNetwork'));
   }
-  if (!response.ok) throw new ApiError(502, 'model_discovery_failed', `模型列表请求失败（${response.status}），请检查地址与密钥，也可直接填写模型 ID`);
+  if (!response.ok) throw new ApiError(502, 'model_discovery_failed', t('errors.discoveryStatus', {value0: response.status}));
   const schema = input.api === 'google-generative-ai'
     ? z.object({ models: z.array(z.object({ name: z.string() })) }).transform(data => data.models.map(model => model.name.replace(/^models\//, '')))
     : z.object({ data: z.array(z.object({ id: z.string() })) }).transform(data => data.data.map(model => model.id));
   const parsed = schema.safeParse(await response.json().catch(() => null));
-  if (!parsed.success) throw new ApiError(502, 'model_catalog_invalid', '服务返回的模型列表格式无效，可直接填写模型 ID');
+  if (!parsed.success) throw new ApiError(502, 'model_catalog_invalid', t('errors.discoveryFormat'));
   return { models: [...new Set(parsed.data)].map(id => describe(id, knownModel(runtime, id, input.api, input.connectionId))) };
 }

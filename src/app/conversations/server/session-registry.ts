@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
 
@@ -84,7 +85,7 @@ export class PiSessionRegistry {
   private async sessionFor(record: LiveConversation, conversation: Conversation, input: SendMessage, signal: AbortSignal) {
     const selection = await this.providers.resolve(input.model, signal);
     if (input.clips?.length && !selection.model.input.includes('image'))
-      throw new ApiError(400, 'image_not_supported', '当前模型不支持图片，请切换支持图片的模型');
+      throw new ApiError(400, 'image_not_supported', t('models.noImages'));
     const session = record.session ?? (await createPiSession(
       this.config, selection, conversation.workspaceId, conversation.id, this.reader,
     ));
@@ -108,10 +109,10 @@ export class PiSessionRegistry {
     const request = JSON.stringify(input);
     if (record.snapshot.run?.id === input.id) {
       if (record.request !== request)
-        throw new ApiError(409, 'conflict', '该请求 ID 已用于其他内容');
+        throw new ApiError(409, 'conflict', t('errors.requestConflict'));
       return record.snapshot.run;
     }
-    if (record.execution) throw new ApiError(409, 'busy', '当前对话正在回答，请等待或停止');
+    if (record.execution) throw new ApiError(409, 'busy', t('errors.conversationBusy'));
     const run: ConversationRun = {
       id: input.id,
       conversationId: id,
@@ -151,7 +152,7 @@ export class PiSessionRegistry {
         });
         const last = session.messages.findLast((message) => message.role === 'assistant');
         if (last?.stopReason === 'error')
-          throw new ApiError(502, 'model_failed', last.errorMessage || '模型调用失败');
+          throw new ApiError(502, 'model_failed', last.errorMessage || t('errors.modelFailed'));
         run.status = signal.aborted ? 'cancelled' : 'completed';
       } catch (error) {
         run.status = signal.aborted ? 'cancelled' : 'failed';
@@ -164,7 +165,7 @@ export class PiSessionRegistry {
           ? null
           : error instanceof Error
             ? error.message
-            : '对话执行失败';
+            : t('errors.conversationFailed');
         if (!signal.aborted) console.error('Pi run failed', run.id, error);
       } finally {
         unsubscribe?.();
@@ -182,7 +183,7 @@ export class PiSessionRegistry {
     void record.execution.catch((error) => {
       console.error('Pi cleanup failed', run.id, error);
       record.execution = undefined;
-      record.snapshot.error = '对话历史读取失败，请检查会话文件';
+      record.snapshot.error = t('errors.historyRead');
       this.emit(record);
       this.release(record);
     });

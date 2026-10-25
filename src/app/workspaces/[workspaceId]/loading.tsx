@@ -1,3 +1,8 @@
+'use client';
+
+import { useTranslations } from 'use-intl';
+
 export default function Loading() {
-  return <div className="loading-screen">打开工作区…</div>;
+  const t = useTranslations();
+  return <div className="loading-screen">{t('workspaces.loading')}</div>;
 }

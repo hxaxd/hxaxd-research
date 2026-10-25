@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import {
   Braces,
   Check,
@@ -28,10 +30,11 @@ function CssEditor({
   theme: ThemeSettings;
   onChange: (changes: Partial<ThemeSettings>) => void;
 }) {
+  const t = useTranslations();
   const [draft, setDraft] = useState(theme.css);
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
-  const label = mode === 'light' ? '浅色 CSS' : '暗色 CSS';
+  const label = mode === 'light' ? t('settings.lightCss') : t('settings.darkCss');
 
   function exportCss() {
     const palette = palettes.find((palette) => palette.id === theme.palette)!;
@@ -70,15 +73,15 @@ function CssEditor({
         className="visually-hidden"
         type="file"
         accept=".css,text/css"
-        aria-label={`导入${label}`}
+        aria-label={t('settings.importCss', {value0: label})}
         onChange={async (event) => {
           const file = event.target.files?.[0];
           if (file) {
             try {
               setDraft(await file.text());
-              setMessage('已载入');
+              setMessage(t('common.loaded'));
             } catch (error) {
-              setMessage(`读取失败：${(error as Error).message}`);
+              setMessage(t('errors.readDetail', {value0: (error as Error).message}));
             }
           }
           event.target.value = '';
@@ -89,20 +92,20 @@ function CssEditor({
           className="button primary"
           onClick={() => {
             onChange({ css: draft });
-            setMessage('已应用');
+            setMessage(t('common.applied'));
           }}
         >
-          应用 CSS
+          {t('settings.applyCss')}
         </button>
         <button
           className="button secondary"
           onClick={() => {
             setDraft('');
             onChange({ css: '' });
-            setMessage('已清空');
+            setMessage(t('common.cleared'));
           }}
         >
-          清空 CSS
+          {t('settings.clearCss')}
         </button>
         <span className="header-spacer" />
         <button
@@ -110,11 +113,11 @@ function CssEditor({
           onClick={() => input.current!.click()}
         >
           <Upload size={14} />
-          导入
+          {t('common.import')}
         </button>
         <button className="button secondary" onClick={exportCss}>
           <Download size={14} />
-          导出主题
+          {t('settings.exportTheme')}
         </button>
       </div>
       {message && (
@@ -137,6 +140,7 @@ function PaletteOption({
   custom?: boolean;
   onSelect: () => void;
 }) {
+  const t = useTranslations();
   return (
     <label className="palette-option">
       <input
@@ -181,7 +185,7 @@ function PaletteOption({
           )}
         </span>
         <span className="palette-caption">
-          <strong>{custom ? '自定义 CSS' : palette.name}</strong>
+          <strong>{custom ? t('settings.customCss') : t(palette.name)}</strong>
           {selected && <Check size={14} aria-hidden="true" />}
         </span>
       </span>
@@ -198,11 +202,12 @@ function ThemeOptions({
   theme: ThemeSettings;
   onChange: (changes: Partial<ThemeSettings>) => void;
 }) {
+  const t = useTranslations();
   const options = palettes.filter((palette) => palette.mode === mode);
   const current = options.find((palette) => palette.id === theme.palette)!;
   return (
     <fieldset className="appearance-section theme-options">
-      <legend>{mode === 'light' ? '浅色模式' : '暗色模式'}</legend>
+      <legend>{mode === 'light' ? t('settings.lightMode') : t('settings.darkMode')}</legend>
       <div className="palette-options">
         {options.map((palette) => (
           <PaletteOption
@@ -227,17 +232,18 @@ function ThemeOptions({
 }
 
 export function AppearanceSettings() {
+  const t = useTranslations();
   const appearance = useAppearance();
   return (
     <>
       <fieldset className="appearance-section">
-        <legend>显示模式</legend>
+        <legend>{t('settings.displayMode')}</legend>
         <div className="appearance-modes">
           {(
             [
-              { id: 'system', name: '跟随系统', icon: Monitor },
-              { id: 'light', name: '浅色', icon: Sun },
-              { id: 'dark', name: '暗色', icon: Moon },
+              { id: 'system', name: t('settings.system'), icon: Monitor },
+              { id: 'light', name: t('settings.light'), icon: Sun },
+              { id: 'dark', name: t('settings.dark'), icon: Moon },
             ] as const
           ).map((mode) => (
             <label key={mode.id}>

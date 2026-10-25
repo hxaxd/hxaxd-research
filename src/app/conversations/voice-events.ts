@@ -1,3 +1,5 @@
+import type { useTranslations } from 'use-intl';
+
 export type VoiceItem = { text: string; done: boolean };
 
 export type VoiceServerEvent = {
@@ -11,6 +13,7 @@ export type VoiceServerEvent = {
 export function applyVoiceEvent(
   items: Map<string, VoiceItem>,
   event: VoiceServerEvent,
+  t: ReturnType<typeof useTranslations>,
 ): { completed: string | null; error: string | null } {
   if (event.type === 'conversation.item.input_audio_transcription.delta') {
     const id = event.item_id ?? 'item';
@@ -38,7 +41,7 @@ export function applyVoiceEvent(
     const detail = event.error?.message?.slice(0, 120);
     return {
       completed: null,
-      error: detail ? `语音服务返回错误：${detail}` : '语音服务返回错误',
+      error: detail ? t('errors.speechDetail', {value0: detail}) : t('errors.speech'),
     };
   }
   return { completed: null, error: null };

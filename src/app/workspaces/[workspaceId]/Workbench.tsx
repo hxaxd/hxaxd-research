@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import {
   MessageSquare,
   PanelLeftClose,
@@ -64,6 +66,7 @@ export function Workbench({
   initialFile,
   initialConversation,
 }: WorkbenchProps) {
+  const t = useTranslations();
   const workspaceId = initialWorkspace.id;
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [conversations, setConversations] = useState(initialConversations);
@@ -146,7 +149,7 @@ export function Workbench({
       }
     };
     stream.onerror = () =>
-      setFileError('文件变化监听已断开，正在重连；可手动刷新材料。');
+      setFileError(t('files.reconnecting'));
     stream.onopen = () => {
       filesChanged(['']);
       setFileError('');
@@ -155,7 +158,7 @@ export function Workbench({
       controller.abort();
       stream.close();
     };
-  }, [workspaceId, filesChanged]);
+  }, [workspaceId, filesChanged, t]);
 
   const refreshModels = useCallback((signal?: AbortSignal) =>
     requestJson<ModelCatalog>('/api/models', { signal }).then(next => {
@@ -218,7 +221,7 @@ export function Workbench({
   async function referenceConversation() {
     if (conversationId) return conversationId;
     const conversation = await requestJson<Conversation>(`/api/workspaces/${workspaceId}/conversations`, {
-      method: 'POST', body: JSON.stringify({ id: crypto.randomUUID(), name: '材料提问' }),
+      method: 'POST', body: JSON.stringify({ id: crypto.randomUUID(), name: t('conversations.materialQuestion') }),
     });
     createdConversation(conversation);
     return conversation.id;
@@ -240,8 +243,8 @@ export function Workbench({
           <div className="collapsed-rail materials-rail">
             <button
               className="icon-button"
-              aria-label="展开材料栏"
-              title="展开材料栏"
+              aria-label={t('workspaces.expandMaterials')}
+              title={t('workspaces.expandMaterials')}
               onClick={() => layout.setOpen('materials', true)}
             >
               <PanelLeftOpen size={18} />
@@ -251,7 +254,7 @@ export function Workbench({
         <aside
           className={`materials-panel${layout.closing === 'materials' ? ' collapse-pending' : ''}`}
           id="materials-panel"
-          aria-label="论文与材料"
+          aria-label={t('files.materials')}
           hidden={!materialsOpen}
         >
           {fileError && (
@@ -261,13 +264,13 @@ export function Workbench({
           )}
           <div className="panel-heading">
             <span>
-              材料
+              {t('files.materials')}
             </span>
             <div className="toolbar">
               <button
                 className="icon-button"
-                aria-label="收起材料栏"
-                title="收起材料栏"
+                aria-label={t('workspaces.collapseMaterials')}
+                title={t('workspaces.collapseMaterials')}
                 onClick={() => layout.setOpen('materials', false)}
               >
                 <PanelLeftClose size={16} />
@@ -299,14 +302,14 @@ export function Workbench({
           onBrowse={() => layout.setOpen('materials', true)}
           onCapture={async clip => {
             const id = await referenceConversation();
-            if ((clips[id]?.length ?? 0) >= maxImageClips) throw new Error(`一次最多添加 ${maxImageClips} 张截图，请先发送或移除已有截图`);
+            if ((clips[id]?.length ?? 0) >= maxImageClips) throw new Error(t('errors.imageCount', {value0: maxImageClips}));
             const target = id;
             setClips(current => ({ ...current, [target]: [...(current[target] ?? []), clip] }));
             layout.setOpen('conversation', true);
           }}
           onQuote={async quote => {
             const id = await referenceConversation();
-            if ((quotes[id]?.length ?? 0) >= maxTextQuotes) throw new Error(`一次最多引用 ${maxTextQuotes} 段，请先发送或移除已有引用`);
+            if ((quotes[id]?.length ?? 0) >= maxTextQuotes) throw new Error(t('errors.quoteCount', {value0: maxTextQuotes}));
             setQuotes(current => ({ ...current, [id]: [...(current[id] ?? []), quote] }));
             layout.setOpen('conversation', true);
           }}
@@ -319,8 +322,8 @@ export function Workbench({
           <div className="collapsed-rail conversation-rail">
             <button
               className="icon-button"
-              aria-label="展开对话栏"
-              title="展开对话栏"
+              aria-label={t('workspaces.expandConversation')}
+              title={t('workspaces.expandConversation')}
               onClick={() => layout.setOpen('conversation', true)}
             >
               <PanelRightOpen size={18} />
@@ -330,7 +333,7 @@ export function Workbench({
         <section
           className={`conversation-panel${layout.closing === 'conversation' ? ' collapse-pending' : ''}`}
           id="conversation-panel"
-          aria-label="材料对话"
+          aria-label={t('conversations.title')}
           hidden={!conversationOpen}
         >
           <div className="panel-heading conversation-heading">
@@ -343,7 +346,7 @@ export function Workbench({
               <EditableText
                 className="conversation-name"
                 value={currentConversation.name}
-                label="对话名称"
+                label={t('conversations.name')}
                 onSave={async (name) => {
                   const renamed = await requestJson<Conversation>(
                     `/api/workspaces/${workspaceId}/conversations/${currentConversation.id}`,
@@ -359,14 +362,14 @@ export function Workbench({
             )}
             {conversations.length ? (
               <ChoiceSelect
-                label="切换对话"
+                label={t('conversations.switch')}
                 value={conversationId ?? ''}
                 items={conversations}
                 onChange={selectConversation}
                 iconOnly
               />
             ) : (
-              <span className="conversation-heading-label">材料对话</span>
+              <span className="conversation-heading-label">{t('conversations.title')}</span>
             )}
             <CreateConversationDialog
               workspaceId={workspaceId}
@@ -374,8 +377,8 @@ export function Workbench({
             />
             <button
               className="icon-button"
-              aria-label="收起对话栏"
-              title="收起对话栏"
+              aria-label={t('workspaces.collapseConversation')}
+              title={t('workspaces.collapseConversation')}
               onClick={() => layout.setOpen('conversation', false)}
             >
               <PanelRightClose size={16} />
@@ -412,8 +415,7 @@ export function Workbench({
           ) : (
             <div className="chat-empty">
               <MessageSquare size={27} strokeWidth={1.3} />
-              <h3>围绕材料，开始讨论</h3>
-              <p>点击上方“新建”，讨论论文、梳理思路，或修改工作区中的文本。</p>
+              <h3>{t('conversations.none')}</h3>
               <ModelSettingsButton showLabel />
             </div>
           )}

@@ -1,3 +1,4 @@
+import { text as t } from '@/app/i18n/server.mjs';
 import { mkdir, readdir, stat } from 'node:fs/promises';
 
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
@@ -59,8 +60,8 @@ export function POST(request: Request, context: Context) {
       await mkdir(target);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EEXIST') throw new ApiError(409, 'conflict', '同名文件或目录已存在');
-      if (code === 'ENOENT') throw new ApiError(404, 'directory_missing', '上级目录不存在');
+      if (code === 'EEXIST') throw new ApiError(409, 'conflict', t('errors.pathExists'));
+      if (code === 'ENOENT') throw new ApiError(404, 'directory_missing', t('errors.parentMissing'));
       throw error;
     }
     return Response.json({ path: safe }, { status: 201 });

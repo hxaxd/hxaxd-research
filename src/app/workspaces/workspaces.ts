@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -14,18 +15,18 @@ export function getWorkspace(root: string, id: string): Workspace {
     text = readFileSync(file, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      throw new ApiError(404, 'not_found', '工作区配置不存在');
+      throw new ApiError(404, 'not_found', t('errors.workspaceConfigMissing'));
     throw error;
   }
   try {
     const workspace = workspaceSchema.parse(JSON.parse(text));
-    if (workspace.id !== id) throw new Error('工作区 ID 与目录名称不一致');
+    if (workspace.id !== id) throw new Error(t('errors.workspaceId'));
     return workspace;
   } catch (error) {
     throw new ApiError(
       422,
       'workspace_config_invalid',
-      `${id}/workspace.json 无效：${(error as Error).message}`,
+      t('errors.workspaceConfig', {value0: id, value1: (error as Error).message}),
     );
   }
 }
@@ -60,7 +61,7 @@ export function listWorkspaces(root: string) {
 
 export function createWorkspace(root: string, input: { id: string; name: string }) {
   const directory = path.join(root, input.id);
-  if (existsSync(directory)) throw new ApiError(409, 'conflict', '工作区目录已存在');
+  if (existsSync(directory)) throw new ApiError(409, 'conflict', t('errors.workspaceExists'));
   mkdirSync(directory);
   const now = new Date().toISOString();
   const workspace = { ...input, createdAt: now, updatedAt: now };

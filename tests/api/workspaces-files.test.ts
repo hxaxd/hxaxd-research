@@ -19,6 +19,26 @@ let app: Awaited<ReturnType<typeof createTestApp>>;
 beforeEach(async () => { app = await createTestApp(); });
 afterEach(async () => { await app.cleanup(); });
 
+test('API errors follow each request language while status, codes and user content remain unchanged', async () => {
+  const context = workspaceContext(app.workspace.id);
+  const cases = [
+    { language: 'en', message: 'File or folder not found' },
+    { language: 'zh-CN', message: '文件或目录不存在' },
+    { language: 'unknown', message: '文件或目录不存在' },
+  ];
+  await Promise.all(cases.map(async ({ language, message }) => {
+    const headers = { Cookie: `research-locale=${language}` };
+    const response = await file(request('/file?path=missing.md', 'GET', undefined, headers), context);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'file_missing', message } });
+    expect(await (await workspace(request('/workspace', 'GET', undefined, headers), context)).json())
+      .toMatchObject({ name: app.workspace.name });
+  }));
+  const invalid = await createDirectory(request('/files', 'POST', { path: '' }, { Cookie: 'research-locale=en' }), context);
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({ error: { code: 'invalid_input', message: 'Invalid input' } });
+});
+
 test('application configuration controls preview and upload limits through the file APIs', async () => {
   await writeFile(app.config.configFile, JSON.stringify({
     dataDir: app.config.dataDir,

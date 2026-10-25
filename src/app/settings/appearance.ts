@@ -5,7 +5,7 @@ export const palettes = [
   {
     id: 'paper',
     mode: 'light',
-    name: '纸白',
+    name: 'settings.paper',
     base: '#f6f8fa',
     panel: '#ffffff',
     canvas: '#f0f3f6',
@@ -21,7 +21,7 @@ export const palettes = [
   {
     id: 'snow',
     mode: 'light',
-    name: 'Nord Snow',
+    name: 'settings.snow',
     base: '#e5e9f0',
     panel: '#eceff4',
     canvas: '#d8dee9',
@@ -37,7 +37,7 @@ export const palettes = [
   {
     id: 'latte',
     mode: 'light',
-    name: 'Catppuccin Latte',
+    name: 'settings.latte',
     base: '#e6e9ef',
     panel: '#eff1f5',
     canvas: '#dce0e8',
@@ -53,7 +53,7 @@ export const palettes = [
   {
     id: 'graphite',
     mode: 'dark',
-    name: '石墨灰',
+    name: 'settings.graphite',
     base: '#0d1117',
     panel: '#161b22',
     canvas: '#0d1117',
@@ -69,7 +69,7 @@ export const palettes = [
   {
     id: 'nord',
     mode: 'dark',
-    name: 'Nord',
+    name: 'settings.nord',
     base: '#2e3440',
     panel: '#3b4252',
     canvas: '#2e3440',
@@ -85,7 +85,7 @@ export const palettes = [
   {
     id: 'mocha',
     mode: 'dark',
-    name: 'Catppuccin Mocha',
+    name: 'settings.mocha',
     base: '#181825',
     panel: '#1e1e2e',
     canvas: '#11111b',

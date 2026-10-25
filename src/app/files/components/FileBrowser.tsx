@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import {
   ArrowLeft,
   ChevronRight,
@@ -32,6 +34,7 @@ export function FileBrowser({
   activePath: string | null;
   onOpenFile: (path: string) => void;
 }) {
+  const t = useTranslations();
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -59,16 +62,16 @@ export function FileBrowser({
     <section className="file-browser">
       <div className="section-heading">
         <span>
-          文件 <small>{files?.length ?? '—'}</small>
+          {t('files.files')} <small>{files?.length ?? '—'}</small>
         </span>
         <div className="toolbar">
-          <CreateEntityDialog title="新建文件夹" label="文件夹名称" onSubmit={async name => {
+          <CreateEntityDialog title={t('files.createFolder')} label={t('files.folderName')} onSubmit={async name => {
             const result = await requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
               method: 'POST', body: JSON.stringify({ path: directory ? `${directory}/${name}` : name }),
             });
             navigate(result.path);
           }}>
-            <button className="icon-button" aria-label="新建文件夹" title="新建文件夹"><FolderPlus size={15} /></button>
+            <button className="icon-button" aria-label={t('files.createFolder')} title={t('files.createFolder')}><FolderPlus size={15} /></button>
           </CreateEntityDialog>
           <ImportFilesDialog
             workspaceId={workspaceId}
@@ -77,8 +80,8 @@ export function FileBrowser({
           />
           <button
             className="icon-button"
-            aria-label="刷新文件"
-            title="刷新文件"
+            aria-label={t('files.refresh')}
+            title={t('files.refresh')}
             onClick={() => setRefresh((value) => value + 1)}
           >
             <RefreshCw size={15} />
@@ -93,7 +96,7 @@ export function FileBrowser({
           }
         >
           <ArrowLeft size={14} />
-          返回上一级
+          {t('files.parent')}
         </button>
       )}
       {directory !== '' && (
@@ -106,12 +109,11 @@ export function FileBrowser({
           {error}
         </p>
       )}
-      {!error && files === null && <p className="empty-small">读取材料…</p>}
+      {!error && files === null && <p className="empty-small">{t('files.loading')}</p>}
       {!error && files?.length === 0 && (
         <div className="empty-small">
-          还没有材料
+          {t('files.empty')}
           <br />
-          <span>从上方导入文件或目录。</span>
         </div>
       )}
       <div>

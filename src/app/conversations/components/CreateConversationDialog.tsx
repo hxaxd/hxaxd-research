@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 
@@ -15,12 +17,13 @@ export function CreateConversationDialog({
   workspaceId: string;
   onCreated: (conversation: Conversation) => void;
 }) {
+  const t = useTranslations();
   const submissionId = useRef<string | null>(null);
   return (
     <CreateEntityDialog
-      title="新建对话"
-      label="这段对话可以讨论工作区中的多篇论文。"
-      initialName="新对话"
+      title={t('conversations.create')}
+      label={t('conversations.description')}
+      initialName={t('conversations.untitled')}
       onSubmit={async (name) => {
         const id = submissionId.current ??= crypto.randomUUID();
         onCreated(
@@ -32,9 +35,9 @@ export function CreateConversationDialog({
         submissionId.current = null;
       }}
     >
-      <button className="text-action" aria-label="新建对话">
+      <button className="text-action" aria-label={t('conversations.create')}>
         <Plus size={15} aria-hidden="true" />
-        <span>新建</span>
+        <span>{t('common.create')}</span>
       </button>
     </CreateEntityDialog>
   );

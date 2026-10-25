@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import {
   ArrowUp,
   BookOpen,
@@ -55,6 +57,7 @@ export function ConversationComposer({
   onQuotesChange: Dispatch<SetStateAction<TextQuote[]>>;
   supportsImages: boolean;
 }) {
+  const t = useTranslations();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -62,7 +65,7 @@ export function ConversationComposer({
   const submission = useRef<{ id: string; content: string } | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const { settings, error: speechError } = useSpeechSettings();
-  const active = activeSpeech(settings);
+  const active = activeSpeech(settings, t);
   const voice = useVoiceInput({ text, onTextChange: setText, textarea });
   const running = run?.status === 'accepted' || run?.status === 'running';
   const canSend =
@@ -78,16 +81,16 @@ export function ConversationComposer({
 
   const voiceLabel =
     voice.state === 'recording'
-      ? `正在录音 ${clock(voice.elapsed)}，点击结束`
+      ? t('speech.recordingTime', {value0: clock(voice.elapsed)})
       : voice.state === 'permission'
-        ? '请求麦克风权限，点击取消'
+        ? t('speech.permissionPending')
         : voice.state === 'connecting'
-          ? '正在连接语音服务，点击取消'
+          ? t('speech.connecting')
           : voice.state === 'finishing'
-            ? '正在整理文字，点击取消'
+            ? t('speech.processing')
             : active
-              ? `开始语音输入 · ${active.name}`
-              : '开始语音输入（尚未配置）';
+              ? t('speech.startWith', {value0: active.name})
+              : t('speech.notConfigured');
 
   function toggleVoice() {
     if (voice.state === 'recording') {
@@ -105,10 +108,10 @@ export function ConversationComposer({
     if (!active) {
       setVoiceNotice(
         speechError
-          ? `无法读取语音设置：${speechError}`
+          ? t('speech.settingsError', {value0: speechError})
           : settings
-            ? `无法开始语音输入：${speechUnavailable(settings)}`
-            : '正在读取语音设置，请稍后重试',
+            ? t('speech.startError', {value0: speechUnavailable(settings, t)})
+            : t('speech.settingsLoading'),
       );
       openModelSettings();
       return;
@@ -121,7 +124,7 @@ export function ConversationComposer({
     if (running || submitting || !canSend) return;
     const sentClips = clips;
     const sentQuotes = quotes;
-    const content = JSON.stringify({ text: text.trim() || (quotes.length ? '请解释引用的选段。' : '请解释所附的截图。'), model, thinkingLevel, reading, clips, quotes });
+    const content = JSON.stringify({ text: text.trim() || (quotes.length ? t('conversations.explainQuote') : t('conversations.explainImage')), model, thinkingLevel, reading, clips, quotes });
     if (!submission.current || submission.current.content !== content)
       submission.current = { id: crypto.randomUUID(), content };
     setSubmitting(true);
@@ -145,10 +148,10 @@ export function ConversationComposer({
   return (
     <div className="composer-area">
       {reading && (
-        <div className="reading-context" title={reading.path} aria-label="当前阅读材料">
+        <div className="reading-context" title={reading.path} aria-label={t('files.current')}>
           <BookOpen size={14} aria-hidden="true" />
           <span>{reading.path.split('/').pop()}</span>
-          {reading.page && <small>第 {reading.page} 页</small>}
+          {reading.page && <small>{t("files.pageNumber", {value0: reading.page})}</small>}
         </div>
       )}
       {error && (
@@ -165,35 +168,35 @@ export function ConversationComposer({
         <div className="voice-error" role="alert">
           <span>{voice.error}</span>
           <button className="text-action" onClick={openModelSettings}>
-            语音设置
+            {t('speech.settings')}
           </button>
         </div>
       )}
-      {!model && <p className="model-notice">暂无可用模型。配置模型后，即可发送消息。</p>}
-      {!!quotes.length && <div className="composer-quotes" aria-label="待发送引用">
+      {!model && <p className="model-notice">{t('models.noneConfigured')}</p>}
+      {!!quotes.length && <div className="composer-quotes" aria-label={t('conversations.pendingQuotes')}>
         {quotes.map((quote, index) => <div className="quote-card" key={index}>
-          <div><small>{quote.path.split('/').pop()}{quote.page ? ` · 第 ${quote.page} 页` : ''}{quote.mode === 'source' ? ' · 源码' : ''}</small>
+          <div><small>{quote.path.split('/').pop()}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}</small>
             <blockquote>{quote.text}</blockquote></div>
-          <button className="icon-button" aria-label={`移除引用 ${index + 1}`} disabled={submitting}
+          <button className="icon-button" aria-label={t('conversations.removeQuote', {value0: index + 1})} disabled={submitting}
             onClick={() => onQuotesChange(current => current.filter((_, i) => i !== index))}><X size={17} /></button>
         </div>)}
       </div>}
       {!!clips.length && (
-        <div className="composer-clips" aria-label="待发送截图">
+        <div className="composer-clips" aria-label={t('conversations.pendingImages')}>
           {clips.map((clip, index) => (
             <div className="composer-clip" key={index}>
-              <ImageAttachment src={`data:image/png;base64,${clip.data}`} label={`${clip.path.split('/').pop()}${clip.page ? ` · 第 ${clip.page} 页` : ''}`} />
-              <button className="icon-button" aria-label={`移除截图 ${index + 1}`} disabled={submitting} onClick={() => onClipsChange(clips.filter((_, i) => i !== index))}><X size={17} /></button>
+              <ImageAttachment src={`data:image/png;base64,${clip.data}`} label={`${clip.path.split('/').pop()}${clip.page ? t('files.pageSuffix', {value0: clip.page}) : ''}`} />
+              <button className="icon-button" aria-label={t('conversations.removeImage', {value0: index + 1})} disabled={submitting} onClick={() => onClipsChange(clips.filter((_, i) => i !== index))}><X size={17} /></button>
             </div>
           ))}
         </div>
       )}
-      {!!clips.length && model && !supportsImages && <p className="model-notice" role="status">当前模型不支持图片，请切换模型后发送。</p>}
+      {!!clips.length && model && !supportsImages && <p className="model-notice" role="status">{t('models.noImages')}</p>}
       <div className="composer">
         <textarea
           ref={textarea}
-          aria-label="对话消息"
-          placeholder={reading ? '围绕当前材料提问…' : '提问，或描述你想完成的修改…'}
+          aria-label={t('conversations.message')}
+          placeholder={reading ? t('conversations.placeholder') : t('conversations.placeholder')}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -217,10 +220,10 @@ export function ConversationComposer({
             <span className="composer-keyboard-hint">
               {connected ? (
                 <>
-                  <kbd>Enter</kbd> 发送 <span className="composer-hint">· Shift + Enter 换行</span>
+                  <kbd>Enter</kbd> {t('common.send')} <span className="composer-hint">{t('conversations.newline')}</span>
                 </>
               ) : (
-                '正在连接…'
+                t('common.connecting')
               )}
             </span>
           )}
@@ -252,8 +255,8 @@ export function ConversationComposer({
             {voice.state === 'recording' && (
               <button
                 className="icon-button voice-cancel"
-                aria-label="取消语音输入"
-                title="取消语音输入"
+                aria-label={t('speech.cancel')}
+                title={t('speech.cancel')}
                 onClick={voice.cancel}
               >
                 <X size={17} />
@@ -263,8 +266,8 @@ export function ConversationComposer({
           {running ? (
             <button
               className="send-button stop"
-              aria-label="停止回答"
-              title="停止回答"
+              aria-label={t('conversations.stopAnswer')}
+              title={t('conversations.stopAnswer')}
               disabled={submitting}
               onClick={async () => {
                 setSubmitting(true);
@@ -282,13 +285,13 @@ export function ConversationComposer({
               }}
             >
               <Square size={14} fill="currentColor" />
-              <span>停止</span>
+              <span>{t('common.stop')}</span>
             </button>
           ) : (
             <button
               className="send-button"
-              aria-label="发送消息"
-              title="发送消息"
+              aria-label={t('conversations.sendMessage')}
+              title={t('conversations.sendMessage')}
               disabled={submitting || !canSend}
               onClick={() => void send()}
             >

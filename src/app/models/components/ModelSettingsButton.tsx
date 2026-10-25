@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { Settings2 } from 'lucide-react';
 
 import { openSettings } from '@/app/settings/components/open-settings';
@@ -11,16 +13,17 @@ export function ModelSettingsButton({
   showLabel?: boolean;
   disabled?: boolean;
 }) {
+  const t = useTranslations();
   return (
     <button
       className={showLabel ? 'button secondary' : 'icon-button provider-trigger'}
-      aria-label="模型设置"
-      title="模型设置"
+      aria-label={t('models.settings')}
+      title={t('models.settings')}
       disabled={disabled}
       onClick={() => openSettings('models')}
     >
       <Settings2 size={15} />
-      {showLabel && '模型设置'}
+      {showLabel && t('models.settings')}
     </button>
   );
 }

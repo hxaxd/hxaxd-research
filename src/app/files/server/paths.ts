@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,7 +9,7 @@ import { ApiError } from '@/shared/http/api-error';
 export function validateRelativePath(value: string, allowEmpty = true): string {
   const normalized = value.replaceAll('\\', '/');
   if ((!normalized && !allowEmpty) || normalized.startsWith('/') || normalized.length > 2048)
-    throw new ApiError(400, 'invalid_path', '请使用工作区内的相对路径');
+    throw new ApiError(400, 'invalid_path', t('errors.relativePath'));
   for (const part of normalized ? normalized.split('/') : []) {
     if (
       !part ||
@@ -18,7 +19,7 @@ export function validateRelativePath(value: string, allowEmpty = true): string {
       /[. ]$/.test(part) ||
       /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
     )
-      throw new ApiError(400, 'invalid_path', '文件路径含有无效名称');
+      throw new ApiError(400, 'invalid_path', t('errors.pathName'));
   }
   return normalized;
 }
@@ -39,11 +40,11 @@ async function resolveWorkspaceRoot(
     const base = await realpath(workspaceDir);
     const root = await realpath(path.join(workspaceDir, workspaceId));
     if (!isWithin(base, root) || base === root)
-      throw new ApiError(403, 'invalid_path', '工作区目录不能指向外部位置');
+      throw new ApiError(403, 'invalid_path', t('errors.workspaceExternal'));
     return root;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      throw new ApiError(404, 'directory_missing', '工作区目录不存在，请检查本地资料');
+      throw new ApiError(404, 'directory_missing', t('errors.workspaceDirectory'));
     throw error;
   }
 }
@@ -65,11 +66,11 @@ export async function resolveWorkspacePath(
       exists = true;
       const resolved = await realpath(/* turbopackIgnore: true */ target);
       if (!isWithin(root, resolved))
-        throw new ApiError(403, 'invalid_path', '不能访问工作区之外的文件');
+        throw new ApiError(403, 'invalid_path', t('errors.pathExternal'));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT' && allowMissing && !exists) continue;
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-        throw new ApiError(404, 'file_missing', '文件或目录不存在，请刷新材料列表');
+        throw new ApiError(404, 'file_missing', t('errors.pathMissing'));
       throw error;
     }
   }

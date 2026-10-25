@@ -1,3 +1,4 @@
+import { text as t } from '../i18n/server.mjs';
 import path from 'node:path';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { z } from 'zod';
@@ -39,9 +40,9 @@ async function availableModels(runtime, provider, signal, timeoutMs = 15000) {
     headers: { Authorization: `Bearer ${auth.auth.apiKey}` },
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   });
-  if (!response.ok) throw new ModelAccessError(502, 'model_catalog_failed', `ChatGPT 模型列表获取失败（${response.status}），请重新连接后重试`);
+  if (!response.ok) throw new ModelAccessError(502, 'model_catalog_failed', t('errors.catalogStatus', {value0: response.status}));
   const catalog = catalogSchema.safeParse(await response.json());
-  if (!catalog.success) throw new ModelAccessError(502, 'model_catalog_invalid', 'ChatGPT 返回的模型列表格式无效');
+  if (!catalog.success) throw new ModelAccessError(502, 'model_catalog_invalid', t('errors.catalogFormat'));
   const known = new Map(models.map(model => [model.id, model]));
   return catalog.data.models.flatMap(entry => {
     const model = known.get(entry.slug);
@@ -53,7 +54,7 @@ async function availableModels(runtime, provider, signal, timeoutMs = 15000) {
 export async function resolveModel(runtime, id, signal, timeoutMs = 15000) {
   const models = await availableModels(runtime, id.slice(0, id.indexOf('/')), signal, timeoutMs);
   const model = models.find(model => `${model.provider}/${model.id}` === id);
-  if (!model) throw new ModelAccessError(503, 'model_unavailable', `模型不可用：${id}`);
+  if (!model) throw new ModelAccessError(503, 'model_unavailable', t('errors.modelUnavailable', {value0: id}));
   return model;
 }
 

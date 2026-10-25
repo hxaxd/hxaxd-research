@@ -1,3 +1,4 @@
+import { text as t } from '@/app/i18n/server.mjs';
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -96,14 +97,14 @@ export class ModelProviders {
       throw new ApiError(
         409,
         "chatgpt_not_connected",
-        "请先在模型设置中连接 ChatGPT 授权",
+        t('errors.chatgptDisconnected'),
       );
     const auth = await runtime.getAuth("openai", { signal });
     if (!auth?.auth.apiKey)
       throw new ApiError(
         409,
         "chatgpt_not_connected",
-        "ChatGPT 授权不可用，请重新连接",
+        t('errors.chatgptUnavailable'),
       );
     return auth.auth.apiKey;
   }
@@ -157,7 +158,7 @@ export class ModelProviders {
       throw new ApiError(
         409,
         "authorization_busy",
-        "已有 ChatGPT 授权正在进行",
+        t('errors.authorizationBusy'),
       );
     const deviceId = this.deviceId();
     // Reserve the attempt before starting the SDK's callback listener.
@@ -233,7 +234,7 @@ export class ModelProviders {
             ? null
             : error instanceof Error
               ? error.message
-              : "ChatGPT 连接失败",
+              : t('errors.chatgptConnection'),
         };
       });
     return login.snapshot;
@@ -244,7 +245,7 @@ export class ModelProviders {
       throw new ApiError(
         409,
         "authorization_changed",
-        "授权已更新，请刷新供应商设置",
+        t('errors.authorizationChanged'),
       );
     if (this.active()) this.login.controller.abort();
     await this.login.done;
@@ -256,7 +257,7 @@ export class ModelProviders {
       throw new ApiError(
         409,
         "authorization_not_waiting",
-        "当前没有等待回调地址的授权",
+        t('errors.callbackNotWaiting'),
       );
     this.login.submit(url);
     return this.login.snapshot;

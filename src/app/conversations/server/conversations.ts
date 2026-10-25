@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -18,7 +19,7 @@ function conversation(info: SessionInfo, workspaceId: string): Conversation {
   return {
     id: info.id,
     workspaceId,
-    name: info.name || '新对话',
+    name: info.name || t('conversations.untitled'),
     createdAt: info.created.toISOString(),
     updatedAt: info.modified.toISOString(),
   };
@@ -35,7 +36,7 @@ export function openConversation(root: string, workspaceId: string, id: string) 
   const cwd = path.join(root, workspaceId);
   const directory = sessionDirectory(root, workspaceId);
   const file = path.join(directory, `${id}.jsonl`);
-  if (!existsSync(file)) throw new ApiError(404, 'not_found', '对话不存在');
+  if (!existsSync(file)) throw new ApiError(404, 'not_found', t('errors.conversationMissing'));
   return SessionManager.open(file, directory, cwd);
 }
 
@@ -46,7 +47,7 @@ export function getConversation(root: string, workspaceId: string, id: string): 
   return {
     id,
     workspaceId,
-    name: manager.getSessionName() || '新对话',
+    name: manager.getSessionName() || t('conversations.untitled'),
     createdAt: timestamp,
     updatedAt: entries.at(-1)?.timestamp ?? timestamp,
   };
@@ -61,7 +62,7 @@ export function createConversation(
   const directory = sessionDirectory(root, workspaceId);
   mkdirSync(directory, { recursive: true });
   const file = path.join(directory, `${input.id}.jsonl`);
-  if (existsSync(file)) throw new ApiError(409, 'conflict', '对话 ID 已存在');
+  if (existsSync(file)) throw new ApiError(409, 'conflict', t('errors.conversationExists'));
   const manager = SessionManager.create(path.join(root, workspaceId), directory, { id: input.id });
   manager.appendSessionInfo(input.name);
   // Pi defers setup-only sessions; the workbench also keeps explicitly created empty conversations.

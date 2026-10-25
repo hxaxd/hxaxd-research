@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import { Quote, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
@@ -10,6 +12,7 @@ export function DocumentSelection({ reading, onQuote, children }: {
   onQuote: (quote: TextQuote) => Promise<void>;
   children: ReactNode;
 }) {
+  const t = useTranslations();
   const root = useRef<HTMLDivElement>(null);
   const nativeSelection = useRef<Selection | null>(null);
   const [quote, setQuote] = useState<TextQuote | null>(null);
@@ -35,7 +38,7 @@ export function DocumentSelection({ reading, onQuote, children }: {
         selectedDocument = doc;
         const page = parent?.closest<HTMLElement>('.page[data-page-number]')?.dataset.pageNumber;
         setQuote(text ? { path, ...(mode ? { mode } : {}), ...(page ? { page: Number(page) } : {}), text } : null);
-        setError(text.length > 10000 ? '选段最多 10,000 字，请缩小选区' : '');
+        setError(text.length > 10000 ? t('errors.quoteLength') : '');
       };
       doc.addEventListener('selectionchange', update);
       doc.addEventListener('pointerup', update);
@@ -61,11 +64,11 @@ export function DocumentSelection({ reading, onQuote, children }: {
     frame?.addEventListener('load', loaded);
     loaded();
     return () => { unbind(); unbindFrame?.(); frame?.removeEventListener('load', loaded); };
-  }, [path, mode]);
+  }, [path, mode, t]);
 
   return <div className="resource-body" ref={root}>
     {children}
-    {quote && <div className="selection-actions" role="group" aria-label="选段引用">
+    {quote && <div className="selection-actions" role="group" aria-label={t('files.selection')}>
       <span title={quote.text}>{error || quote.text}</span>
       <button className="button" disabled={busy || quote.text.length > 10000}
         onPointerDown={event => event.preventDefault()} onClick={async () => {
@@ -74,8 +77,8 @@ export function DocumentSelection({ reading, onQuote, children }: {
           try { await onQuote(quote); nativeSelection.current?.removeAllRanges(); setQuote(null); }
           catch (error) { setError((error as Error).message); }
           finally { setBusy(false); }
-        }}><Quote size={16} aria-hidden="true" />{busy ? '正在加入…' : '引用选段'}</button>
-      <button className="icon-button" aria-label="取消选段引用" onClick={() => setQuote(null)}><X size={17} /></button>
+        }}><Quote size={16} aria-hidden="true" />{busy ? t('files.attaching') : t('files.quote')}</button>
+      <button className="icon-button" aria-label={t('files.cancelQuote')} onClick={() => setQuote(null)}><X size={17} /></button>
     </div>}
   </div>;
 }

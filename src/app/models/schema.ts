@@ -32,7 +32,7 @@ const connectionModelSchema = z.object({
 const connectionBaseUrlSchema = z.url().max(2048).refine(value => {
   const url = new URL(value);
   return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
-}, '请填写有效的 http(s) 接口地址');
+});
 const connectionInputSchema = z.object({
   name: z.string().trim().max(160).default(''),
   baseUrl: connectionBaseUrlSchema,

@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 import path from 'node:path';
 import type { AppConfig } from '@/app/config.mjs';
 
@@ -11,7 +12,7 @@ import { translationContext } from '@/app/translation/runtime';
 export function workspaceContextTool(config: AppConfig, workspaceId: string) {
   return defineTool({
     name: 'get_workspace_context',
-    label: '查看工作区',
+    label: t('tools.workspace'),
     description:
       '读取当前工作区信息、应用配置路径、项目 TeX 环境，以及翻译、OCR 和已注册模型的调用入口。文件内容请用文件工具读取。',
     parameters: Type.Object({}),

@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { z } from 'zod';
 import type { AppConfig } from '@/app/config.mjs';
@@ -25,21 +26,21 @@ function transcriptionSession(model: string) {
 
 function failure(status: number) {
   if (status === 401 || status === 403)
-    return new ApiError(502, 'speech_auth_failed', `语音服务拒绝了凭据（${status}），请检查密钥或重新连接授权`);
+    return new ApiError(502, 'speech_auth_failed', t('errors.speechAuth', {value0: status}));
   if (status === 404)
-    return new ApiError(502, 'speech_endpoint_missing', '语音服务没有对应的接口（404），请检查地址与连接协议');
+    return new ApiError(502, 'speech_endpoint_missing', t('errors.speechEndpoint'));
   if (status === 429)
-    return new ApiError(502, 'speech_limited', '语音服务的额度或频率受限（429），请稍后重试');
+    return new ApiError(502, 'speech_limited', t('errors.speechLimit'));
   if (status >= 500)
-    return new ApiError(502, 'speech_unavailable', `语音服务暂时不可用（${status}）`);
-  return new ApiError(502, 'speech_request_failed', `语音服务请求失败（${status}）`);
+    return new ApiError(502, 'speech_unavailable', t('errors.speechUnavailable', {value0: status}));
+  return new ApiError(502, 'speech_request_failed', t('errors.speechStatus', {value0: status}));
 }
 
 function transportFailure(error: unknown, signal: AbortSignal): never {
-  if (signal.aborted) throw new ApiError(408, 'request_cancelled', '请求已取消');
+  if (signal.aborted) throw new ApiError(408, 'request_cancelled', t('common.cancelled'));
   if (error instanceof Error && error.name === 'TimeoutError')
-    throw new ApiError(504, 'speech_timeout', '语音服务响应超时，请检查地址与网络');
-  throw new ApiError(502, 'speech_unreachable', '无法连接语音服务，请检查地址、端口与网络');
+    throw new ApiError(504, 'speech_timeout', t('errors.speechTimeout'));
+  throw new ApiError(502, 'speech_unreachable', t('errors.speechNetwork'));
 }
 
 async function send(url: string, init: RequestInit, timeout: number, outer: AbortSignal) {
@@ -60,11 +61,11 @@ async function readJson<T>(response: Response, schema: z.ZodType<T>) {
   try {
     data = await response.json();
   } catch {
-    throw new ApiError(502, 'speech_response_invalid', '语音服务返回了无法识别的数据');
+    throw new ApiError(502, 'speech_response_invalid', t('errors.speechResponse'));
   }
   const parsed = schema.safeParse(data);
   if (!parsed.success)
-    throw new ApiError(502, 'speech_response_invalid', '语音服务返回的数据格式无效');
+    throw new ApiError(502, 'speech_response_invalid', t('errors.speechResponseFormat'));
   return parsed.data;
 }
 
@@ -139,7 +140,7 @@ export async function fileTranscript(
   timeouts: AppConfig['timeouts'],
 ) {
   if (target.kind === 'chatgpt')
-    throw new ApiError(409, 'speech_protocol_unsupported', 'ChatGPT 授权只用于实时转写，请配置文件转写服务');
+    throw new ApiError(409, 'speech_protocol_unsupported', t('errors.chatgptSpeechProtocol'));
   const form = new FormData();
   form.set('model', target.model);
   form.set('file', audio, filename);
@@ -190,20 +191,20 @@ export async function testTarget(target: SpeechTarget, signal: AbortSignal, time
       signal,
     );
     if (!response.ok) throw failure(response.status);
-    return '实时转写接口可用';
+    return t('speech.realtimeAvailable');
   }
   if (target.protocol === 'realtime') {
     try {
       await mintSecret(target, signal, timeouts, target.key);
-      return '实时转写接口可用';
+      return t('speech.realtimeAvailable');
     } catch (error) {
       if (!isApiError(error) || error.code !== 'speech_endpoint_missing') throw error;
       const reachable = await send(`${target.baseUrl}/realtime/calls`, { method: 'POST', body: '' }, timeouts.speechProbeMs, signal);
       if ([401, 403, 404, 429].includes(reachable.status) || reachable.status >= 500)
         throw failure(reachable.status);
-      return '地址可访问；实时连接将在开始录音时建立';
+      return t('speech.reachable');
     }
   }
   await fileTranscript(target, silentWav(), 'silence.wav', signal, timeouts);
-  return '文件转写接口可用';
+  return t('speech.fileAvailable');
 }

@@ -1,4 +1,5 @@
 import 'server-only';
+import { text as t } from '@/app/i18n/server.mjs';
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -77,11 +78,11 @@ export class SpeechConnections {
     try {
       parsed = JSON.parse(stripJsonComments(readFileSync(this.file, 'utf8').replace(/^\uFEFF/, '')));
     } catch {
-      throw new ApiError(500, 'speech_config_invalid', '语音配置文件无法解析，请检查本机的 speech.json');
+      throw new ApiError(500, 'speech_config_invalid', t('errors.speechParse'));
     }
     const result = storedSchema.safeParse(parsed);
     if (!result.success)
-      throw new ApiError(500, 'speech_config_invalid', '语音配置文件格式无效，请检查本机的 speech.json');
+      throw new ApiError(500, 'speech_config_invalid', t('errors.speechFormat'));
     return result.data;
   }
 
@@ -103,7 +104,7 @@ export class SpeechConnections {
     if (connectionId === 'chatgpt') return { kind: 'chatgpt' as const, model: data.chatgptModel };
     const connection = data.connections.find((item) => item.id === connectionId);
     if (!connection)
-      throw new ApiError(404, 'speech_connection_missing', '语音连接不存在，请刷新后重试');
+      throw new ApiError(404, 'speech_connection_missing', t('errors.speechMissing'));
     return {
       kind: 'custom' as const,
       protocol: connection.protocol,
@@ -116,7 +117,7 @@ export class SpeechConnections {
   select(activeId: string | null) {
     const data = this.read();
     if (activeId !== null && activeId !== 'chatgpt' && !data.connections.some((item) => item.id === activeId))
-      throw new ApiError(404, 'speech_connection_missing', '语音连接不存在，请刷新后重试');
+      throw new ApiError(404, 'speech_connection_missing', t('errors.speechMissing'));
     this.write({ ...data, activeId });
   }
 
@@ -146,7 +147,7 @@ export class SpeechConnections {
     const data = this.read();
     const current = data.connections.find((item) => item.id === id);
     if (!current)
-      throw new ApiError(404, 'speech_connection_missing', '语音连接不存在，请刷新后重试');
+      throw new ApiError(404, 'speech_connection_missing', t('errors.speechMissing'));
     const key = input.clearKey
       ? undefined
       : input.key?.trim()
@@ -169,7 +170,7 @@ export class SpeechConnections {
   remove(id: string) {
     const data = this.read();
     if (!data.connections.some((item) => item.id === id))
-      throw new ApiError(404, 'speech_connection_missing', '语音连接不存在，请刷新后重试');
+      throw new ApiError(404, 'speech_connection_missing', t('errors.speechMissing'));
     this.write({
       ...data,
       connections: data.connections.filter((item) => item.id !== id),

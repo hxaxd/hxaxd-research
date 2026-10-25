@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'use-intl';
+
 import {
   useEffect,
   useRef,
@@ -31,6 +33,7 @@ function subscribe(listener: () => void) {
 }
 
 export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
+  const t = useTranslations();
   const saved = useSyncExternalStore(
     subscribe,
     () => localStorage.getItem(key),
@@ -115,7 +118,7 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
   function separator(side: Side) {
     return {
       role: 'separator' as const,
-      'aria-label': side === 'materials' ? '调整材料栏宽度' : '调整对话栏宽度',
+      'aria-label': side === 'materials' ? t('workspaces.resizeMaterials') : t('workspaces.resizeConversation'),
       'aria-orientation': 'vertical' as const,
       'aria-controls': `${side}-panel`,
       'aria-valuemin': minimum[side],

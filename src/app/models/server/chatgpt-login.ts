@@ -1,3 +1,4 @@
+import { text as t } from '@/app/i18n/server.mjs';
 import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
@@ -49,17 +50,17 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
     function parseCallback(url: URL) {
       const expected = new URL(redirectUri);
       if (url.origin !== expected.origin || url.pathname !== expected.pathname)
-        throw new Error("请粘贴本次授权最后跳转的完整回调地址");
+        throw new Error(t('errors.callbackRequired'));
       if (url.searchParams.get("state") !== state)
-        throw new Error("回调不属于本次授权，请使用当前授权页面");
+        throw new Error(t('errors.callbackAttempt'));
       const error = url.searchParams.get("error");
-      if (error) throw new Error(`ChatGPT 授权失败：${error}`);
+      if (error) throw new Error(t('errors.authorizationDetail', {value0: error}));
       const code = url.searchParams.get("code");
       const issuedId = url.searchParams.get("client_id") ?? clientId;
       if (!code || !issuedId || issuedId === "dynamic_agent_client")
-        throw new Error("授权回调缺少授权码或客户端身份");
+        throw new Error(t('errors.callbackFields'));
       if (clientId && issuedId !== clientId)
-        throw new Error("授权返回了不同的客户端身份");
+        throw new Error(t('errors.callbackClient'));
       return { code, clientId: issuedId };
     }
 
@@ -76,20 +77,20 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
           "Cache-Control": "no-store",
         });
         response.end(
-          '<!doctype html><meta charset="utf-8"><title>ChatGPT 授权</title><p>已收到授权回调，请返回工作台查看连接结果。可以关闭此页面。</p>',
+          `<!doctype html><meta charset="utf-8"><title>ChatGPT</title><h1>${t('models.callbackReceived')}</h1><p>${t('models.callbackReturn')}</p>`,
         );
         callback.resolve(result);
       } catch {
         response.writeHead(400, {
           "Content-Type": "text/plain; charset=utf-8",
         });
-        response.end("授权回调无效，请返回工作台重试。");
+        response.end(t('errors.callbackInvalid'));
         if (
           url.searchParams.get("state") === state &&
           url.searchParams.has("error")
         )
           callback.reject(
-            new Error(`ChatGPT 授权失败：${url.searchParams.get("error")}`),
+            new Error(t('errors.authorizationDetail', {value0: url.searchParams.get("error")})),
           );
       }
     });
@@ -128,7 +129,7 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
       const fromManual = interaction
         .prompt({
           type: "manual_code",
-          message: "完成浏览器授权，或粘贴最后跳转的完整地址",
+          message: t('models.authorizationPending'),
           placeholder: redirectUri,
           signal: AbortSignal.any([manual.signal, interaction.signal]),
         })
@@ -137,7 +138,7 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
       manual.abort();
       interaction.notify({
         type: "progress",
-        message: "正在完成 ChatGPT 连接",
+        message: t('models.authorizing'),
       });
       const response = await fetch(
         new URL("/api/accounts/oauth/token", issuer),
@@ -157,7 +158,7 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
       );
       if (!response.ok)
         throw new Error(
-          `ChatGPT 令牌交换失败（${response.status}），请重新授权`,
+          t('errors.tokenExchange', {value0: response.status}),
         );
       const token = tokenSchema.parse(await response.json());
       const { payload } = await jwtVerify(token.id_token, keys, {
@@ -166,12 +167,12 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
         requiredClaims: ["exp", "sub", "nonce"],
       });
       if (payload.nonce !== nonce)
-        throw new Error("ChatGPT 身份令牌与本次授权不匹配");
+        throw new Error(t('errors.identityToken'));
       if (previous?.subject && previous.subject !== payload.sub)
-        throw new Error("ChatGPT 返回了不同的账号，请断开原连接后添加");
+        throw new Error(t('errors.accountMismatch'));
       const grantedScopes = token.scope.split(/\s+/);
       if (!grantedScopes.includes(directScope))
-        throw new Error("本次授权未授予 ChatGPT 模型调用权限");
+        throw new Error(t('errors.authorizationScope'));
       return {
         type: "oauth",
         access: token.access_token,
