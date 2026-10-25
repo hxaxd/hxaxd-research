@@ -1,5 +1,6 @@
 import { handleApiRequest, validatedIds } from '@/app/api/handle-request';
-import { listWorkspaceFiles } from '@/features/files/server/list-files';
+import { createDirectorySchema } from '@/features/files/schema';
+import { createWorkspaceDirectory, listWorkspaceFiles } from '@/features/files/server/directories';
 import { getWorkspace } from '@/features/workspaces/server/workspaces';
 import { getAppRuntime } from '@/server/runtime';
 
@@ -17,5 +18,16 @@ export function GET(request: Request, context: Context) {
       workspaceId,
       new URL(request.url).searchParams.get('path') ?? '',
     );
+  });
+}
+
+export function POST(request: Request, context: Context) {
+  return handleApiRequest(request, async () => {
+    const app = getAppRuntime();
+    const { workspaceId } = await validatedIds(context);
+    getWorkspace(app.config.workspaceDir, workspaceId);
+    const input = createDirectorySchema.parse(await request.json());
+    const result = await createWorkspaceDirectory(app.config.workspaceDir, workspaceId, input.path);
+    return Response.json(result, { status: 201 });
   });
 }

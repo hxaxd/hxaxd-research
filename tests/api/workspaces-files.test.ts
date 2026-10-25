@@ -1,59 +1,62 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { GET as workspaces, POST as createWorkspace } from '@/app/api/workspaces/route';
 import { GET as workspace, PATCH as renameWorkspace } from '@/app/api/workspaces/[workspaceId]/route';
-import { GET as papers, POST as createPaper } from '@/app/api/workspaces/[workspaceId]/papers/route';
-import { PATCH as renamePaper } from '@/app/api/workspaces/[workspaceId]/papers/[paperId]/route';
-import { GET as files } from '@/app/api/workspaces/[workspaceId]/files/route';
+import { GET as files, POST as createDirectory } from '@/app/api/workspaces/[workspaceId]/files/route';
 import { GET as file } from '@/app/api/workspaces/[workspaceId]/file/route';
 import { POST as importFiles } from '@/app/api/workspaces/[workspaceId]/imports/route';
 import { GET as openapi } from '@/app/api/openapi/route';
 import { GET as preview } from '@/app/api/workspaces/[workspaceId]/preview/[...path]/route';
 import { GET as changes } from '@/app/api/workspaces/[workspaceId]/files/events/route';
 
-import { createTestApp, request, workspaceContext } from '../app';
+import { createTestApp, request, restartApp, workspaceContext } from '../app';
 
 let app: Awaited<ReturnType<typeof createTestApp>>;
 beforeEach(async () => { app = await createTestApp(); });
 afterEach(async () => { await app.cleanup(); });
 
-test('workspace and paper names persist, external metadata edits work, and papers belong to their workspace', async () => {
+test('workspace identity persists while materials follow the filesystem without registration', async () => {
   const context = workspaceContext(app.workspace.id);
-  const created = await createPaper(request('/papers', 'POST', { id: randomUUID(), name: '论文' }), context);
-  expect(created.status).toBe(201);
-  const paper = await created.json();
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  const metadata = path.join(root, 'workspace.json');
+  expect(JSON.parse(await readFile(metadata, 'utf8'))).not.toHaveProperty('papers');
   expect((await renameWorkspace(request('/workspace', 'PATCH', { name: '新名称' }), context)).status).toBe(200);
-  expect((await renamePaper(request('/paper', 'PATCH', { name: '新论文名' }), {
-    params: Promise.resolve({ workspaceId: app.workspace.id, paperId: paper.id }),
-  })).status).toBe(200);
   expect(await (await workspaces(request('/workspaces'))).json()).toContainEqual(expect.objectContaining({ name: '新名称' }));
-
-  const metadata = path.join(app.config.workspaceDir, app.workspace.id, 'workspace.json');
   const config = JSON.parse(await readFile(metadata, 'utf8'));
   config.name = '外部编辑';
-  config.papers[0].path = 'research/custom-location';
   await writeFile(metadata, JSON.stringify(config));
   expect(await (await workspace(request('/workspace'), context)).json()).toMatchObject({ name: '外部编辑' });
-  expect(await (await papers(request('/papers'), context)).json()).toContainEqual(expect.objectContaining({ name: '新论文名', path: 'research/custom-location' }));
-
-  const other = await (await createWorkspace(request('/workspaces', 'POST', { id: randomUUID(), name: '其他工作区' }))).json();
-  expect((await renamePaper(request('/paper', 'PATCH', { name: '错误归属' }), {
-    params: Promise.resolve({ workspaceId: other.id, paperId: paper.id }),
-  })).status).toBe(404);
+  const created = await createDirectory(request('/files', 'POST', { path: '论文材料' }), context);
+  expect(created.status).toBe(201);
+  expect(await created.json()).toEqual({ path: '论文材料' });
+  await writeFile(path.join(root, '论文材料', '原文.md'), '# 论文');
+  await rename(path.join(root, '论文材料'), path.join(root, '任意目录'));
+  restartApp();
+  expect(await (await files(request('/files'), context)).json()).toContainEqual(expect.objectContaining({ path: '任意目录', kind: 'directory' }));
+  expect(await (await file(request('/file?path=任意目录/原文.md'), context)).text()).toBe('# 论文');
+  expect(JSON.parse(await readFile(metadata, 'utf8'))).not.toHaveProperty('papers');
   await writeFile(metadata, '{invalid');
   expect((await workspace(request('/workspace'), context)).status).toBe(422);
+});
+
+test('directory creation checks paths and reports conflicts without replacing existing materials', async () => {
+  const context = workspaceContext(app.workspace.id);
+  expect((await createDirectory(request('/files', 'POST', { path: '材料' }), context)).status).toBe(201);
+  expect((await createDirectory(request('/files', 'POST', { path: '材料/翻译' }), context)).status).toBe(201);
+  expect((await createDirectory(request('/files', 'POST', { path: '材料' }), context)).status).toBe(409);
+  expect((await createDirectory(request('/files', 'POST', { path: '../外部' }), context)).status).toBe(400);
+  expect((await createDirectory(request('/files', 'POST', { path: '' }), context)).status).toBe(400);
+  expect((await createDirectory(request('/files', 'POST', { path: '不存在/子目录' }), context)).status).toBe(404);
+  expect((await createDirectory(request('/files', 'POST', { path: '目录' }), workspaceContext(randomUUID()))).status).toBe(404);
 });
 
 test('metadata writes reject duplicate identities and malformed requests without replacing the workspace', async () => {
   expect((await createWorkspace(request('/workspaces', 'POST', { id: app.workspace.id, name: '替换' }))).status).toBe(409);
   const context = workspaceContext(app.workspace.id);
-  const paperId = randomUUID();
-  await createPaper(request('/papers', 'POST', { id: paperId, name: '原论文' }), context);
-  expect((await createPaper(request('/papers', 'POST', { id: paperId, name: '重复' }), context)).status).toBe(409);
   const response = await renameWorkspace(new Request('http://localhost/workspace', {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{invalid',
   }), context);

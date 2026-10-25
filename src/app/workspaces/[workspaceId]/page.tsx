@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation';
 
 import { listConversations } from '@/features/conversations/server/conversations';
-import { listPapers } from '@/features/papers/server/papers';
 import {
   getWorkspace,
   listWorkspaces,
@@ -32,7 +31,6 @@ export default async function WorkspacePage({
     if (isApiError(error) && error.status === 404) notFound();
     throw error;
   }
-  const papers = listPapers(app.config.workspaceDir, workspaceId);
   const conversations = await listConversations(
     app.config.workspaceDir,
     workspaceId,
@@ -43,14 +41,7 @@ export default async function WorkspacePage({
       key={workspaceId}
       initialWorkspace={workspace}
       workspaces={listWorkspaces(app.config.workspaceDir)}
-      initialPapers={papers}
       initialConversations={conversations}
-      initialPaper={
-        typeof query.paper === 'string' &&
-        papers.some((paper) => paper.id === query.paper)
-          ? query.paper
-          : null
-      }
       initialFile={typeof query.file === 'string' ? query.file : null}
       initialConversation={
         typeof query.conversation === 'string' &&

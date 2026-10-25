@@ -19,6 +19,8 @@ import {
 } from '@/features/conversations/schema';
 import {
   fileEntrySchema,
+  createDirectorySchema,
+  directoryResultSchema,
   importResultSchema,
   textFileSchema,
   readerRequestSchema,
@@ -30,7 +32,6 @@ import {
   modelCatalogSchema,
   providerSettingsSchema,
 } from '@/features/models/schema';
-import { createPaperSchema, paperSchema } from '@/features/papers/schema';
 import {
   speechChatgptSchema,
   speechConnectionInputSchema,
@@ -81,20 +82,7 @@ export function generateOpenapi() {
       body: renameSchema,
     },
     { method: 'get', path: prefix, response: workspaceSchema },
-    { method: 'get', path: `${prefix}/papers`, response: z.array(paperSchema) },
-    {
-      method: 'post',
-      path: `${prefix}/papers`,
-      response: paperSchema,
-      body: createPaperSchema,
-      status: 201,
-    },
-    {
-      method: 'patch',
-      path: `${prefix}/papers/{paperId}`,
-      response: paperSchema,
-      body: renameSchema,
-    },
+    { method: 'post', path: `${prefix}/files`, body: createDirectorySchema, response: directoryResultSchema, status: 201 },
     {
       method: 'get',
       path: `${prefix}/files`,

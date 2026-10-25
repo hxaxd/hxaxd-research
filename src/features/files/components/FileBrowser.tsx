@@ -5,29 +5,33 @@ import {
   ChevronRight,
   FileText,
   Folder,
+  FolderPlus,
   RefreshCw,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
+import { CreateEntityDialog } from '@/shared/ui/EntityControls';
 
 import { requestJson } from '@/shared/http/request-json';
 
 import type { FileEntry } from '../schema';
 import { ImportFilesDialog } from './ImportFilesDialog';
 
-export function FileTree({
+export function FileBrowser({
   workspaceId,
-  rootPath,
+  directory,
+  onDirectoryChange,
   revision,
   activePath,
   onOpenFile,
 }: {
   workspaceId: string;
-  rootPath: string;
+  directory: string;
+  onDirectoryChange: (directory: string) => void;
   revision: number;
   activePath: string | null;
   onOpenFile: (path: string) => void;
 }) {
-  const [directory, setDirectory] = useState(rootPath);
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -49,7 +53,7 @@ export function FileTree({
   const navigate = (next: string) => {
     setFiles(null);
     setError('');
-    setDirectory(next);
+    onDirectoryChange(next);
   };
   return (
     <section className="file-browser">
@@ -58,6 +62,14 @@ export function FileTree({
           文件 <small>{files?.length ?? '—'}</small>
         </span>
         <div className="toolbar">
+          <CreateEntityDialog title="新建文件夹" label="文件夹名称" onSubmit={async name => {
+            const result = await requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
+              method: 'POST', body: JSON.stringify({ path: directory ? `${directory}/${name}` : name }),
+            });
+            navigate(result.path);
+          }}>
+            <button className="icon-button" aria-label="新建文件夹" title="新建文件夹"><FolderPlus size={15} /></button>
+          </CreateEntityDialog>
           <ImportFilesDialog
             workspaceId={workspaceId}
             target={directory}
@@ -73,20 +85,20 @@ export function FileTree({
           </button>
         </div>
       </div>
-      {directory !== rootPath && (
+      {directory !== '' && (
         <button
           className="directory-back"
           onClick={() =>
-            navigate(directory.slice(0, Math.max(rootPath.length, directory.lastIndexOf('/'))))
+            navigate(directory.slice(0, Math.max(0, directory.lastIndexOf('/'))))
           }
         >
           <ArrowLeft size={14} />
           返回上一级
         </button>
       )}
-      {directory !== rootPath && (
+      {directory !== '' && (
         <div className="directory-path" title={directory}>
-          {directory.slice(rootPath.length).replace(/^\//, '')}
+          {directory}
         </div>
       )}
       {error && (

@@ -1,9 +1,11 @@
 import 'server-only';
 
-import { readdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, stat } from 'node:fs/promises';
+
+import { ApiError } from '@/shared/http/api-error';
 
 import type { FileEntry } from '../schema';
-import { resolveWorkspacePath } from './paths';
+import { resolveWorkspacePath, validateRelativePath } from './paths';
 
 export async function listWorkspaceFiles(
   workspaceDir: string,
@@ -42,4 +44,18 @@ export async function listWorkspaceFiles(
         ? -1
         : 1,
   );
+}
+
+export async function createWorkspaceDirectory(workspaceDir: string, workspaceId: string, relative: string) {
+  const safe = validateRelativePath(relative, false);
+  const target = await resolveWorkspacePath(workspaceDir, workspaceId, safe, true);
+  try {
+    await mkdir(target);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EEXIST') throw new ApiError(409, 'conflict', '同名文件或目录已存在');
+    if (code === 'ENOENT') throw new ApiError(404, 'directory_missing', '上级目录不存在');
+    throw error;
+  }
+  return { path: safe };
 }

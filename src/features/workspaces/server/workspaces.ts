@@ -5,9 +5,9 @@ import path from 'node:path';
 
 import { ApiError } from '@/shared/http/api-error';
 
-import { workspaceConfigSchema, type WorkspaceConfig } from '../schema';
+import { workspaceSchema, type Workspace } from '../schema';
 
-export function readWorkspace(root: string, id: string): WorkspaceConfig {
+export function getWorkspace(root: string, id: string): Workspace {
   const file = path.join(root, id, 'workspace.json');
   let text: string;
   try {
@@ -18,7 +18,7 @@ export function readWorkspace(root: string, id: string): WorkspaceConfig {
     throw error;
   }
   try {
-    const workspace = workspaceConfigSchema.parse(JSON.parse(text));
+    const workspace = workspaceSchema.parse(JSON.parse(text));
     if (workspace.id !== id) throw new Error('工作区 ID 与目录名称不一致');
     return workspace;
   } catch (error) {
@@ -30,36 +30,21 @@ export function readWorkspace(root: string, id: string): WorkspaceConfig {
   }
 }
 
-export function saveWorkspace(root: string, workspace: WorkspaceConfig) {
+function saveWorkspace(root: string, workspace: Workspace) {
   writeFileSync(
     path.join(root, workspace.id, 'workspace.json'),
     `${JSON.stringify(workspace, null, 2)}\n`,
   );
 }
 
-export function getWorkspace(root: string, id: string) {
-  const workspace = readWorkspace(root, id);
-  return {
-    id: workspace.id,
-    name: workspace.name,
-    createdAt: workspace.createdAt,
-    updatedAt: workspace.updatedAt,
-  };
-}
-
 export function getWorkspaceContext(root: string, id: string) {
-  const workspace = readWorkspace(root, id);
+  const workspace = getWorkspace(root, id);
   return {
     workspace: { id: workspace.id, name: workspace.name, root: '.' },
-    papers: workspace.papers.map((paper) => ({
-      id: paper.id,
-      name: paper.name,
-      path: paper.path,
-    })),
     paths: {
       metadata: 'workspace.json',
       description:
-        '论文路径来自 workspace.json；工作区及论文内可包含任意文件与子目录。原生工具接受绝对路径或相对默认工作目录的路径，实际权限由运行账号决定。',
+        '材料直接以文件系统为准，工作区可包含任意文件与子目录。原生工具接受绝对路径或相对默认工作目录的路径，实际权限由运行账号决定。',
     },
   };
 }
@@ -79,12 +64,12 @@ export function createWorkspace(root: string, input: { id: string; name: string 
   mkdirSync(directory);
   const now = new Date().toISOString();
   const workspace = { ...input, createdAt: now, updatedAt: now };
-  saveWorkspace(root, { ...workspace, papers: [] });
+  saveWorkspace(root, workspace);
   return workspace;
 }
 
 export function renameWorkspace(root: string, id: string, name: string) {
-  const workspace = { ...readWorkspace(root, id), name, updatedAt: new Date().toISOString() };
+  const workspace = { ...getWorkspace(root, id), name, updatedAt: new Date().toISOString() };
   saveWorkspace(root, workspace);
   return { id, name, createdAt: workspace.createdAt, updatedAt: workspace.updatedAt };
 }

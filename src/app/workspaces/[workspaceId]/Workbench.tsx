@@ -13,13 +13,14 @@ import { ConversationPanel } from '@/features/conversations/components/Conversat
 import { CreateConversationDialog } from '@/features/conversations/components/CreateConversationDialog';
 import type { Conversation } from '@/features/conversations/schema';
 import { FilePreview } from '@/features/files/components/FilePreview';
-import { FileTree } from '@/features/files/components/FileTree';
+import { FileBrowser } from '@/features/files/components/FileBrowser';
 import {
   fileChangeSchema,
   maxImageClips,
   maxTextQuotes,
   readerRequestSchema,
   type ReadingContext,
+  type DocumentRequest,
   type ReaderRequest,
   type ViewMode,
   type ImageClip,
@@ -28,13 +29,10 @@ import {
 import { ModelSettingsButton } from '@/features/models/components/ModelSettingsButton';
 import { modelsChangedEvent } from '@/features/models/components/model-events';
 import type { ConfiguredModel, ModelCatalog } from '@/features/models/schema';
-import { CreatePaperDialog } from '@/features/papers/components/CreatePaperDialog';
-import { PaperList } from '@/features/papers/components/PaperList';
-import type { Paper } from '@/features/papers/schema';
 import type { Workspace } from '@/features/workspaces/schema';
 import { requestJson } from '@/shared/http/request-json';
 import { ChoiceSelect } from '@/shared/ui/ChoiceSelect';
-import { InlineName } from '@/shared/ui/InlineName';
+import { EditableText } from '@/shared/ui/EntityControls';
 
 import { WorkbenchHeader } from './WorkbenchHeader';
 import { useWorkbenchLayout } from './use-workbench-layout';
@@ -42,9 +40,7 @@ import { useWorkbenchLayout } from './use-workbench-layout';
 type WorkbenchProps = {
   initialWorkspace: Workspace;
   workspaces: Workspace[];
-  initialPapers: Paper[];
   initialConversations: Conversation[];
-  initialPaper: string | null;
   initialFile: string | null;
   initialConversation: string | null;
 };
@@ -64,20 +60,17 @@ function rememberWorkspace() {
 export function Workbench({
   initialWorkspace,
   workspaces,
-  initialPapers,
   initialConversations,
-  initialPaper,
   initialFile,
   initialConversation,
 }: WorkbenchProps) {
   const workspaceId = initialWorkspace.id;
   const [workspace, setWorkspace] = useState(initialWorkspace);
-  const [papers, setPapers] = useState(initialPapers);
   const [conversations, setConversations] = useState(initialConversations);
-  const [paperId, setPaperId] = useState(initialPaper);
   const [file, setFile] = useState(initialFile);
+  const [directory, setDirectory] = useState(initialFile?.slice(0, Math.max(0, initialFile.lastIndexOf('/'))) ?? '');
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
-  const [readerRequest, setReaderRequest] = useState<ReaderRequest | null>(null);
+  const [readerRequest, setReaderRequest] = useState<DocumentRequest | null>(null);
   const [filesRevision, setFilesRevision] = useState(0);
   const [fileRevisions, setFileRevisions] = useState<Record<string, number>>(
     {},
@@ -117,17 +110,9 @@ export function Workbench({
   const currentConversation = conversations.find(
     (item) => item.id === conversationId,
   );
-  const currentPaper = papers.find((paper) => paper.id === paperId);
   const displayDocument = useEffectEvent((request: ReaderRequest) => {
     if (request.conversationId !== conversationId) return;
-    setReaderRequest(request);
-    setFile(request.path);
-    setViewMode(request.mode ?? 'preview');
-    setPdfPosition({ path: request.path, page: request.page ?? 1 });
-    updateQuery('file', request.path);
-    const paper = papers.find(paper => request.path.startsWith(`${paper.path}/`));
-    setPaperId(paper?.id ?? null);
-    updateQuery('paper', paper?.id ?? null);
+    openDocument(request);
   });
 
   useEffect(() => rememberWorkspace(), [workspaceId]);
@@ -150,18 +135,8 @@ export function Workbench({
         filesChanged(paths);
         setFileError('');
         if (paths.includes('workspace.json') || paths.includes('')) {
-          void Promise.all([
-            requestJson<Workspace>(`/api/workspaces/${workspaceId}`, {
-              signal: controller.signal,
-            }),
-            requestJson<Paper[]>(`/api/workspaces/${workspaceId}/papers`, {
-              signal: controller.signal,
-            }),
-          ])
-            .then(([workspace, papers]) => {
-              setWorkspace(workspace);
-              setPapers(papers);
-            })
+          void requestJson<Workspace>(`/api/workspaces/${workspaceId}`, { signal: controller.signal })
+            .then(setWorkspace)
             .catch((error) => {
               if (!controller.signal.aborted) setFileError(error.message);
             });
@@ -182,48 +157,37 @@ export function Workbench({
     };
   }, [workspaceId, filesChanged]);
 
-  const refreshModels = useCallback(async () => {
-    try {
-      const next = await requestJson<ModelCatalog>('/api/models');
+  const refreshModels = useCallback((signal?: AbortSignal) =>
+    requestJson<ModelCatalog>('/api/models', { signal }).then(next => {
+      const saved = localStorage.getItem('research-model');
       setModels(next.models);
       setModelIssues(next.issues);
-      setModel((current) =>
-        next.models.some((model) => model.id === current)
-          ? current
-          : (next.models[0]?.id ?? ''),
-      );
+      setModel(current => next.models.find(model => model.id === current)?.id
+        ?? next.models.find(model => model.id === saved)?.id ?? next.models[0]?.id ?? '');
       setModelError('');
-    } catch (error) {
-      setModels([]);
-      setModel('');
-      setModelError((error as Error).message);
-      throw error;
-    }
-  }, []);
+    }).catch(error => {
+      if (!signal?.aborted) {
+        setModels([]);
+        setModel('');
+        setModelError((error as Error).message);
+      }
+    }), []);
 
   useEffect(() => {
     const controller = new AbortController();
-    void requestJson<ModelCatalog>('/api/models', { signal: controller.signal })
-      .then(({ models, issues }) => {
-        setModels(models);
-        setModelIssues(issues);
-        setModel(models[0]?.id ?? '');
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setModelError(error.message);
-      });
+    void refreshModels(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [refreshModels]);
 
   useEffect(() => {
-    const changed = () => void refreshModels().catch(() => undefined);
+    const changed = () => void refreshModels();
     window.addEventListener(modelsChangedEvent, changed);
     return () => window.removeEventListener(modelsChangedEvent, changed);
   }, [refreshModels]);
 
-  function selectPaper(id: string | null) {
-    setPaperId(id);
-    updateQuery('paper', id);
+  function selectModel(id: string) {
+    setModel(id);
+    localStorage.setItem('research-model', id);
   }
 
   function selectConversation(id: string) {
@@ -232,12 +196,17 @@ export function Workbench({
     updateQuery('conversation', id);
   }
 
+  function openDocument(target: ReadingContext) {
+    setFile(target.path);
+    setDirectory(target.path.slice(0, Math.max(0, target.path.lastIndexOf('/'))));
+    setViewMode(target.mode ?? 'preview');
+    setPdfPosition({ path: target.path, page: target.page ?? 1 });
+    setReaderRequest({ ...target, id: crypto.randomUUID() });
+    updateQuery('file', target.path);
+  }
+
   function openFile(path: string) {
-    setFile(path);
-    setReaderRequest(null);
-    setViewMode('preview');
-    setPdfPosition(null);
-    updateQuery('file', path);
+    openDocument({ path });
     if (layout.tablet) layout.setOpen('materials', false);
   }
 
@@ -292,16 +261,9 @@ export function Workbench({
           )}
           <div className="panel-heading">
             <span>
-              论文 <small>{papers.length}</small>
+              材料
             </span>
             <div className="toolbar">
-              <CreatePaperDialog
-                workspaceId={workspaceId}
-                onCreated={(paper) => {
-                  setPapers((current) => [...current, paper]);
-                  selectPaper(paper.id);
-                }}
-              />
               <button
                 className="icon-button"
                 aria-label="收起材料栏"
@@ -312,21 +274,10 @@ export function Workbench({
               </button>
             </div>
           </div>
-          <PaperList
-            papers={papers}
+          <FileBrowser
             workspaceId={workspaceId}
-            activeId={paperId}
-            onSelect={selectPaper}
-            onRenamed={(paper) =>
-              setPapers((current) =>
-                current.map((item) => (item.id === paper.id ? paper : item)),
-              )
-            }
-          />
-          <FileTree
-            key={currentPaper?.path ?? 'root'}
-            workspaceId={workspaceId}
-            rootPath={currentPaper?.path ?? ''}
+            directory={directory}
+            onDirectoryChange={setDirectory}
             revision={filesRevision}
             activePath={file}
             onOpenFile={openFile}
@@ -389,11 +340,11 @@ export function Workbench({
               aria-hidden="true"
             />
             {currentConversation && (
-              <InlineName
+              <EditableText
                 className="conversation-name"
-                name={currentConversation.name}
+                value={currentConversation.name}
                 label="对话名称"
-                onRename={async (name) => {
+                onSave={async (name) => {
                   const renamed = await requestJson<Conversation>(
                     `/api/workspaces/${workspaceId}/conversations/${currentConversation.id}`,
                     { method: 'PATCH', body: JSON.stringify({ name }) },
@@ -447,16 +398,15 @@ export function Workbench({
               conversation={currentConversation}
               models={models}
               model={model}
-              onModelChange={setModel}
+              onModelChange={selectModel}
               reading={reading}
               clips={clips[currentConversation.id] ?? []}
               onClipsChange={value => setClips(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
               quotes={quotes[currentConversation.id] ?? []}
               onQuotesChange={value => setQuotes(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
               onOpenQuote={quote => {
-                openFile(quote.path);
-                setViewMode(quote.mode ?? 'preview');
-                if (quote.page) setReaderRequest({ id: crypto.randomUUID(), conversationId: currentConversation.id, path: quote.path, page: quote.page });
+                openDocument(quote);
+                if (layout.tablet) layout.setOpen('materials', false);
               }}
             />
           ) : (

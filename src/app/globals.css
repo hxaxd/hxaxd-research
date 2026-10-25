@@ -289,11 +289,6 @@ svg {
   gap: 4px;
   flex: none;
 }
-.paper-list {
-  padding: 4px 8px 6px;
-  border-bottom: 0;
-}
-.paper-row,
 .file-row {
   position: relative;
   display: flex;
@@ -301,11 +296,9 @@ svg {
   min-width: 0;
   border-radius: 8px;
 }
-.paper-row + .paper-row,
 .file-row + .file-row {
   margin-top: 3px;
 }
-.paper-row:hover,
 .file-row:hover {
   background: var(--hover);
 }
@@ -313,7 +306,6 @@ svg {
   background: var(--soft);
   color: var(--accent);
 }
-.paper-row.selected::before,
 .file-row.selected::before {
   position: absolute;
   inset: 10px auto 10px 0;
@@ -322,7 +314,6 @@ svg {
   content: '';
   background: var(--accent);
 }
-.paper-select,
 .file-open {
   display: flex;
   flex: 1;
@@ -334,7 +325,6 @@ svg {
   line-height: 1.5;
   padding: 8px 10px;
 }
-.paper-select span,
 .file-open span {
   flex: 1;
   min-width: 0;
@@ -342,36 +332,11 @@ svg {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.paper-select svg,
 .file-open svg {
   color: var(--muted);
 }
-.selected .paper-select svg,
 .selected .file-open svg {
   color: var(--accent);
-}
-.row-action {
-  min-width: 30px;
-  height: 30px;
-  margin-right: 4px;
-}
-.row-action.is-referenced {
-  opacity: 1;
-  color: var(--accent);
-}
-.public-materials {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 10px;
-  text-align: left;
-  font-size: 13px;
-  border-radius: 8px;
-  margin-top: 6px;
-}
-.public-materials:hover {
-  background: var(--soft);
 }
 .file-browser {
   flex: 1;
@@ -1509,16 +1474,6 @@ kbd {
 .conversation-name {
   flex: 1;
 }
-.paper-name {
-  flex: 1;
-  font-size: 13px;
-}
-.paper-icon {
-  color: var(--accent);
-}
-.paper-name > button {
-  padding-left: 0;
-}
 .workspace-menu,
 .choice-menu {
   z-index: 45;
@@ -1854,14 +1809,8 @@ kbd {
   .panel-heading {
     height: 54px;
   }
-  .paper-select,
-  .file-open,
-  .public-materials {
+  .file-open {
     min-height: 44px;
-  }
-  .row-action {
-    min-width: 40px;
-    height: 40px;
   }
   .conversation-heading .icon-button {
     min-width: 40px;
@@ -1907,7 +1856,7 @@ kbd {
   }
   .pdf-controls { gap: 6px; }
   .pdf-navigation input { min-height: 44px; }
-  .pdf-outline button:not(.icon-button), .file-open, .paper-select { min-height: 44px; }
+  .pdf-outline button:not(.icon-button), .file-open { min-height: 44px; }
   .composer-keyboard-hint { visibility: hidden; }
   button, a, summary { touch-action: manipulation; }
 }

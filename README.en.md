@@ -81,7 +81,7 @@ Open **<http://127.0.0.1:8642>**.
 
 ## Start with a research question
 
-1. Create a workspace and a paper, then import a PDF, documents, or an entire materials directory.
+1. Create a workspace, then import a PDF, documents, or an entire materials directory.
 2. Open a document, select a passage or an image region, and ask a question. You can also tap the microphone and speak.
 3. Ask the assistant to turn the discussion into notes, a translation, or a draft, or take it further with experiment scripts. Review results, make changes, and keep working in the same workspace.
 

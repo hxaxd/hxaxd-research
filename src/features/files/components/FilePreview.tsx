@@ -9,7 +9,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
-import type { ImageClip, ReaderRequest, ViewMode, TextQuote } from '../schema';
+import type { ImageClip, DocumentRequest, ViewMode, TextQuote } from '../schema';
 
 import { PdfViewer } from './PdfViewer';
 import { TextPreview } from './TextPreview';
@@ -59,7 +59,7 @@ export function FilePreview({
   onBrowse: () => void;
   mode: ViewMode;
   onModeChange: (mode: ViewMode) => void;
-  request: ReaderRequest | null;
+  request: DocumentRequest | null;
   onOpenFile: (path: string) => void;
   onCapture: (clip: ImageClip) => Promise<void>;
   onQuote: (quote: TextQuote) => Promise<void>;
