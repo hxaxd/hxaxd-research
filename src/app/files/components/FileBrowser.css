@@ -1,22 +1,3 @@
-.file-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 2px 5px;
-}
-
-.material-views {
-  margin: 0 2px 12px;
-  border-radius: 10px;
-}
-
-.material-views button {
-  flex: 1;
-  min-height: 40px;
-  border-radius: 8px;
-  font-size: 0.857143rem;
-}
-
 .file-folder {
   min-width: 40px;
   height: 40px;
@@ -30,7 +11,7 @@
   border-radius: 8px;
 }
 
-.file-row + .file-row {
+.file-list > div + div {
   margin-top: 3px;
 }
 
@@ -84,13 +65,51 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 8px;
+  padding: 6px;
 }
 
 .file-open {
   font-size: 0.857143rem;
   padding-top: 10px;
   padding-bottom: 10px;
+}
+
+.file-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-size);
+  margin: 0 2px 6px;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-control);
+  background: var(--inset);
+  color: var(--muted);
+}
+
+.file-search:focus-within {
+  border-color: var(--accent);
+}
+
+.file-search input {
+  flex: 1;
+  min-width: 0;
+  height: calc(var(--control-size) - 2px);
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.857143rem;
+}
+
+.file-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.file-search .icon-button {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
 }
 
 .directory-back {
@@ -140,6 +159,42 @@
   gap: 6px;
 }
 
+.file-tree-row.selected::before {
+  position: absolute;
+  inset: 8px auto 8px -2px;
+  width: 3px;
+  border-radius: 2px;
+  content: '';
+  background: var(--accent);
+}
+
+.import-paper {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-control);
+  background: var(--inset);
+  cursor: pointer;
+}
+
+.import-paper input {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
+.import-paper span {
+  display: grid;
+  gap: 2px;
+}
+
+.import-paper small {
+  color: var(--muted);
+  font-size: 0.785714rem;
+}
+
 .import-summary {
   color: var(--accent);
   font-size: 0.857143rem;
@@ -157,7 +212,6 @@
 
 @media (pointer: coarse) {
   .file-open,
-  .material-views button,
   .file-folder {
     min-height: 44px;
   }

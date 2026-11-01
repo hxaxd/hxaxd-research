@@ -8,7 +8,7 @@ import type { AppConfig } from '@/app/config.mjs';
 import type { ReaderController } from '@/app/files/server/reader';
 import { ApiError, isApiError } from '@/shared/http/api-error';
 
-import type { Conversation, ConversationRun, ConversationSnapshot, SendMessage } from '../schema';
+import type { Conversation, ConversationRun, ConversationSnapshot, SendMessage, UserQuestion } from '../schema';
 import { getConversation, renameConversation } from './conversations';
 import { readConversationHistory } from './history';
 import { mapPiEvent } from './pi-events';
@@ -22,6 +22,7 @@ type LiveConversation = {
   execution?: Promise<void>;
   controller?: AbortController;
   request?: string;
+  questions: Map<string, (answer: string | null) => void>;
 };
 
 export class PiSessionRegistry {
@@ -45,6 +46,7 @@ export class PiSessionRegistry {
           error: null,
         },
         listeners: new Set(),
+        questions: new Map(),
       };
       this.conversations.set(key, record);
     } else if (!record.execution) {
@@ -88,6 +90,7 @@ export class PiSessionRegistry {
       throw new ApiError(400, 'image_not_supported', t('models.noImages'));
     const session = record.session ?? (await createPiSession(
       this.config, selection, conversation.workspaceId, conversation.id, this.reader,
+      (question, signal) => this.ask(record, question, signal),
     ));
     record.session = session;
     await session.setModel(selection.model);
@@ -101,6 +104,31 @@ export class PiSessionRegistry {
     const conversation = getConversation(root, workspaceId, id);
     const context = await buildReadingContext(root, workspaceId, input.reading, input.clips, input.quotes);
     return this.start(conversation, input, context);
+  }
+
+  private ask(record: LiveConversation, question: UserQuestion, toolSignal?: AbortSignal) {
+    const signal = toolSignal ? AbortSignal.any([toolSignal, record.controller!.signal]) : record.controller!.signal;
+    if (signal.aborted) return Promise.resolve(null);
+    return new Promise<string | null>(resolve => {
+      const finish = (answer: string | null) => {
+        signal.removeEventListener('abort', cancel);
+        record.questions.delete(question.id);
+        resolve(answer);
+      };
+      const cancel = () => finish(null);
+      record.questions.set(question.id, finish);
+      signal.addEventListener('abort', cancel, { once: true });
+    });
+  }
+
+  async answer(workspaceId: string, id: string, questionId: string, answer: string | null) {
+    getConversation(this.config.workspaceDir, workspaceId, id);
+    const record = this.conversations.get(`${workspaceId}/${id}`);
+    const finish = record?.questions.get(questionId);
+    if (!finish) throw new ApiError(409, 'question_closed', t('errors.questionClosed'));
+    if (answer === null) await this.stop(workspaceId, id, record!.snapshot.run!.id);
+    else finish(answer);
+    return { accepted: true };
   }
 
   private start(conversation: Conversation, input: SendMessage, context: string | null) {

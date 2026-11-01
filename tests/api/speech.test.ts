@@ -139,18 +139,22 @@ test('file transcription uploads the selected model and audio using the stored c
   expect((await transcribe(audio('chatgpt'))).status).toBe(409);
 });
 
-test('custom realtime exchanges SDP; connection tests and protocol errors are exposed through the API', async () => {
+test('realtime issues a short-lived audio session for the configured service without exposing its stored key', async () => {
   const id = await connection({ protocol: 'realtime', key: '' });
   vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
     const upstream = new Request(url, init);
     expect(upstream.headers.has('authorization')).toBe(false);
-    if (upstream.url.endsWith('/client_secrets')) return Response.json({ value: 'ephemeral-key' });
-    const form = await upstream.formData();
-    expect(form.get('sdp')).toBe('offer');
-    expect(JSON.parse(form.get('session') as string)).toMatchObject({ type: 'transcription', audio: { input: { transcription: { model: 'whisper-1' } } } });
-    return new Response('answer', { headers: { 'Content-Type': 'application/sdp' } });
+    expect(upstream.url).toBe('http://127.0.0.1:8000/v1/realtime/client_secrets');
+    expect(await upstream.json()).toMatchObject({ session: { type: 'transcription', audio: { input: { transcription: { model: 'whisper-1' } } } } });
+    return Response.json({ value: 'ephemeral-key' });
   });
-  expect(await (await realtime(request('/realtime', 'POST', { connectionId: id, sdp: 'offer' }))).json()).toEqual({ sdp: 'answer' });
+  const response = await realtime(request('/realtime', 'POST', { connectionId: id }));
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(await response.json()).toMatchObject({
+    url: 'ws://127.0.0.1:8000/v1/realtime?intent=transcription', key: 'ephemeral-key',
+    session: { type: 'transcription', audio: { input: { format: { type: 'audio/pcm', rate: 24000 }, turn_detection: null } } },
+    timeoutMs: app.config.timeouts.speechRealtimeMs,
+  });
   expect(await (await testConnection(request('/test', 'POST', { connectionId: id }))).json()).toMatchObject({ ok: true });
   expect((await transcribe(audio(id))).status).toBe(409);
 });
@@ -210,15 +214,26 @@ test.each([
   expect(await response.json()).toMatchObject({ error: { code } });
 });
 
-test('connection testing accepts an SDP validation response but rejects invalid credentials', async () => {
+test('realtime connection setup reports unsupported services and invalid credentials', async () => {
   const id = await connection({ protocol: 'realtime' });
-  let status = 400;
-  vi.stubGlobal('fetch', async (url: string) => new Response(null, {
-    status: url.endsWith('/client_secrets') ? 404 : status,
-  }));
-  expect(await (await testConnection(request('/test', 'POST', { connectionId: id }))).json()).toMatchObject({ ok: true });
+  let status = 404;
+  vi.stubGlobal('fetch', async () => new Response(null, { status }));
+  expect(await (await testConnection(request('/test', 'POST', { connectionId: id }))).json()).toMatchObject({ error: { code: 'speech_endpoint_missing' } });
   status = 401;
   const rejected = await testConnection(request('/test', 'POST', { connectionId: id }));
   expect(rejected.status).toBe(502);
   expect(await rejected.json()).toMatchObject({ error: { code: 'speech_auth_failed' } });
+});
+
+test('realtime setup uses HTTPS and keeps long-lived API credentials on the server', async () => {
+  const id = await connection({ protocol: 'realtime', baseUrl: 'https://speech.example/v1' });
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer sk-private');
+    return Response.json({ value: 'ephemeral-key' });
+  });
+  const session = await (await realtime(request('/realtime', 'POST', { connectionId: id }))).json();
+  expect(session).toMatchObject({ url: 'wss://speech.example/v1/realtime?intent=transcription', key: 'ephemeral-key' });
+  expect(JSON.stringify(session)).not.toContain('sk-private');
+  vi.stubGlobal('fetch', async () => Response.json({ value: '' }));
+  expect(await (await realtime(request('/realtime', 'POST', { connectionId: id }))).json()).toMatchObject({ error: { code: 'speech_response_invalid' } });
 });

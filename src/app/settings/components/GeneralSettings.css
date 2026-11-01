@@ -20,6 +20,9 @@
 .settings-row .choice-trigger {
   min-width: 160px;
   justify-content: space-between;
+  border-color: var(--control-line);
+  background: var(--control);
+  box-shadow: var(--control-shadow);
 }
 
 .settings-size-control {

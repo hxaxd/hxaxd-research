@@ -13,6 +13,7 @@ for (const entry of [
   'app/settings/skills',
   'app/latex/skills',
   'app/translation/skills',
+  'app/conversations/skills',
   'app/translation/prompts',
 ]) {
   cpSync(path.join(root, 'src', entry), path.join(templateDir, entry), { recursive: true });

@@ -4,6 +4,7 @@ import { useTranslations } from 'use-intl';
 
 import { Check, RotateCcw, X } from 'lucide-react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import { clsx } from 'clsx';
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 
 import type { ImageClip } from '../schema';
@@ -127,7 +128,7 @@ export function PdfRegionSelection({ getPage, scroll, onCapture, onClose }: {
         onPointerCancel={() => { drag.current = null; setSelection(null); }}
       >
         {selection && box && (
-          <div className={`pdf-selection-box${hasArea(selection) ? '' : ' anchor'}`} style={{
+          <div className={clsx('pdf-selection-box', !hasArea(selection) && 'anchor')} style={{
             left: selection.bounds.left + box.x * selection.bounds.width,
             top: selection.bounds.top + box.y * selection.bounds.height,
             width: box.width * selection.bounds.width,

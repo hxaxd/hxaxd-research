@@ -1,32 +1,6 @@
+/* Layout lives in Tailwind classes; this keeps state styling that depends on [open] and media queries. */
 .tool-message {
   font-size: 0.857143rem;
-  border: 0;
-  background: transparent;
-  border-radius: 0;
-}
-
-.tool-message + .tool-message {
-  margin-top: -15px;
-}
-
-.tool-message summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  cursor: pointer;
-  list-style: none;
-  min-height: 30px;
-  padding: 4px;
-  font-size: 0.857143rem;
-}
-
-.tool-message summary::-webkit-details-marker {
-  display: none;
-}
-
-.tool-message summary > svg:first-child {
-  color: var(--accent);
 }
 
 .tool-state {
@@ -36,41 +10,20 @@
 }
 
 .tool-chevron {
+  flex: none;
   transition: transform 140ms ease;
 }
 
-.tool-message[open] .tool-chevron {
+.tool-message[open] > summary > .tool-chevron {
   transform: rotate(180deg);
 }
 
-.tool-message pre {
-  margin: 0;
-  max-height: 230px;
-  overflow: auto;
-  padding: 12px;
-  border-top: 1px solid var(--line);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-size: 0.857143rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--ground);
-}
-
-.tool-error {
-  border-color: var(--danger);
-  border: 0;
-  background: transparent;
-}
-
-.tool-error summary,
-.tool-error summary > svg:first-child {
+.tool-error > summary {
   color: var(--danger);
 }
 
-.tool-message summary > span:not(.tool-state) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+@media (pointer: coarse) {
+  .tool-message summary {
+    min-height: 44px;
+  }
 }

@@ -67,10 +67,8 @@
 }
 
 .connection-chosen-model {
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--control-line);
 }
 
 .connection-chosen-model > div {

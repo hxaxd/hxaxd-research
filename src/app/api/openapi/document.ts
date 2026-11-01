@@ -16,12 +16,15 @@ import {
   runSchema,
   sendMessageSchema,
   stopRunSchema,
+  answerQuestionSchema,
 } from '@/app/conversations/schema';
 import {
   fileEntrySchema,
   fileListQuerySchema,
   createDirectorySchema,
   directoryResultSchema,
+  folderMarkerRequestSchema,
+  folderMarkerSchema,
   importResultSchema,
   textFileSchema,
   readerRequestSchema,
@@ -94,6 +97,12 @@ export function generateOpenapi() {
     { method: 'get', path: prefix, response: workspaceSchema },
     { method: 'post', path: `${prefix}/files`, body: createDirectorySchema, response: directoryResultSchema, status: 201 },
     {
+      method: 'patch',
+      path: `${prefix}/files`,
+      body: folderMarkerRequestSchema,
+      response: directoryResultSchema.extend({ marker: folderMarkerSchema.optional() }),
+    },
+    {
       method: 'get',
       path: `${prefix}/files`,
       response: z.array(fileEntrySchema),
@@ -112,6 +121,7 @@ export function generateOpenapi() {
       status: 201,
     },
     { method: 'get', path: conversation, response: conversationSnapshotSchema },
+    { method: 'post', path: `${conversation}/answers`, body: answerQuestionSchema, response: z.object({ accepted: z.boolean() }) },
     {
       method: 'patch',
       path: conversation,
@@ -319,7 +329,7 @@ export function generateOpenapi() {
             schema: z.object({
               metadata: z
                 .string()
-                .describe('JSON: target, optional folderName; precedes files'),
+                .describe('JSON: target, optional folderName, optional paper (writes research.json); precedes files'),
               files: z.array(z.string().openapi({ format: 'binary' })),
             }),
           },

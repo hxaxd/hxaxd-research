@@ -2,6 +2,48 @@
 
 @import '../shared/ui/controls.css';
 
+/* Streamdown renders Tailwind classes; scan its bundle so they are generated. */
+@source '../../node_modules/streamdown/dist/*.js';
+
+/* Tailwind follows the app theme attribute instead of the OS preference. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Utilities read the same palette variables as hand-written CSS, so all six presets apply. */
+@theme inline {
+  --color-ink: var(--ink);
+  /* shadcn naming: `muted` is a surface, `muted-foreground` is secondary text. */
+  --color-muted: var(--inset);
+  --color-line: var(--line);
+  --color-paper: var(--paper);
+  --color-ground: var(--ground);
+  --color-sidebar: var(--sidebar);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-soft: var(--soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-hover: var(--hover);
+  --color-inset: var(--inset);
+  --color-raised: var(--raised);
+  --color-control: var(--control);
+  --color-control-line: var(--control-line);
+  --color-strong-line: var(--strong-line);
+  --color-on-accent: var(--on-accent);
+  /* Streamdown's shadcn token names, mapped to the app palette. */
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-border: var(--line);
+  --color-muted-foreground: var(--muted);
+
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-destructive: var(--danger);
+  --radius-control: var(--radius-control);
+  --radius-surface: var(--radius-surface);
+  --font-mono: Consolas, 'Cascadia Mono', monospace;
+}
+
 @layer research-theme {
   :root {
     color-scheme: light;
@@ -20,8 +62,6 @@
     --header-ink: var(--ink);
     --header-muted: var(--muted);
     --header-height: 56px;
-    --materials-width: 248px;
-    --conversation-width: 384px;
     --reader: #eef1f5;
     --shell: #edf0f5;
     --hover: #e9edf4;
@@ -34,11 +74,89 @@
     --danger-line: #efd5d0;
     --on-accent: #fff;
     --floating-shadow: 0 12px 40px #15203024, 0 2px 6px #15203010;
+    --control: color-mix(in srgb, var(--paper) 78%, var(--sidebar));
+    --control-line: color-mix(in srgb, var(--ink) 13%, var(--paper));
+    --raised: color-mix(in srgb, var(--paper) 96%, var(--ink));
+    --inset: color-mix(in srgb, var(--paper) 45%, var(--sidebar));
+    --edge-highlight: color-mix(in srgb, var(--paper) 88%, white);
+    --control-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 7%, transparent), inset 0 1px 0 var(--edge-highlight);
+  }
+}
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-press: 120ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --control-size: 34px;
+  --touch-size: 34px;
+  --radius-control: 9px;
+  --radius-surface: 14px;
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: color-mix(in srgb, var(--strong-line) 55%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--muted) 62%, transparent);
+  --scrollbar-thumb-active: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+@media (max-width: 1180px) {
+  :root {
+    --control-size: 40px;
+    --touch-size: 40px;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --control-size: 44px;
+    --touch-size: 44px;
   }
 }
 
 * {
   box-sizing: border-box;
+}
+
+/*
+ * Thin, translucent scrollbars. The 10px strip stays transparent; a 3px transparent
+ * border clips the thumb down to 4px, so scrolling reads as a hairline.
+ * The standard properties are scoped to engines without ::-webkit-scrollbar: Chromium
+ * ignores the pseudo-elements as soon as scrollbar-color is set.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
 }
 
 body {
@@ -80,9 +198,15 @@ textarea {
 
 button,
 a {
-  transition: background-color 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+  transition: background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+
+:root {
+  transition: background-color var(--duration-base) ease, color var(--duration-base) ease;
 }
 
 button:disabled {
@@ -155,14 +279,61 @@ svg {
   }
 }
 
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation: none !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
     transition: none !important;
     scroll-behavior: auto !important;
   }
+  .tool-spinner {
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* Sonner reads these on its container; mapping them keeps toasts on the active palette. */
+[data-sonner-toaster] {
+  --normal-bg: var(--raised);
+  --normal-text: var(--ink);
+  --normal-border: var(--control-line);
+  --success-bg: var(--raised);
+  --success-text: var(--ink);
+  --success-border: var(--control-line);
+  --error-bg: var(--danger-soft);
+  --error-text: var(--danger);
+  --error-border: var(--danger-line);
+  --border-radius: var(--radius-surface);
+  font-family: inherit;
+}
+
+.app-toast {
+  box-shadow: var(--floating-shadow) !important;
+  font-size: 0.928571rem !important;
+}
+
+.app-toast [data-icon] {
+  color: var(--accent);
+}
+
+.app-toast[data-type='error'] [data-icon] {
+  color: var(--danger);
 }
 
 html {

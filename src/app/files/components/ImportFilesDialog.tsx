@@ -5,6 +5,7 @@ import { useTranslations } from 'use-intl';
 import * as Dialog from '@radix-ui/react-dialog';
 import { FilePlus2, FolderPlus, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { requestJson } from '@/shared/http/request-json';
 
@@ -17,11 +18,13 @@ export function ImportFilesDialog({
 }: {
   workspaceId: string;
   target: string;
-  onImported: () => void;
+  onImported: (result: ImportResult) => void;
 }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const [paper, setPaper] = useState(false);
+  const hasPdf = files.some(file => /\.pdf$/i.test(file.name));
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +34,7 @@ export function ImportFilesDialog({
     const next = Array.from(list ?? []);
     setFiles(next);
     setError('');
+    setPaper(next.some(file => /\.pdf$/i.test(file.name)));
     setName(next[0]?.webkitRelativePath.split('/')[0] || (next.length > 1 ? t('files.materials') : ''));
   }
   return (
@@ -41,9 +45,8 @@ export function ImportFilesDialog({
       }}
     >
       <Dialog.Trigger asChild>
-        <button className="text-action" aria-label={t('files.importMaterials')}>
+        <button className="icon-button" aria-label={t('files.importMaterials')} title={t('files.importMaterials')}>
           <Upload size={15} aria-hidden="true" />
-          <span>{t('common.import')}</span>
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -112,6 +115,15 @@ export function ImportFilesDialog({
               />
             </>
           )}
+          {hasPdf && (
+            <label className="import-paper">
+              <input type="checkbox" checked={paper} disabled={busy} onChange={event => setPaper(event.target.checked)} />
+              <span>
+                <strong>{t('files.importAsPaper')}</strong>
+                <small>{t('files.importAsPaperHint')}</small>
+              </span>
+            </label>
+          )}
           {error && (
             <p className="error-message" role="alert">
               {error}
@@ -130,7 +142,7 @@ export function ImportFilesDialog({
                 const form = new FormData();
                 const folderName =
                   files.length > 1 || files[0]?.webkitRelativePath ? name.trim() : undefined;
-                form.append('metadata', JSON.stringify({ target, folderName }));
+                form.append('metadata', JSON.stringify({ target, folderName, paper: hasPdf && paper }));
                 for (const file of files) {
                   const relative = file.webkitRelativePath
                     ? file.webkitRelativePath.split('/').slice(1).join('/')
@@ -138,13 +150,14 @@ export function ImportFilesDialog({
                   form.append('files', file, relative);
                 }
                 try {
-                  await requestJson<ImportResult>(`/api/workspaces/${workspaceId}/imports`, {
+                  const result = await requestJson<ImportResult>(`/api/workspaces/${workspaceId}/imports`, {
                     method: 'POST',
                     body: form,
                   });
                   setFiles([]);
                   setOpen(false);
-                  onImported();
+                  toast.success(t('files.imported', { count: result.files }), { description: result.path });
+                  onImported(result);
                 } catch (error) {
                   setError((error as Error).message);
                 } finally {

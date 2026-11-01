@@ -2,155 +2,58 @@
 
 import './FileBrowser.css';
 
-
+import { Search, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'use-intl';
 
-import {
-  ArrowLeft,
-  ChevronRight,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  RefreshCw,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { FileRow, FileTree, FileTreeFolder, useFileList } from './FileTree';
 
-import { CreateEntityDialog } from '@/shared/ui/EntityControls';
-
-import { requestJson } from '@/shared/http/request-json';
-
-import type { FileEntry } from '../schema';
-import { ImportFilesDialog } from './ImportFilesDialog';
-
-export function FileBrowser({
-  workspaceId,
-  directory,
-  onDirectoryChange,
-  revision,
-  activePath,
-  onOpenFile,
-}: {
+/**
+ * One tree for the whole workspace. The workspace root is not a node; its
+ * children are the first level. "Papers only" and search flatten the tree into
+ * matching entries, and paper folders stay expandable in every mode.
+ */
+export function FileBrowser({ workspaceId, papersOnly, revision, activePath, onOpenFile, onChanged }: {
   workspaceId: string;
-  directory: string;
-  onDirectoryChange: (directory: string) => void;
+  papersOnly: boolean;
   revision: number;
   activePath: string | null;
   onOpenFile: (path: string) => void;
+  onChanged: () => void;
 }) {
   const t = useTranslations();
-  const [files, setFiles] = useState<FileEntry[] | null>(null);
-  const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
-  const [view, setView] = useState<'papers' | 'files'>('papers');
-  const listDirectory = view === 'papers' ? '' : directory;
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
   useEffect(() => {
-    const controller = new AbortController();
-    void requestJson<FileEntry[]>(
-      `/api/workspaces/${workspaceId}/files?path=${encodeURIComponent(listDirectory)}&view=${view}`,
-      { signal: controller.signal },
-    )
-      .then((result) => {
-        setFiles(result);
-        setError('');
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setError(error.message);
-      });
-    return () => controller.abort();
-  }, [workspaceId, listDirectory, view, revision, refresh]);
-  const navigate = (next: string) => {
-    setFiles(null);
-    setError('');
-    setView('files');
-    onDirectoryChange(next);
-  };
+    const timer = setTimeout(() => setSearch(query.trim()), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const flat = papersOnly || !!search;
+  const params: Record<string, string> = papersOnly ? { view: 'papers' } : {};
+  if (search) params.q = search;
+  const { files, error } = useFileList(workspaceId, params, revision, flat);
+  const tree = { workspaceId, revision, activePath, onOpenFile, onChanged };
   return (
     <section className="file-browser">
-      <div className="material-views preview-modes" role="group" aria-label={t('files.viewMode')}>
-        {(['papers', 'files'] as const).map(value => (
-          <button key={value} aria-pressed={view === value} onClick={() => {
-            if (value !== view) {
-              setFiles(null);
-              setView(value);
-            }
-          }}>{t(`files.${value}`)}</button>
-        ))}
-      </div>
-      <div className="file-actions">
-        <CreateEntityDialog title={t('files.createFolder')} onSubmit={async name => {
-          const result = await requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
-            method: 'POST', body: JSON.stringify({ path: listDirectory ? `${listDirectory}/${name}` : name }),
-          });
-          navigate(result.path);
-        }}>
-          <button className="icon-button" aria-label={t('files.createFolder')} title={t('files.createFolder')}><FolderPlus size={15} /></button>
-        </CreateEntityDialog>
-        <ImportFilesDialog
-          workspaceId={workspaceId}
-          target={listDirectory}
-          onImported={() => setRefresh((value) => value + 1)}
-        />
-        <button
-          className="icon-button"
-          aria-label={t('files.refresh')}
-          title={t('files.refresh')}
-          onClick={() => setRefresh((value) => value + 1)}
-        >
-          <RefreshCw size={15} />
-        </button>
-      </div>
-      {view === 'files' && directory !== '' && (
-        <button
-          className="directory-back"
-          onClick={() =>
-            navigate(directory.slice(0, Math.max(0, directory.lastIndexOf('/'))))
-          }
-        >
-          <ArrowLeft size={14} />
-          {t('files.parent')}
-        </button>
-      )}
-      {view === 'files' && directory !== '' && (
-        <div className="directory-path" title={directory}>
-          {directory}
+      <label className="file-search">
+        <Search size={14} aria-hidden="true" />
+        <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery(''); } }}
+          aria-label={t('files.search')} placeholder={t('files.search')} maxLength={200} />
+        {query && <button className="icon-button" aria-label={t('files.clearSearch')} title={t('files.clearSearch')}
+          onClick={() => setQuery('')}><X size={13} /></button>}
+      </label>
+      {!flat && <FileTree {...tree} directory="" />}
+      {flat && <>
+        {error && <p role="alert" className="error-message">{error}</p>}
+        {!error && files === null && <p className="empty-small" role="status">{t('common.loading')}</p>}
+        {!error && files?.length === 0 && <p className="empty-small">{t(search ? 'files.noMatches' : 'files.noPapers')}</p>}
+        <div className="file-tree file-tree-root">
+          {files?.map(file => file.kind === 'directory'
+            ? <FileTreeFolder key={file.path} file={file} showPath {...tree} />
+            : <FileRow key={file.path} file={file} showPath activePath={activePath} onOpenFile={onOpenFile} />)}
         </div>
-      )}
-      {error && (
-        <p role="alert" className="error-message">
-          {error}
-        </p>
-      )}
-      {!error && files === null && <p className="empty-small" role="status">{t('common.loading')}</p>}
-      {!error && files?.length === 0 && (
-        <div className="empty-small">
-          {t(view === 'papers' ? 'files.noPapers' : 'files.empty')}
-        </div>
-      )}
-      <div>
-        {files?.map((file) => (
-          <div className={`file-row${activePath === file.path ? ' selected' : ''}`} key={file.path}>
-            <button
-              className="file-open"
-              title={file.name}
-              aria-current={activePath === file.path ? 'true' : undefined}
-              onClick={() =>
-                file.kind === 'directory' ? navigate(file.path) : onOpenFile(file.path)
-              }
-            >
-              {file.kind === 'directory' ? <Folder size={15} /> : <FileText size={15} />}
-              <span>{file.name}</span>
-              {file.kind === 'directory' && <ChevronRight size={12} />}
-            </button>
-            {view === 'papers' && (
-              <button className="icon-button file-folder" aria-label={t('files.openFolder', { name: file.name })}
-                title={file.path} onClick={() => navigate(file.path.slice(0, Math.max(0, file.path.lastIndexOf('/'))))}>
-                <FolderOpen size={15} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+      </>}
     </section>
   );
 }

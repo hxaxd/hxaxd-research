@@ -10,6 +10,7 @@ import { POST as send } from '@/app/api/workspaces/[workspaceId]/conversations/[
 import { GET as events } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/events/route';
 import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/images/route';
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
+import { POST as answer } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/answers/route';
 import type { ConversationSnapshot } from '@/app/conversations/schema';
 
 import { startModelServer } from '../model-server';
@@ -136,4 +137,63 @@ test('unsupported image input fails without saving the question', async () => {
   const failed = await complete('failed');
   expect(failed.error).toContain('不支持图片');
   expect(failed.messages).toEqual([]);
+});
+
+test('questions wait for a clicked choice, survive reconnect and persist the answer in conversation history', async () => {
+  await message('[ASK]');
+  await expect.poll(async () => (await snapshot()).messages.find(item => item.question)?.question?.prompt).toBe('由谁完成翻译？');
+  const waiting = await snapshot();
+  const question = waiting.messages.find(item => item.question)!.question!;
+  expect(waiting.run?.status).toBe('running');
+  const stream = await events(request('/events'), context());
+  await stream.body!.cancel();
+  expect((await snapshot()).messages.find(item => item.question)?.question).toEqual(question);
+  expect((await answer(request('/answers', 'POST', { id: question.id, answer: '' }), context())).status).toBe(400);
+  expect((await answer(request('/answers', 'POST', { id: 'stale', answer: '当前助手' }), context())).status).toBe(409);
+  expect((await answer(request('/answers', 'POST', { id: question.id, answer: '当前助手' }), context())).status).toBe(200);
+  expect((await answer(request('/answers', 'POST', { id: question.id, answer: '注册模型' }), context())).status).toBe(409);
+  const finished = await complete();
+  expect(finished.messages.filter(item => item.question)).toHaveLength(1);
+  expect(finished.messages.find(item => item.question)?.question?.answer).toBe('当前助手');
+  expect(finished.messages.at(-1)?.text).toContain('当前助手');
+  restartApp();
+  expect((await snapshot()).messages).toEqual(finished.messages);
+});
+
+test.each(['自己的回答', null])('questions accept custom text or cancellation: %s', async value => {
+  await message('[ASK]');
+  await expect.poll(async () => (await snapshot()).messages.some(item => item.question)).toBe(true);
+  const question = (await snapshot()).messages.find(item => item.question)!.question!;
+  expect((await answer(request('/answers', 'POST', { id: question.id, answer: value }), context())).status).toBe(200);
+  expect((await complete(value === null ? 'cancelled' : 'completed')).messages.find(item => item.question)?.question?.answer).toBe(value);
+});
+
+test('stopping a waiting question releases the run and rejects stale replies', async () => {
+  await message('[ASK]');
+  await expect.poll(async () => (await snapshot()).messages.some(item => item.question)).toBe(true);
+  const waiting = await snapshot();
+  const question = waiting.messages.find(item => item.question)!.question!;
+  expect((await stop(request('/stop', 'POST', { id: waiting.run!.id }), context())).status).toBe(200);
+  expect((await snapshot()).run?.status).toBe('cancelled');
+  expect((await answer(request('/answers', 'POST', { id: question.id, answer: '迟到的回答' }), context())).status).toBe(409);
+  await message('继续');
+  await complete();
+  const missing = { params: Promise.resolve({ workspaceId: app.workspace.id, conversationId: randomUUID() }) };
+  expect((await answer(request('/answers', 'POST', { id: question.id, answer: '回答' }), missing)).status).toBe(404);
+});
+
+test('search uses hosted web results and preserves citations; unsupported protocols return command guidance', async () => {
+  await message('[SEARCH]');
+  expect((await complete()).messages.at(-1)?.text).toContain('"supported":false');
+  const provider = { ...model.config.providers.test, api: 'openai-responses' };
+  await writeFile(path.join(app.config.piDir, 'models.json'), JSON.stringify({ providers: { test: provider } }));
+  restartApp();
+  await message('[SEARCH]');
+  const finished = await complete();
+  const search = finished.messages.filter(item => item.toolName === 'web_search').at(-1)!;
+  expect(search.isError).toBe(false);
+  expect(search.args).toEqual({ query: 'Find the official paper' });
+  const result = JSON.parse(search.text);
+  expect(result.sources).toEqual([{ title: 'Attention Is All You Need', url: 'https://arxiv.org/abs/1706.03762' }]);
+  expect(result.text).toContain('https://arxiv.org/abs/1706.03762');
 });

@@ -190,7 +190,7 @@ test('a failed account catalog leaves other configured providers usable', async 
   } finally { await server.close(); }
 });
 
-test('connected ChatGPT authorization can establish and test realtime speech without returning credentials', async () => {
+test('connected ChatGPT authorization issues temporary realtime speech credentials without returning the account token', async () => {
   const { callback } = await login();
   await networkFetch(callback);
   await expect.poll(async () => (await state()).authorization.status).toBe('connected');
@@ -201,15 +201,12 @@ test('connected ChatGPT authorization can establish and test realtime speech wit
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer private-access');
       return Response.json({ value: 'temporary-speech-key' });
     }
-    if (url.endsWith('/realtime/calls')) {
-      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer temporary-speech-key');
-      expect(init?.body).toBe('offer');
-      return new Response('speech-answer');
-    }
     return authorizationFetch(input, init);
   });
-  const answer = await realtime(request('/speech/realtime', 'POST', { connectionId: 'chatgpt', sdp: 'offer' }));
-  expect(await answer.json()).toEqual({ sdp: 'speech-answer' });
+  const answer = await realtime(request('/speech/realtime', 'POST', { connectionId: 'chatgpt' }));
+  const session = await answer.json();
+  expect(session).toMatchObject({ url: 'wss://api.openai.com/v1/realtime?intent=transcription', key: 'temporary-speech-key' });
+  expect(JSON.stringify(session)).not.toContain('private-access');
   const testResult = await testSpeech(request('/speech/test', 'POST', { connectionId: 'chatgpt' }));
   expect(await testResult.json()).toMatchObject({ ok: true });
   const form = new FormData();

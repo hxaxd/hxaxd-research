@@ -29,14 +29,14 @@
 .connection-row {
   min-width: 0;
   padding: 11px 13px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   border-radius: 10px;
-  background: var(--paper);
+  background: var(--control);
 }
 
 .connection-row.is-active {
-  border-color: var(--accent);
-  background: var(--soft);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--control-line));
+  background: color-mix(in srgb, var(--soft) 40%, var(--control));
 }
 
 .connection-row-title {
@@ -80,18 +80,6 @@
   line-height: 1.7;
   max-height: 3.4em;
   overflow: hidden;
-}
-
-.connection-inline-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 7px;
-  margin-top: 10px;
-}
-
-.connection-inline-form .field-label {
-  grid-column: 1 / -1;
 }
 
 .connection-result {

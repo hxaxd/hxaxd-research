@@ -94,8 +94,8 @@ Pi 把缺失的 `models.json` 视为没有自定义模型。检查修改结果�
 | 界面字体大小 | 12..22 px，步长 1，默认 14；常规设置中调整 | `research-font-size` |
 | 界面缩放 | 75..150%，步长 5，默认 100%；常规设置中调整 | `research-ui-scale` |
 | 外观模式 | `system`、`light`、`dark`；默认 `system` | `research-theme` |
-| 浅色预设 | `paper`、`snow`、`latte`；默认 `paper` | `research-light-palette` |
-| 暗色预设 | `graphite`、`nord`、`mocha`；默认 `graphite` | `research-palette` |
+| 浅色预设 | `paper`（纸白）、`parchment`（羊皮纸）、`celadon`（青瓷）；默认 `paper`，未知值回退默认 | `research-light-palette` |
+| 暗色预设 | `graphite`（石墨灰）、`ink`（墨蓝）、`lamplight`（灯下）；默认 `graphite`，未知值回退默认 | `research-palette` |
 | 浅/暗色自定义 CSS 开关 | 字符串 `true`、`false`；默认关闭，两种模式独立 | `research-light-custom-active`、`research-custom-active` |
 | 浅/暗色自定义 CSS 内容 | CSS 字符串；默认空，两种模式独立 | `research-light-custom-css`、`research-custom-css` |
 | 当前文字模型 | 已配置的 `供应商ID/模型ID`；未选择或模型失效时使用列表首项 | `research-model` |

@@ -1,0 +1,94 @@
+.command-palette {
+  position: fixed;
+  top: 18vh;
+  left: 50%;
+  z-index: 60;
+  width: min(620px, calc(var(--viewport-width) - 32px));
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-surface);
+  background: var(--raised);
+  box-shadow: var(--floating-shadow);
+  animation: surface-in var(--duration-base) var(--ease-out);
+}
+
+.command-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.command-list {
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.command-empty {
+  padding: 22px 12px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.928571rem;
+}
+
+.command-list [cmdk-group-heading] {
+  padding: 8px 10px 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.command-list [cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.928571rem;
+}
+
+.command-list [cmdk-item] svg {
+  color: var(--muted);
+}
+
+.command-list [cmdk-item] span {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-list [cmdk-item] small {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+.command-list [cmdk-item][data-selected='true'] {
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.command-list [cmdk-item][data-selected='true'] svg {
+  color: var(--accent);
+}
+
+.command-list [cmdk-item][data-disabled='true'] {
+  cursor: default;
+  opacity: 0.55;
+}

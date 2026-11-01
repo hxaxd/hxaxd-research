@@ -10,14 +10,15 @@
   gap: 8px;
   min-height: 30px;
   min-width: 0;
-  padding: 4px 7px;
-  border-radius: 6px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
   text-align: left;
 }
 
 .choice-trigger:hover:not(:disabled),
 .choice-trigger[data-state='open'] {
-  background: var(--hover);
+  background: var(--inset);
 }
 
 .choice-trigger > span:first-child {
@@ -62,7 +63,7 @@
 
 .choice-item-copy small {
   color: var(--muted);
-  font-size: 0.714286rem;
+  font-size: 0.785714rem;
 }
 
 .choice-item[data-state='checked'] {

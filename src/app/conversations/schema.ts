@@ -20,6 +20,17 @@ export const sendMessageSchema = z.object({
   quotes: textQuotesSchema.optional(),
 });
 export const stopRunSchema = z.object({ id: idSchema });
+export const answerQuestionSchema = z.object({
+  id: z.string().min(1),
+  answer: z.string().trim().min(1).max(10000).nullable(),
+});
+export const questionSchema = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  options: z.array(z.string()),
+  answer: z.string().nullable().optional(),
+});
+export type UserQuestion = z.infer<typeof questionSchema>;
 export const conversationImageQuerySchema = z.object({
   message: z.coerce.number().int().positive(),
   index: z.coerce.number().int().nonnegative(),
@@ -40,8 +51,11 @@ const chatMessageSchema = z.object({
   images: z.array(z.object({ url: z.string() })).optional(),
   quotes: textQuotesSchema.optional(),
   toolName: z.string().optional(),
+  /** Tool call arguments, shown as the call's input. */
+  args: z.record(z.string(), z.unknown()).optional(),
   pending: z.boolean().optional(),
   isError: z.boolean().optional(),
+  question: questionSchema.optional(),
 });
 export const conversationSnapshotSchema = z.object({
   revision: z.number(),

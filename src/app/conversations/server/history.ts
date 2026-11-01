@@ -4,11 +4,12 @@ import { text as t } from '@/app/i18n/server.mjs';
 import { ApiError } from '@/shared/http/api-error';
 
 import { openConversation } from './conversations';
-import { mapPiMessage } from './pi-events';
+import { mapPiMessage, toolCallArgs } from './pi-events';
 import { textQuotesSchema, type TextQuote } from '@/app/files/schema';
 
 export function readConversationHistory(root: string, workspaceId: string, id: string) {
   let quotes: TextQuote[] = [];
+  const args = new Map<string, Record<string, unknown>>();
   return openConversation(root, workspaceId, id)
     .getBranch()
     .flatMap((entry) => {
@@ -17,7 +18,8 @@ export function readConversationHistory(root: string, workspaceId: string, id: s
         quotes = textQuotesSchema.parse(details?.quotes ?? []);
       }
       if (entry.type !== 'message') return [];
-      const message = mapPiMessage(entry.id, entry.message, `/api/workspaces/${workspaceId}/conversations/${id}/images`);
+      for (const [callId, value] of toolCallArgs(entry.message)) args.set(callId, value);
+      const message = mapPiMessage(entry.id, entry.message, `/api/workspaces/${workspaceId}/conversations/${id}/images`, args);
       if (message?.role === 'user') {
         if (quotes.length) message.quotes = quotes;
         quotes = [];

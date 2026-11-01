@@ -4,10 +4,12 @@ import './FilePreview.css';
 
 
 import { useTranslations } from 'use-intl';
+import * as Menu from '@radix-ui/react-dropdown-menu';
 
 import {
   BookOpen,
   Download,
+  Ellipsis,
   File,
   FileText,
   FolderOpen,
@@ -51,7 +53,6 @@ export function FilePreview({
   onPageChange,
   onBrowse,
   mode,
-  onModeChange,
   request,
   onOpenFile,
   onCapture,
@@ -63,21 +64,16 @@ export function FilePreview({
   onPageChange: (page: number) => void;
   onBrowse: () => void;
   mode: ViewMode;
-  onModeChange: (mode: ViewMode) => void;
   request: DocumentRequest | null;
   onOpenFile: (path: string) => void;
   onCapture: (clip: ImageClip) => Promise<void>;
   onQuote: (quote: TextQuote) => Promise<void>;
 }) {
   const t = useTranslations();
-  const [refresh, setRefresh] = useState(0);
   const [textPath, setTextPath] = useState<string | null>(null);
   if (!path)
     return (
       <section className="reader-panel" id="reader-panel" aria-label={t('files.reader')}>
-        <div className="panel-heading">
-          <span>{t('files.reading')}</span>
-        </div>
         <div className="reader-empty">
           <div className="reader-mark">
             <BookOpen size={36} strokeWidth={1.4} aria-hidden="true" />
@@ -98,51 +94,20 @@ export function FilePreview({
   const html = ['html', 'htm'].includes(extension);
   const previewUrl = `/api/workspaces/${workspaceId}/preview/${path.split('/').map(encodeURIComponent).join('/')}`;
   return (
-    <section className="reader-panel" id="reader-panel" aria-label={t('files.reader')}>
-      <div className="panel-heading reader-heading">
-        <div className="resource-heading">
-          <FileText size={16} aria-hidden="true" />
-          <strong className="resource-name" title={path}>
-            {name}
-          </strong>
-        </div>
-        <div className="toolbar">
-          {(markdown || html) && (
-            <div className="preview-modes" role="group" aria-label={t('files.viewMode')}>
-              <button aria-pressed={mode === 'source'} onClick={() => onModeChange('source')}>{t('files.source')}</button>
-              <button aria-pressed={mode === 'preview'} onClick={() => onModeChange('preview')}>{t('files.preview')}</button>
-            </div>
-          )}
-          <button
-            className="icon-button"
-            aria-label={t('files.reloadCurrent')}
-            title={t('files.reload')}
-            onClick={() => setRefresh((value) => value + 1)}
-          >
-            <RefreshCw size={16} />
-          </button>
-          <a
-            className="icon-button"
-            href={`${url}&download=1`}
-            aria-label={t('files.downloadCurrent')}
-            title={t('files.download')}
-          >
-            <Download size={17} />
-          </a>
-        </div>
-      </div>
-      <DocumentSelection key={`${path}:${mode}:${revision}:${refresh}:${request?.id ?? ''}`}
+    <section className="reader-panel" id="reader-panel" aria-label={t('files.reader')}
+      data-resize-mode={extension === 'pdf' ? 'deferred' : undefined}>
+      <DocumentSelection key={`${path}:${mode}:${revision}:${request?.id ?? ''}`}
         reading={{ path, ...((markdown || html) ? { mode } : {}) }} onQuote={onQuote}>
         {extension === 'pdf' ? (
           <PdfViewer url={url} onPageChange={onPageChange} initialPage={request?.page ?? 1} onCapture={clip => onCapture({ ...clip, path })} />
         ) : html && mode === 'preview' ? (
-          <iframe className="html-preview" title={t('files.htmlPreview')} src={`${previewUrl}?revision=${revision}:${refresh}`} allowFullScreen referrerPolicy="no-referrer" />
+          <iframe className="html-preview" title={t('files.htmlPreview')} src={`${previewUrl}?revision=${revision}`} allowFullScreen referrerPolicy="no-referrer" />
         ) : markdown && mode === 'preview' ? (
           <TextPreview url={url} markdown={{ workspaceId, path }} onOpenFile={onOpenFile} />
         ) : html || markdown || textExtensions.has(extension) || textPath === path ? (
           <TextPreview url={url} />
         ) : imageExtensions.has(extension) ? (
-          <ImagePreview url={`${url}&revision=${revision}:${refresh}`} path={path} onCapture={onCapture} />
+          <ImagePreview url={`${url}&revision=${revision}`} path={path} onCapture={onCapture} />
         ) : (
           <div className="reader-empty">
             <File size={36} aria-hidden="true" />
@@ -161,4 +126,42 @@ export function FilePreview({
       </DocumentSelection>
     </section>
   );
+}
+
+export function FilePreviewHeader({ workspaceId, path, mode, onModeChange, onReload, toolbarRef }: {
+  workspaceId: string;
+  path: string | null;
+  mode: ViewMode;
+  onModeChange: (mode: ViewMode) => void;
+  onReload: () => void;
+  toolbarRef: (element: HTMLDivElement | null) => void;
+}) {
+  const t = useTranslations();
+  const name = path?.split('/').pop();
+  return <div className="reader-heading" hidden={!path}>
+    <span className="reader-title" title={path ?? undefined}>{name}</span>
+    {/\.(md|markdown|html?)$/i.test(path ?? '') && <div className="preview-modes" role="group" aria-label={t('files.viewMode')}>
+      <button aria-pressed={mode === 'preview'} onClick={() => onModeChange('preview')}>{t('files.preview')}</button>
+      <button aria-pressed={mode === 'source'} onClick={() => onModeChange('source')}>{t('files.source')}</button>
+    </div>}
+    <div className="reader-tools" ref={toolbarRef} />
+    {path && <Menu.Root modal={false}>
+      <Menu.Trigger className="icon-button" aria-label={t('files.actions')} title={t('files.actions')}>
+        <Ellipsis size={18} />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content className="menu-surface" align="end" sideOffset={6}>
+          <Menu.Label className="menu-label file-menu-name">{path}</Menu.Label>
+          <Menu.Item className="menu-item" onSelect={onReload}>
+            <RefreshCw size={16} aria-hidden="true" />{t('files.reload')}
+          </Menu.Item>
+          <Menu.Item className="menu-item" asChild>
+            <a href={`/api/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}&download=1`}>
+              <Download size={16} aria-hidden="true" />{t('files.download')}
+            </a>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>}
+  </div>;
 }

@@ -2,7 +2,6 @@
 
 import { useTranslations } from 'use-intl';
 
-import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 
 import { requestJson } from '@/shared/http/request-json';
@@ -13,8 +12,12 @@ import type { Conversation } from '../schema';
 export function CreateConversationDialog({
   workspaceId,
   onCreated,
+  open,
+  onOpenChange,
 }: {
   workspaceId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onCreated: (conversation: Conversation) => void;
 }) {
   const t = useTranslations();
@@ -22,6 +25,8 @@ export function CreateConversationDialog({
   return (
     <CreateEntityDialog
       title={t('conversations.create')}
+      open={open}
+      onOpenChange={onOpenChange}
       initialName={t('conversations.untitled')}
       onSubmit={async (name) => {
         const id = submissionId.current ??= crypto.randomUUID();
@@ -33,11 +38,6 @@ export function CreateConversationDialog({
         );
         submissionId.current = null;
       }}
-    >
-      <button className="text-action" aria-label={t('conversations.create')}>
-        <Plus size={15} aria-hidden="true" />
-        <span>{t('common.create')}</span>
-      </button>
-    </CreateEntityDialog>
+    />
   );
 }

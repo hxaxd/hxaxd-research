@@ -1,0 +1,60 @@
+.question-message {
+  padding: 14px;
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  background: var(--control);
+}
+
+.question-message h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.question-options {
+  display: grid;
+  gap: 6px;
+}
+
+.question-options button {
+  padding: 10px 12px;
+  min-height: 44px;
+  text-align: left;
+  border: 1px solid var(--control-line);
+  border-radius: 9px;
+  background: var(--paper);
+  overflow-wrap: anywhere;
+}
+
+.question-options button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+.question-message textarea {
+  width: 100%;
+  min-height: 60px;
+  margin-top: 10px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--control-line);
+  border-radius: 9px;
+  background: var(--inset);
+  font: inherit;
+}
+
+.question-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.question-answer {
+  color: var(--accent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}

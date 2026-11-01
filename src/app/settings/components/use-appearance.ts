@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 
 import {
   applyAppearance,
+  resolvePalette,
   type ColorMode,
   type ThemeSettings,
 } from '../appearance';
@@ -27,9 +28,7 @@ function subscribe(listener: () => void) {
 function readTheme(mode: ColorMode): ThemeSettings {
   const prefix = mode === 'dark' ? 'research' : 'research-light';
   return {
-    palette:
-      localStorage.getItem(`${prefix}-palette`) ??
-      (mode === 'dark' ? 'graphite' : 'paper'),
+    palette: resolvePalette(mode, localStorage.getItem(`${prefix}-palette`)).id,
     custom: localStorage.getItem(`${prefix}-custom-active`) === 'true',
     css: localStorage.getItem(`${prefix}-custom-css`) ?? '',
   };

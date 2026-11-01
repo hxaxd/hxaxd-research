@@ -6,6 +6,7 @@ import './ChoiceSelect.css';
 import { useTranslations } from 'use-intl';
 
 import * as Select from '@radix-ui/react-select';
+import { clsx } from 'clsx';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 export function ChoiceSelect({
@@ -29,7 +30,7 @@ export function ChoiceSelect({
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
-        className={`choice-trigger${iconOnly ? ' icon-only' : ''}`}
+        className={clsx('choice-trigger', iconOnly && 'icon-only')}
         aria-label={label}
       >
         {!iconOnly && <Select.Value placeholder={placeholder ?? t('common.select')} />}

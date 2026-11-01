@@ -4,9 +4,10 @@ import { text as t } from '@/app/i18n/server.mjs';
 import { z } from 'zod';
 import type { AppConfig } from '@/app/config.mjs';
 
-import { ApiError, isApiError } from '@/shared/http/api-error';
+import { ApiError } from '@/shared/http/api-error';
 
 import type { SpeechTarget } from '@/app/models/server/speech-connections';
+import type { SpeechRealtimeSession } from '../schema';
 
 const secretSchema = z.object({ value: z.string().min(1) });
 const transcriptSchema = z.object({ text: z.string() });
@@ -16,7 +17,7 @@ function transcriptionSession(model: string) {
     type: 'transcription' as const,
     audio: {
       input: {
-        format: { type: 'audio/pcm', rate: 24000 },
+        format: { type: 'audio/pcm' as const, rate: 24000 as const },
         transcription: { model },
         turn_detection: null,
       },
@@ -70,18 +71,19 @@ async function readJson<T>(response: Response, schema: z.ZodType<T>) {
 }
 
 async function mintSecret(
-  target: Extract<SpeechTarget, { kind: 'custom' }>,
+  target: SpeechTarget,
   signal: AbortSignal,
   timeouts: AppConfig['timeouts'],
-  key?: string,
 ) {
+  const baseUrl = target.kind === 'chatgpt' ? 'https://api.openai.com/v1' : target.baseUrl;
+  const key = target.kind === 'chatgpt' ? target.token : target.key;
   const response = await send(
-    `${target.baseUrl}/realtime/client_secrets`,
+    `${baseUrl}/realtime/client_secrets`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authorization(key) },
       body: JSON.stringify({
-        expires_after: { anchor: 'created_at', seconds: 600 },
+        expires_after: { anchor: 'created_at', seconds: 120 },
         session: transcriptionSession(target.model),
       }),
     },
@@ -92,44 +94,13 @@ async function mintSecret(
   return (await readJson(response, secretSchema)).value;
 }
 
-export async function realtimeAnswer(target: SpeechTarget, sdp: string, signal: AbortSignal, timeouts: AppConfig['timeouts']) {
-  if (target.kind === 'chatgpt') {
-    const token = target.token;
-    const secret = await send(
-      'https://api.openai.com/v1/realtime/client_secrets',
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expires_after: { anchor: 'created_at', seconds: 120 },
-          session: transcriptionSession(target.model),
-        }),
-      },
-      timeouts.speechSecretMs,
-      signal,
-    );
-    if (!secret.ok) throw failure(secret.status);
-    const key = (await readJson(secret, secretSchema)).value;
-    const answer = await send(
-      'https://api.openai.com/v1/realtime/calls',
-      { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/sdp' }, body: sdp },
-      timeouts.speechRealtimeMs,
-      signal,
-    );
-    if (!answer.ok) throw failure(answer.status);
-    return answer.text();
-  }
-  const form = new FormData();
-  form.set('sdp', sdp);
-  form.set('session', JSON.stringify(transcriptionSession(target.model)));
-  const answer = await send(
-    `${target.baseUrl}/realtime/calls`,
-    { method: 'POST', headers: authorization(target.key), body: form },
-    timeouts.speechRealtimeMs,
-    signal,
-  );
-  if (!answer.ok) throw failure(answer.status);
-  return answer.text();
+export async function realtimeSession(target: SpeechTarget, signal: AbortSignal, timeouts: AppConfig['timeouts']): Promise<SpeechRealtimeSession> {
+  const key = await mintSecret(target, signal, timeouts);
+  const baseUrl = target.kind === 'chatgpt' ? 'https://api.openai.com/v1' : target.baseUrl;
+  const url = new URL(`${baseUrl}/realtime`);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('intent', 'transcription');
+  return { url: url.toString(), key, session: transcriptionSession(target.model), timeoutMs: timeouts.speechRealtimeMs };
 }
 
 export async function fileTranscript(
@@ -175,35 +146,9 @@ function silentWav(seconds = 1) {
 }
 
 export async function testTarget(target: SpeechTarget, signal: AbortSignal, timeouts: AppConfig['timeouts']) {
-  if (target.kind === 'chatgpt') {
-    const token = target.token;
-    const response = await send(
-      'https://api.openai.com/v1/realtime/client_secrets',
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expires_after: { anchor: 'created_at', seconds: 60 },
-          session: transcriptionSession(target.model),
-        }),
-      },
-      timeouts.speechSecretMs,
-      signal,
-    );
-    if (!response.ok) throw failure(response.status);
+  if (target.kind === 'chatgpt' || target.protocol === 'realtime') {
+    await mintSecret(target, signal, { ...timeouts, speechSecretMs: timeouts.speechProbeMs });
     return t('speech.realtimeAvailable');
-  }
-  if (target.protocol === 'realtime') {
-    try {
-      await mintSecret(target, signal, timeouts, target.key);
-      return t('speech.realtimeAvailable');
-    } catch (error) {
-      if (!isApiError(error) || error.code !== 'speech_endpoint_missing') throw error;
-      const reachable = await send(`${target.baseUrl}/realtime/calls`, { method: 'POST', body: '' }, timeouts.speechProbeMs, signal);
-      if ([401, 403, 404, 429].includes(reachable.status) || reachable.status >= 500)
-        throw failure(reachable.status);
-      return t('speech.reachable');
-    }
   }
   await fileTranscript(target, silentWav(), 'silence.wav', signal, timeouts);
   return t('speech.fileAvailable');

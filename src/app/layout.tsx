@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { applyAppearance, paletteStyles } from '@/app/settings/appearance';
 import { localeCookie, resolveLocale, translator } from '@/shared/i18n/config.mjs';
+import { Toaster } from 'sonner';
 import { LocaleProvider } from './i18n/LocaleProvider';
 
 import './globals.css';
@@ -26,7 +27,10 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body><LocaleProvider locale={locale}>{children}</LocaleProvider></body>
+      <body>
+        <LocaleProvider locale={locale}>{children}</LocaleProvider>
+        <Toaster position="bottom-center" closeButton duration={3500} toastOptions={{ className: 'app-toast' }} />
+      </body>
     </html>
   );
 }

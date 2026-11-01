@@ -6,9 +6,7 @@ export const runtime = 'nodejs';
 
 export function POST(request: Request) {
   return handleApiRequest(request, async () => {
-    const { connectionId, sdp } = speechRealtimeSchema.parse(await request.json());
-    return {
-      sdp: await getAppRuntime().speech.answer(connectionId, sdp, request.signal),
-    };
+    const { connectionId } = speechRealtimeSchema.parse(await request.json());
+    return getAppRuntime().speech.connect(connectionId, request.signal);
   });
 }

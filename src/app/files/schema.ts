@@ -4,12 +4,27 @@ const relativePathSchema = z.string().max(2048);
 export const fileListQuerySchema = z.object({
   path: relativePathSchema.default(''),
   view: z.enum(['files', 'papers']).default('files'),
+  q: z.string().trim().max(200).default(''),
 });
+export const maxSearchResults = 200;
 export const createDirectorySchema = z.object({ path: relativePathSchema.min(1) });
 export const directoryResultSchema = z.object({ path: relativePathSchema });
 export const importMetadataSchema = z.object({
   target: relativePathSchema.default(''),
   folderName: z.string().max(160).optional(),
+  paper: z.boolean().optional(),
+});
+/** A folder containing this file is a typed material, e.g. `{"type":"paper","main":"paper.pdf"}`. */
+export const folderMarkerFile = 'research.json';
+export const folderMarkerSchema = z.object({
+  type: z.string().min(1).max(40),
+  title: z.string().max(300).optional(),
+  main: relativePathSchema.optional(),
+});
+export type FolderMarker = z.infer<typeof folderMarkerSchema>;
+export const folderMarkerRequestSchema = z.object({
+  path: relativePathSchema.min(1),
+  type: z.enum(['paper']).nullable(),
 });
 export const fileEntrySchema = z.object({
   path: relativePathSchema,
@@ -17,6 +32,8 @@ export const fileEntrySchema = z.object({
   kind: z.enum(['file', 'directory']),
   size: z.number(),
   modifiedAt: z.string(),
+  /** Present on folders with a valid marker; `main` is workspace-relative. */
+  marker: folderMarkerSchema.optional(),
 });
 export const readingContextSchema = z.object({
   path: relativePathSchema.min(1),
@@ -34,6 +51,7 @@ export const importResultSchema = z.object({
   path: relativePathSchema,
   files: z.number(),
   bytes: z.number(),
+  main: relativePathSchema.optional(),
 });
 export const textFileSchema = z.object({
   path: z.string(),

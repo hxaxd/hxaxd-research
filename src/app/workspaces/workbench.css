@@ -1,17 +1,13 @@
 .workbench {
-  --panel-heading-height: 48px;
   display: grid;
-  grid-template-columns: var(--materials-width) 0 minmax(0, 1fr) 0 var(
-      --conversation-width
-    );
   grid-template-areas: 'materials materials-handle reader conversation-handle conversation';
   min-height: 0;
   height: calc(var(--viewport-height) - var(--header-height) - 12px);
   border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: clip;
   background: var(--reader);
-  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: grid-template-columns var(--layout-duration) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .materials-panel,
@@ -30,26 +26,46 @@
 
 .reader-panel {
   grid-area: reader;
+  position: relative;
+  isolation: isolate;
   background: var(--paper);
   overflow: hidden;
+}
+
+.reader-panel[data-resize-mode='deferred']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--paper) 80%, transparent);
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease 120ms, visibility 0s 240ms;
+}
+
+.workspace-shell[data-layout-moving] .reader-panel[data-resize-mode='deferred']::after {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: none;
+}
+
+.reader-panel > .resource-body {
+  flex: 1;
+  width: 100%;
+  contain: layout paint;
+}
+
+.workspace-shell[data-layout-moving] .resource-body,
+.workspace-shell[data-layout-moving] .panel-content {
+  will-change: transform;
 }
 
 .conversation-panel {
   grid-area: conversation;
   background: var(--sidebar);
-}
-
-.panel-heading {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.928571rem;
-  font-weight: 600;
-  background: transparent;
-  height: var(--panel-heading-height);
-  padding: 7px 10px;
-  gap: 8px;
 }
 
 .loading-screen {
@@ -69,6 +85,76 @@
   background: var(--shell);
 }
 
+.workspace-shell {
+  --header-height: 48px;
+  padding: 4px;
+  min-width: 0;
+  overflow: clip;
+  width: var(--viewport-width);
+}
+
+.workspace-shell > .app-header {
+  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: var(--paper);
+  padding: 0;
+  gap: 0;
+  transition: grid-template-columns var(--layout-duration) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.workspace-shell > .app-header .header-materials,
+.workspace-shell > .app-header .header-actions {
+  height: 100%;
+  align-items: center;
+  background: var(--sidebar);
+}
+
+.workspace-shell > .app-header .header-materials {
+  border-top-left-radius: 12px;
+}
+
+.workspace-shell > .app-header .header-actions {
+  border-top-right-radius: 12px;
+}
+
+.workspace-shell[data-materials-open='false'] > .app-header .header-materials,
+.workspace-shell[data-conversation-open='false'] > .app-header .header-actions {
+  background: var(--paper);
+}
+
+.workspace-shell > .workbench {
+  height: calc(var(--viewport-height) - var(--header-height) - 8px);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+}
+
+.workspace-shell .workspace-name {
+  flex-basis: 204px;
+  width: 204px;
+  max-width: 204px;
+}
+
+.conversation-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-shell:has(.is-resizing) > .app-header {
+  transition: none;
+}
+
+@container (max-width: 400px) {
+  .workspace-shell .workspace-name {
+    flex-basis: 172px;
+    width: 172px;
+    max-width: 172px;
+  }
+}
+
 .workbench > [hidden] {
   display: none;
 }
@@ -76,7 +162,7 @@
 .materials-panel,
 .conversation-panel {
   position: relative;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .materials-panel {
@@ -87,7 +173,6 @@
 .conversation-panel {
   --panel-content-width: var(--conversation-content-width);
   --panel-exit: 12px;
-  container-type: inline-size;
 }
 
 .panel-content {
@@ -96,18 +181,19 @@
   flex-direction: column;
   min-height: 0;
   width: var(--panel-content-width);
-  transition: opacity 180ms ease, transform 240ms ease, visibility 0s;
+  transition: opacity 140ms ease, transform var(--layout-duration) ease, visibility 0s;
 }
 
 .conversation-panel > .panel-content {
   align-self: flex-end;
+  container-type: inline-size;
 }
 
 [data-open='false'] > .panel-content {
   opacity: 0;
   transform: translateX(var(--panel-exit));
   visibility: hidden;
-  transition: opacity 140ms ease, transform 240ms ease, visibility 0s 240ms;
+  transition: opacity 120ms ease, transform var(--layout-duration) ease, visibility 0s var(--layout-duration);
 }
 
 .first-workspace {
@@ -122,36 +208,6 @@
   font-size: 1.642857rem;
   font-weight: 600;
   margin-bottom: 24px;
-}
-
-.collapsed-rail {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 44px;
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  padding-top: calc((var(--panel-heading-height) - 44px) / 2);
-  transition: opacity 160ms ease;
-}
-
-.collapsed-rail .icon-button {
-  min-width: 44px;
-  height: 44px;
-}
-
-.materials-panel > .collapsed-rail {
-  right: 0;
-}
-
-.conversation-panel > .collapsed-rail {
-  left: 0;
-}
-
-[data-open='true'] > .collapsed-rail {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .materials-handle {
@@ -206,6 +262,10 @@
   cursor: col-resize;
 }
 
+.is-resizing .panel-content {
+  width: 100%;
+}
+
 .is-resizing iframe {
   pointer-events: none;
 }
@@ -224,23 +284,16 @@
   pointer-events: none;
 }
 
-.reader-panel {
+.reader-panel > .resource-body {
   container-type: inline-size;
 }
 
 @media (pointer: coarse) {
+  .workspace-shell {
+    --header-height: 56px;
+  }
   .split-handle {
     width: 24px;
-  }
-}
-
-.panel-icon {
-  color: var(--muted);
-}
-
-@media (max-width: 1180px) {
-  .workbench {
-    --panel-heading-height: 54px;
   }
 }
 
@@ -248,15 +301,9 @@
   flex: 1;
 }
 
-.conversation-heading-label {
-  flex: 1;
-}
-
 @media (pointer: coarse) {
-  .workbench {
-    --panel-heading-height: 56px;
-  }
-  .panel-heading .icon-button {
+  .workspace-shell .app-header .icon-button,
+  .workspace-shell .app-header .preview-modes button {
     min-width: 44px;
     min-height: 44px;
   }

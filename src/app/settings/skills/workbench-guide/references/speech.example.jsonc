@@ -15,6 +15,7 @@
       // 字符串，最多 160 字符；界面留空时以服务域名命名。
       "name": "自定义语音",
       // 全部取值："realtime"（实时转写）或 "file"（录音结束后上传转写）。
+      // realtime 使用兼容 OpenAI 的 client_secrets 临时凭证与 WebSocket 音频块协议。
       "protocol": "file",
       // http(s) 地址，最多 2048 字符；不带账号、密码、查询参数或片段。
       // 填接口根地址，不包含 /audio/transcriptions 等具体操作路径。

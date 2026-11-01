@@ -95,14 +95,16 @@ export function SettingsDialog() {
                   {t('models.model')}
                 </button>
               </nav>
-              <div className="settings-body" key={tab}>
-                {tab === 'general' ? (
+              <div className="settings-body">
+                <div className="settings-page" hidden={tab !== 'general'}>
                   <GeneralSettings />
-                ) : tab === 'appearance' ? (
+                </div>
+                <div className="settings-page" hidden={tab !== 'appearance'}>
                   <AppearanceSettings />
-                ) : (
+                </div>
+                <div className="settings-page" hidden={tab !== 'models'}>
                   <ModelSettings onModelsChanged={modelsChanged} />
-                )}
+                </div>
               </div>
             </div>
           </Dialog.Content>

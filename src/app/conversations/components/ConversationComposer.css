@@ -2,7 +2,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 4px 7px;
+  margin: 0 0 6px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  background: var(--inset);
   color: var(--muted);
   font-size: 0.785714rem;
   min-width: 0;
@@ -28,29 +31,29 @@
 .composer-area {
   flex: none;
   border-top: 0;
-  padding: 10px 12px 12px;
+  padding: 6px 8px 8px;
 }
 
 .composer {
-  border: 1px solid var(--strong-line);
+  border: 1px solid var(--control-line);
   transition: border-color 140ms,
     box-shadow 140ms;
-  border-radius: 12px;
-  background: var(--composer);
-  border-color: var(--strong-line);
-  box-shadow: 0 2px 6px #24462e06,
-    inset 0 1px 0 #fff;
-  padding: 11px;
+  border-radius: 16px;
+  background: var(--control);
+  box-shadow: var(--control-shadow);
+  padding: 9px;
 }
 
 .composer:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px #216e5e0a;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--control-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 .composer textarea {
   display: block;
   width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
   max-height: 190px;
   padding: 0;
   resize: vertical;
@@ -58,8 +61,8 @@
   background: transparent;
   outline: none;
   font-size: 1rem;
-  line-height: 1.8;
-  min-height: 62px;
+  line-height: 1.6;
+  min-height: 3.2em;
 }
 
 .composer textarea::placeholder {
@@ -69,9 +72,13 @@
 .composer-bottom {
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin-top: 9px;
+  gap: 5px;
+  margin-top: 6px;
   justify-content: flex-end;
+}
+
+.composer-bottom > .model-selector-trigger {
+  margin-right: auto;
 }
 
 .send-button {
@@ -102,18 +109,6 @@
   margin: 10px 0;
 }
 
-.send-button {
-  color: var(--on-accent);
-}
-
-.send-button.stop {
-  color: var(--paper);
-}
-
-.composer {
-  box-shadow: 0 2px 6px #00000005;
-}
-
 @media (max-width: 1180px) {
   .send-button {
     min-width: 42px;
@@ -138,6 +133,15 @@
   flex: none;
 }
 
+.voice-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.785714rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .composer-quotes {
   display: grid;
   gap: 6px;
@@ -147,11 +151,10 @@
 }
 
 .composer-voice-preview {
-  flex: 1;
-  min-width: 0;
+  margin-top: 6px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.714286rem;
+  font-size: 0.928571rem;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1,106 +1,34 @@
 export type ColorMode = 'light' | 'dark';
 export type ThemeSettings = { palette: string; custom: boolean; css: string };
 
-export const palettes = [
-  {
-    id: 'paper',
-    mode: 'light',
-    name: 'settings.paper',
-    base: '#f6f8fa',
-    panel: '#ffffff',
-    canvas: '#f0f3f6',
-    surface: '#eaeef2',
-    text: '#1f2328',
-    muted: '#59636e',
-    line: '#d0d7de',
-    strong: '#8c959f',
-    accent: '#0969da',
-    danger: '#cf222e',
-    dangerSurface: '#ffebe9',
-  },
-  {
-    id: 'snow',
-    mode: 'light',
-    name: 'settings.snow',
-    base: '#e5e9f0',
-    panel: '#eceff4',
-    canvas: '#d8dee9',
-    surface: '#d8dee9',
-    text: '#2e3440',
-    muted: '#4c566a',
-    line: '#c1cad8',
-    strong: '#81a1c1',
-    accent: '#42648c',
-    danger: '#a13e48',
-    dangerSurface: '#f5e2e5',
-  },
-  {
-    id: 'latte',
-    mode: 'light',
-    name: 'settings.latte',
-    base: '#e6e9ef',
-    panel: '#eff1f5',
-    canvas: '#dce0e8',
-    surface: '#dce0e8',
-    text: '#4c4f69',
-    muted: '#5c5f77',
-    line: '#bcc0cc',
-    strong: '#8c8fa1',
-    accent: '#8839ef',
-    danger: '#d20f39',
-    dangerSurface: '#f9e2e8',
-  },
-  {
-    id: 'graphite',
-    mode: 'dark',
-    name: 'settings.graphite',
-    base: '#0d1117',
-    panel: '#161b22',
-    canvas: '#0d1117',
-    surface: '#21262d',
-    text: '#e6edf3',
-    muted: '#9da7b3',
-    line: '#30363d',
-    strong: '#59636f',
-    accent: '#79c0ff',
-    danger: '#ffa198',
-    dangerSurface: '#362125',
-  },
-  {
-    id: 'nord',
-    mode: 'dark',
-    name: 'settings.nord',
-    base: '#2e3440',
-    panel: '#3b4252',
-    canvas: '#2e3440',
-    surface: '#434c5e',
-    text: '#eceff4',
-    muted: '#d8dee9',
-    line: '#4c566a',
-    strong: '#81a1c1',
-    accent: '#88c0d0',
-    danger: '#e5a0a7',
-    dangerSurface: '#49343f',
-  },
-  {
-    id: 'mocha',
-    mode: 'dark',
-    name: 'settings.mocha',
-    base: '#181825',
-    panel: '#1e1e2e',
-    canvas: '#11111b',
-    surface: '#313244',
-    text: '#cdd6f4',
-    muted: '#bac2de',
-    line: '#45475a',
-    strong: '#7f849c',
-    accent: '#b4befe',
-    danger: '#f38ba8',
-    dangerSurface: '#432c3f',
-  },
+type Palette = {
+  id: string; mode: ColorMode; name: string;
+  base: string; panel: string; canvas: string; surface: string; text: string; muted: string;
+  line: string; strong: string; accent: string; danger: string; dangerSurface: string;
+};
+
+// The first palette of each mode is its default and the fallback for unknown saved ids.
+export const palettes: Palette[] = [
+  { id: 'paper', mode: 'light', name: 'settings.paper', base: '#f5f6f8', panel: '#ffffff', canvas: '#eef0f3', surface: '#e8ebf0',
+    text: '#1f2430', muted: '#5b6472', line: '#dde1e7', strong: '#a9b1bd', accent: '#3a5fc0', danger: '#b42d35', dangerSurface: '#fdeeee' },
+  { id: 'parchment', mode: 'light', name: 'settings.parchment', base: '#f3efe6', panel: '#fbf9f4', canvas: '#ece6da', surface: '#e7e0d2',
+    text: '#2c2620', muted: '#6b6155', line: '#ddd5c6', strong: '#b3a790', accent: '#9c4a2c', danger: '#a8322d', dangerSurface: '#f8e7e2' },
+  { id: 'celadon', mode: 'light', name: 'settings.celadon', base: '#eef2f0', panel: '#fafcfb', canvas: '#e5ebe8', surface: '#dfe7e3',
+    text: '#1f2a27', muted: '#56645f', line: '#d3ddd8', strong: '#9fb0a9', accent: '#2f6e60', danger: '#ac3a3a', dangerSurface: '#f7e8e6' },
+  { id: 'graphite', mode: 'dark', name: 'settings.graphite', base: '#16181c', panel: '#1d2025', canvas: '#121417', surface: '#272b31',
+    text: '#e4e7ec', muted: '#9aa1ac', line: '#30353d', strong: '#555c67', accent: '#8ab4f8', danger: '#f2a097', dangerSurface: '#3a2426' },
+  { id: 'ink', mode: 'dark', name: 'settings.ink', base: '#0f1623', panel: '#151e2e', canvas: '#0b111b', surface: '#1f2a3d',
+    text: '#dfe6f2', muted: '#93a1b8', line: '#273349', strong: '#4a5a75', accent: '#7fa7ff', danger: '#f19c9c', dangerSurface: '#3a2230' },
+  { id: 'lamplight', mode: 'dark', name: 'settings.lamplight', base: '#1b1916', panel: '#22201c', canvas: '#161411', surface: '#2d2a25',
+    text: '#e9e2d4', muted: '#a69d8c', line: '#38342d', strong: '#5f5749', accent: '#e0a463', danger: '#ee9a85', dangerSurface: '#3d2620' },
 ];
 
-export function paletteTokens(palette: (typeof palettes)[number]) {
+export function resolvePalette(mode: ColorMode, id: string | null) {
+  const options = palettes.filter(palette => palette.mode === mode);
+  return options.find(palette => palette.id === id) ?? options[0];
+}
+
+export function paletteTokens(palette: Palette) {
   return {
     '--ink': palette.text,
     '--muted': palette.muted,
@@ -135,16 +63,16 @@ export function paletteTokens(palette: (typeof palettes)[number]) {
   };
 }
 
-export const paletteStyles = `@layer research-theme {${palettes
-  .map(
-    (palette) =>
-      `:root[data-theme='${palette.mode}'][data-palette='${palette.id}']{color-scheme:${palette.mode};${Object.entries(
-        paletteTokens(palette),
-      )
-        .map(([key, value]) => `${key}:${value}`)
-        .join(';')}}`,
-  )
-  .join('\n')}}`;
+function paletteRule(selector: string, palette: Palette) {
+  const tokens = Object.entries(paletteTokens(palette)).map(([key, value]) => `${key}:${value}`).join(';');
+  return `${selector}{color-scheme:${palette.mode};${tokens}}`;
+}
+
+// Mode-level rules come first so a removed or unknown palette id still gets that mode's default.
+export const paletteStyles = `@layer research-theme {${[
+  ...(['light', 'dark'] as const).map(mode => paletteRule(`:root[data-theme='${mode}']`, resolvePalette(mode, null))),
+  ...palettes.map(palette => paletteRule(`:root[data-theme='${palette.mode}'][data-palette='${palette.id}']`, palette)),
+].join('\n')}}`;
 
 // Self-contained so the same function can run before hydration and on preference changes.
 export function applyAppearance() {

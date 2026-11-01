@@ -135,12 +135,10 @@ function CssEditor({
 function PaletteOption({
   palette,
   selected,
-  custom = false,
   onSelect,
 }: {
   palette: (typeof palettes)[number];
   selected: boolean;
-  custom?: boolean;
   onSelect: () => void;
 }) {
   const t = useTranslations();
@@ -149,48 +147,16 @@ function PaletteOption({
       <input
         type="radio"
         name={`${palette.mode}-palette`}
-        value={custom ? 'custom' : palette.id}
+        value={palette.id}
         checked={selected}
         onChange={onSelect}
       />
-      <span className="palette-card">
-        <span
-          className="palette-preview"
-          aria-hidden="true"
-          style={paletteTokens(palette) as CSSProperties}
-        >
-          <span className="preview-top">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="preview-sidebar">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="preview-document">
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="preview-chat">
-            <i />
-            <i />
-            <i />
-            <b />
-          </span>
-          {custom && (
-            <span className="preview-custom-icon">
-              <Braces size={24} />
-            </span>
-          )}
+      <span className="palette-chip">
+        <span className="palette-swatch" aria-hidden="true" style={paletteTokens(palette) as CSSProperties}>
+          <i /><i /><i />
         </span>
-        <span className="palette-caption">
-          <strong>{custom ? t('settings.customCss') : t(palette.name)}</strong>
-          {selected && <Check size={14} aria-hidden="true" />}
-        </span>
+        <span className="palette-name">{t(palette.name)}</span>
+        {selected && <Check size={14} aria-hidden="true" />}
       </span>
     </label>
   );
@@ -207,7 +173,6 @@ function ThemeOptions({
 }) {
   const t = useTranslations();
   const options = palettes.filter((palette) => palette.mode === mode);
-  const current = options.find((palette) => palette.id === theme.palette)!;
   return (
     <fieldset className="appearance-section theme-options">
       <legend>{mode === 'light' ? t('settings.lightMode') : t('settings.darkMode')}</legend>
@@ -216,17 +181,18 @@ function ThemeOptions({
           <PaletteOption
             key={palette.id}
             palette={palette}
-            selected={!theme.custom && theme.palette === palette.id}
-            onSelect={() => onChange({ palette: palette.id, custom: false })}
+            selected={theme.palette === palette.id}
+            onSelect={() => onChange({ palette: palette.id })}
           />
         ))}
-        <PaletteOption
-          palette={current}
-          selected={theme.custom}
-          custom
-          onSelect={() => onChange({ custom: true })}
-        />
       </div>
+      <label className="custom-css-toggle">
+        <input type="checkbox" role="switch" checked={theme.custom}
+          onChange={(event) => onChange({ custom: event.target.checked })} />
+        <span className="switch-track" aria-hidden="true" />
+        <Braces size={14} aria-hidden="true" />
+        {t('settings.customCss')}
+      </label>
       {theme.custom && (
         <CssEditor mode={mode} theme={theme} onChange={onChange} />
       )}

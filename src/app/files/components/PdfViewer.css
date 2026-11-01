@@ -9,19 +9,77 @@
 
 .pdf-controls {
   display: flex;
+  flex: 1;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 6px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.pdf-viewer > .pdf-controls {
   flex: none;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 6px;
+  justify-content: flex-start;
   padding: 5px 10px;
   min-height: 42px;
-  color: var(--muted);
 }
 
 .pdf-controls .icon-button {
   width: 30px;
   min-width: 30px;
   height: 30px;
+}
+
+.pdf-wide {
+  display: inline-flex;
+}
+
+.pdf-options {
+  display: none;
+}
+
+.pdf-options-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  width: min(320px, calc(var(--viewport-width) - 24px));
+  max-height: calc(var(--radix-popover-content-available-height) / var(--ui-scale, 1));
+  overflow: auto;
+}
+
+.pdf-options-zoom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.928571rem;
+}
+
+.pdf-options-scales {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.pdf-options-scales button {
+  min-height: 36px;
+  border-radius: 7px;
+  background: var(--inset);
+  font-size: 0.857143rem;
+}
+
+.pdf-options-scales button:nth-child(-n + 2) {
+  grid-column: span 2;
+}
+
+.pdf-options-scales button[aria-pressed='true'] {
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.pdf-options-panel .preview-modes button {
+  flex: 1;
 }
 
 .pdf-controls .choice-trigger {
@@ -37,6 +95,13 @@
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.pdf-navigation,
+.pdf-zoom {
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--inset);
 }
 
 .pdf-navigation form {
@@ -73,6 +138,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--inset);
 }
 
 .pdf-scroll {
@@ -169,11 +235,11 @@
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: var(--paper);
+  background: var(--raised);
   color: var(--ink);
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   border-radius: 14px;
-  box-shadow: 0 8px 32px #0002;
+  box-shadow: var(--floating-shadow);
 }
 
 .pdf-selection-actions > span {
@@ -207,9 +273,10 @@
   width: min(280px, 85%);
   overflow: auto;
   padding: 8px;
-  background: var(--paper);
+  background: var(--raised);
+  border-right: 1px solid var(--control-line);
   border-radius: 0 10px 10px 0;
-  box-shadow: 8px 0 30px #00000018;
+  box-shadow: var(--floating-shadow);
 }
 
 .pdf-outline-heading {
@@ -287,14 +354,38 @@
   }
 }
 
-@container (max-width: 430px) {
-  .pdf-controls {
-    gap: 0;
-    padding-inline: 3px;
+@container (max-width: 560px) {
+  .pdf-controls,
+  .pdf-viewer > .pdf-controls {
+    flex-wrap: nowrap;
+    gap: 2px;
   }
-  .pdf-controls .icon-button {
-    min-width: 28px;
+  .pdf-viewer > .pdf-controls {
+    padding: 4px;
+  }
+  .pdf-controls .pdf-wide,
+  .pdf-select-button span {
+    display: none;
+  }
+  .pdf-options {
+    display: inline-flex;
+  }
+  .pdf-navigation {
+    flex: none;
+  }
+  .pdf-select-button {
+    min-width: 34px;
+    padding-inline: 0;
+  }
+}
+
+@container (max-width: 300px) {
+  .pdf-navigation input {
     width: 28px;
+  }
+  .pdf-navigation,
+  .pdf-navigation form {
+    gap: 0;
   }
 }
 
@@ -315,8 +406,9 @@
     min-width: 44px;
     min-height: 44px;
   }
-  .pdf-controls {
-    gap: 6px;
+  .pdf-options-scales button,
+  .pdf-options-panel .preview-modes button {
+    min-height: 44px;
   }
   .pdf-navigation input {
     min-height: 44px;

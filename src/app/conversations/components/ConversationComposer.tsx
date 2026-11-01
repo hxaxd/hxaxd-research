@@ -14,7 +14,8 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { clsx } from 'clsx';
+import { useRef, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 
 import type { ImageClip, ReadingContext, TextQuote } from '@/app/files/schema';
 import {
@@ -48,6 +49,7 @@ export function ConversationComposer({
   quotes,
   onQuotesChange,
   supportsImages,
+  modelControl,
 }: {
   url: string;
   model: string;
@@ -60,6 +62,7 @@ export function ConversationComposer({
   quotes: TextQuote[];
   onQuotesChange: Dispatch<SetStateAction<TextQuote[]>>;
   supportsImages: boolean;
+  modelControl: ReactNode;
 }) {
   const t = useTranslations();
   const [text, setText] = useState('');
@@ -88,13 +91,11 @@ export function ConversationComposer({
       ? t('speech.recordingTime', {value0: clock(voice.elapsed)})
       : voice.state === 'permission'
         ? t('speech.permissionPending')
-        : voice.state === 'connecting'
-          ? t('speech.connecting')
-          : voice.state === 'finishing'
-            ? t('speech.processing')
-            : active
-              ? t('speech.startWith', {value0: active.name})
-              : t('speech.notConfigured');
+        : voice.state === 'finishing'
+          ? t('speech.processing')
+          : active
+            ? t('speech.startWith', {value0: active.name})
+            : t('speech.notConfigured');
 
   function toggleVoice() {
     if (voice.state === 'recording') {
@@ -103,7 +104,6 @@ export function ConversationComposer({
     }
     if (
       voice.state === 'permission' ||
-      voice.state === 'connecting' ||
       voice.state === 'finishing'
     ) {
       voice.cancel();
@@ -151,13 +151,6 @@ export function ConversationComposer({
 
   return (
     <div className="composer-area">
-      {reading && (
-        <div className="reading-context" title={reading.path} aria-label={t('files.current')}>
-          <BookOpen size={14} aria-hidden="true" />
-          <span>{reading.path.split('/').pop()}</span>
-          {reading.page && <small>{t("files.pageNumber", {value0: reading.page})}</small>}
-        </div>
-      )}
       {error && (
         <p className="error-message" role="alert">
           {error}
@@ -196,10 +189,16 @@ export function ConversationComposer({
       )}
       {!!clips.length && model && !supportsImages && <p className="model-notice" role="status">{t('models.noImages')}</p>}
       <div className="composer">
+        {reading && (
+          <div className="reading-context" title={reading.path} aria-label={t('files.current')}>
+            <BookOpen size={14} aria-hidden="true" />
+            <span>{reading.path.split('/').pop()}</span>
+            {reading.page && <small>{t('files.pageNumber', {value0: reading.page})}</small>}
+          </div>
+        )}
         <textarea
           ref={textarea}
           aria-label={t('conversations.message')}
-          placeholder={t('conversations.message')}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -210,33 +209,28 @@ export function ConversationComposer({
           }}
           maxLength={100000}
         />
+        {voice.pending && (
+          <div className="composer-voice-preview" title={voice.pending} aria-live="polite">
+            {voice.pending}
+          </div>
+        )}
         <div className="composer-bottom">
-          {voice.pending && (
-            <span
-              className="composer-voice-preview"
-              title={voice.pending}
-              aria-live="polite"
-            >
-              {voice.pending}
-            </span>
-          )}
+          {modelControl}
           <div className="voice-control">
+            {voice.state === 'recording' && <span className="voice-time" role="status" aria-label={voiceLabel}>
+              {voice.connecting && <LoaderCircle size={12} className="tool-spinner" aria-label={t('speech.connecting')} />}
+              {clock(voice.elapsed)}
+            </span>}
             <button
-              className={`icon-button voice-button${
-                voice.state === 'recording'
-                  ? ' is-recording'
-                  : voice.state === 'permission' ||
-                      voice.state === 'connecting' ||
-                      voice.state === 'finishing'
-                    ? ' is-busy'
-                    : ''
-              }`}
+              className={clsx('icon-button voice-button', {
+                'is-recording': voice.state === 'recording',
+                'is-busy': voice.state === 'permission' || voice.state === 'finishing',
+              })}
               aria-label={voiceLabel}
               title={voiceLabel}
               onClick={toggleVoice}
             >
               {voice.state === 'permission' ||
-              voice.state === 'connecting' ||
               voice.state === 'finishing' ? (
                 <LoaderCircle size={17} className="tool-spinner" />
               ) : voice.state === 'recording' ? (
@@ -245,7 +239,7 @@ export function ConversationComposer({
                 <Mic size={17} />
               )}
             </button>
-            {voice.state === 'recording' && (
+            {(voice.state === 'recording' || voice.state === 'finishing') && (
               <button
                 className="icon-button voice-cancel"
                 aria-label={t('speech.cancel')}

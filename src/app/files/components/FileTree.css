@@ -1,0 +1,92 @@
+.file-tree {
+  margin-inline-start: 14px;
+  padding-inline-start: 2px;
+  border-inline-start: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.file-tree.file-tree-root {
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+  border: 0;
+}
+
+.file-tree > .file-open {
+  width: 100%;
+  border-radius: 8px;
+  /* Files align with folder labels, which sit after a chevron column. */
+  padding-inline-start: 26px;
+}
+
+.file-tree > .file-open:hover,
+.file-tree-row:hover {
+  background: var(--hover);
+}
+
+.file-tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.file-tree-row > .file-open {
+  padding-inline-start: 2px;
+}
+
+.folder-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  align-self: stretch;
+  color: var(--muted);
+  border-radius: 6px;
+}
+
+.folder-chevron {
+  transition: transform 160ms ease;
+}
+
+.file-tree-folder.is-open > .file-tree-row .folder-chevron {
+  transform: rotate(90deg);
+}
+
+.folder-menu {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  margin-inline-end: 4px;
+  opacity: 0;
+}
+
+.file-tree-row:hover .folder-menu,
+.file-tree-row:focus-within .folder-menu,
+.folder-menu[data-state='open'] {
+  opacity: 1;
+}
+
+.file-tree-folder.is-paper > .file-tree-row > .file-open svg {
+  color: var(--accent);
+}
+
+.file-tree-folder.is-paper > .file-tree-row > .file-open span {
+  font-weight: 500;
+}
+
+.file-location {
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+@media (pointer: coarse) {
+  .folder-menu {
+    opacity: 1;
+  }
+}

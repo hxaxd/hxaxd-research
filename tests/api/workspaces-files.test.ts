@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { GET as workspaces, POST as createWorkspace } from '@/app/api/workspaces/route';
 import { GET as workspace, PATCH as renameWorkspace } from '@/app/api/workspaces/[workspaceId]/route';
-import { GET as files, POST as createDirectory } from '@/app/api/workspaces/[workspaceId]/files/route';
+import { GET as files, PATCH as markFolder, POST as createDirectory } from '@/app/api/workspaces/[workspaceId]/files/route';
 import { GET as file } from '@/app/api/workspaces/[workspaceId]/file/route';
 import { POST as importFiles } from '@/app/api/workspaces/[workspaceId]/imports/route';
 import { GET as openapi } from '@/app/api/openapi/route';
@@ -101,30 +101,120 @@ test('directory creation checks paths and reports conflicts without replacing ex
   expect((await createDirectory(request('/files', 'POST', { path: '目录' }), workspaceContext(randomUUID()))).status).toBe(404);
 });
 
-test('paper view finds PDFs in arbitrary folders and follows filesystem changes without registration', async () => {
+test('paper view lists folders marked by research.json and follows filesystem changes', async () => {
   const context = workspaceContext(app.workspace.id);
   const root = path.join(app.config.workspaceDir, app.workspace.id);
-  await mkdir(path.join(root, 'research', 'sources'), { recursive: true });
+  await mkdir(path.join(root, 'research', 'attention'), { recursive: true });
+  await mkdir(path.join(root, 'loose'));
+  await mkdir(path.join(root, 'broken'));
   await mkdir(path.join(root, '.pi'));
-  await writeFile(path.join(root, 'first.pdf'), 'first');
-  await writeFile(path.join(root, 'research', 'sources', 'second.PDF'), 'second');
-  await writeFile(path.join(root, 'research', 'note.md'), '# Notes');
-  await writeFile(path.join(root, '.pi', 'internal.pdf'), 'internal');
+  await writeFile(path.join(root, 'loose', 'unmarked.pdf'), 'pdf');
+  await writeFile(path.join(root, 'research', 'attention', 'paper.pdf'), 'pdf');
+  await writeFile(path.join(root, 'research', 'attention', 'research.json'),
+    JSON.stringify({ type: 'paper', title: 'Attention Is All You Need', main: 'paper.pdf' }));
+  await writeFile(path.join(root, 'broken', 'research.json'), '{invalid');
+  await writeFile(path.join(root, '.pi', 'research.json'), JSON.stringify({ type: 'paper' }));
   await symlink(root, path.join(root, 'loop'), process.platform === 'win32' ? 'junction' : 'dir');
   async function papers(query = '') {
     const response = await files(request(`/files?view=papers${query}`), context);
     expect(response.status).toBe(200);
-    return (await response.json()).map((entry: { path: string }) => entry.path);
+    return (await response.json()) as { path: string; marker?: { main?: string; title?: string } }[];
   }
-  expect(await papers()).toEqual(['first.pdf', 'research/sources/second.PDF']);
-  expect(await papers('&path=research')).toEqual(['research/sources/second.PDF']);
-  expect(await (await files(request('/files?path=research'), context)).json())
-    .toContainEqual(expect.objectContaining({ path: 'research/note.md', kind: 'file' }));
+  expect(await papers()).toEqual([expect.objectContaining({
+    path: 'research/attention', kind: 'directory',
+    marker: { type: 'paper', title: 'Attention Is All You Need', main: 'research/attention/paper.pdf' },
+  })]);
+  expect((await papers('&q=all you need')).map(entry => entry.path)).toEqual(['research/attention']);
+  expect(await papers('&path=loose')).toEqual([]);
+  const listed = await (await files(request('/files?path=research'), context)).json();
+  expect(listed).toContainEqual(expect.objectContaining({ path: 'research/attention', marker: expect.objectContaining({ type: 'paper' }) }));
+  const rootEntries = await (await files(request('/files'), context)).json();
+  expect(rootEntries).toContainEqual(expect.not.objectContaining({ path: 'broken', marker: expect.anything() }));
+  expect(rootEntries).not.toContainEqual(expect.objectContaining({ path: '.pi' }));
   await rename(path.join(root, 'research'), path.join(root, 'renamed'));
-  await unlink(path.join(root, 'first.pdf'));
-  expect(await papers()).toEqual(['renamed/sources/second.PDF']);
+  expect((await papers()).map(entry => entry.marker?.main)).toEqual(['renamed/attention/paper.pdf']);
+  await unlink(path.join(root, 'renamed', 'attention', 'research.json'));
+  expect(await papers()).toEqual([]);
   expect((await files(request('/files?view=papers&path=..'), context)).status).toBe(400);
   expect((await files(request('/files?view=unknown'), context)).status).toBe(400);
+});
+
+test('folders can be marked and unmarked as papers, choosing the shallowest PDF as main', async () => {
+  const context = workspaceContext(app.workspace.id);
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  await mkdir(path.join(root, 'paper', 'translation'), { recursive: true });
+  await writeFile(path.join(root, 'paper', 'translation', 'paper.zh.pdf'), 'zh');
+  await writeFile(path.join(root, 'paper', 'Original.pdf'), 'en');
+  await mkdir(path.join(root, 'empty'));
+  const mark = (body: object) => markFolder(request('/files', 'PATCH', body), context);
+  const marked = await mark({ path: 'paper', type: 'paper' });
+  expect(marked.status).toBe(200);
+  expect(await marked.json()).toMatchObject({ marker: { type: 'paper', title: 'Original', main: 'paper/Original.pdf' } });
+  expect(JSON.parse(await readFile(path.join(root, 'paper', 'research.json'), 'utf8'))).toEqual({ type: 'paper', title: 'Original', main: 'Original.pdf' });
+  expect((await mark({ path: 'empty', type: 'paper' })).status).toBe(400);
+  expect((await mark({ path: 'paper/Original.pdf', type: 'paper' })).status).toBe(400);
+  expect((await mark({ path: '../outside', type: 'paper' })).status).toBe(400);
+  expect((await mark({ path: 'paper', type: null })).status).toBe(200);
+  expect((await (await files(request('/files?view=papers'), context)).json())).toEqual([]);
+});
+
+test('importing as a paper writes a marker and reports the main PDF', async () => {
+  const context = workspaceContext(app.workspace.id);
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  async function upload(names: string[], metadata: Record<string, unknown>) {
+    const form = new FormData();
+    form.set('metadata', JSON.stringify({ target: '', ...metadata }));
+    names.forEach(name => form.append('files', new Blob(['x']), name));
+    return importFiles(new Request('http://localhost/imports', { method: 'POST', body: form }), context);
+  }
+  const single = await upload(['Attention.pdf'], { paper: true });
+  expect(single.status).toBe(201);
+  expect(await single.json()).toMatchObject({ path: 'Attention', main: 'Attention/Attention.pdf' });
+  expect(JSON.parse(await readFile(path.join(root, 'Attention', 'research.json'), 'utf8')))
+    .toEqual({ type: 'paper', title: 'Attention', main: 'Attention.pdf' });
+  const folder = await upload(['notes.md', 'src/figure.pdf', 'main.pdf'], { paper: true, folderName: 'BERT' });
+  expect(await folder.json()).toMatchObject({ path: 'BERT', main: 'BERT/main.pdf' });
+  expect((await upload(['notes.md'], { paper: true })).status).toBe(400);
+  expect(await (await upload(['plain.pdf'], {})).json()).not.toHaveProperty('main');
+});
+
+test('file search matches names recursively, honours the paper view and skips internal folders', async () => {
+  const context = workspaceContext(app.workspace.id);
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  await mkdir(path.join(root, 'notes', 'deep'), { recursive: true });
+  await mkdir(path.join(root, '.pi'));
+  await writeFile(path.join(root, 'notes', 'deep', 'Attention.md'), '# a');
+  await writeFile(path.join(root, 'notes', 'attention.pdf'), 'pdf');
+  await writeFile(path.join(root, '.pi', 'attention.jsonl'), '{}');
+  async function search(query: string) {
+    const response = await files(request(`/files?${query}`), context);
+    expect(response.status).toBe(200);
+    return (await response.json()).map((entry: { path: string }) => entry.path).sort();
+  }
+  expect(await search('q=ATTENTION')).toEqual(['notes/attention.pdf', 'notes/deep/Attention.md']);
+  expect(await search('q=attention&view=papers')).toEqual([]);
+  expect(await search('q=attention&path=notes/deep')).toEqual(['notes/deep/Attention.md']);
+  expect(await search('q=missing')).toEqual([]);
+});
+
+test('file search matches names recursively, honors the paper view and skips internal files', async () => {
+  const context = workspaceContext(app.workspace.id);
+  const root = path.join(app.config.workspaceDir, app.workspace.id);
+  await mkdir(path.join(root, 'notes', 'deep'), { recursive: true });
+  await mkdir(path.join(root, '.pi'));
+  await writeFile(path.join(root, 'Survey.pdf'), 'a');
+  await writeFile(path.join(root, 'notes', 'deep', 'survey-notes.md'), 'b');
+  await writeFile(path.join(root, 'notes', 'other.md'), 'c');
+  await writeFile(path.join(root, '.pi', 'survey.jsonl'), 'd');
+  async function search(query: string) {
+    const response = await files(request(`/files?${query}`), context);
+    expect(response.status).toBe(200);
+    return (await response.json()).map((entry: { path: string }) => entry.path);
+  }
+  expect(await search('q=SURVEY')).toEqual(['notes/deep/survey-notes.md', 'Survey.pdf']);
+  expect(await search('q=survey&view=papers')).toEqual([]);
+  expect(await search('q=survey&path=notes')).toEqual(['notes/deep/survey-notes.md']);
+  expect(await search('q=missing')).toEqual([]);
 });
 
 test('metadata writes reject duplicate identities and malformed requests without replacing the workspace', async () => {

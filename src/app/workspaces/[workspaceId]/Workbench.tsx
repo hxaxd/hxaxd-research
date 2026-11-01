@@ -4,6 +4,7 @@ import '../workbench.css';
 import '@/app/conversations/conversations.css';
 
 
+import { clsx } from 'clsx';
 import { useTranslations } from 'use-intl';
 
 import {
@@ -18,8 +19,10 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ConversationPanel } from '@/app/conversations/components/ConversationPanel';
 import { CreateConversationDialog } from '@/app/conversations/components/CreateConversationDialog';
 import type { Conversation } from '@/app/conversations/schema';
-import { FilePreview } from '@/app/files/components/FilePreview';
+import { FilePreview, FilePreviewHeader } from '@/app/files/components/FilePreview';
 import { FileBrowser } from '@/app/files/components/FileBrowser';
+import { FileBrowserToolbar } from '@/app/files/components/FileBrowserToolbar';
+import { ReaderToolbarProvider } from '@/app/files/components/ReaderToolbar';
 import {
   fileChangeSchema,
   maxImageClips,
@@ -37,10 +40,10 @@ import { modelsChangedEvent } from '@/app/models/components/model-events';
 import type { ConfiguredModel, ModelCatalog } from '@/app/models/schema';
 import type { Workspace } from '@/app/workspaces/schema';
 import { requestJson } from '@/shared/http/request-json';
-import { ChoiceSelect } from '@/shared/ui/ChoiceSelect';
-import { EditableText } from '@/shared/ui/EntityControls';
+import { EntitySwitcher } from '@/shared/ui/EntityControls';
 
 import { WorkbenchHeader } from '@/app/WorkbenchHeader';
+import { CommandPalette } from '@/app/workspaces/CommandPalette';
 import { useWorkbenchLayout } from './use-workbench-layout';
 
 type WorkbenchProps = {
@@ -75,10 +78,12 @@ export function Workbench({
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [conversations, setConversations] = useState(initialConversations);
   const [file, setFile] = useState(initialFile);
-  const [directory, setDirectory] = useState(initialFile?.slice(0, Math.max(0, initialFile.lastIndexOf('/'))) ?? '');
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [readerRequest, setReaderRequest] = useState<DocumentRequest | null>(null);
   const [filesRevision, setFilesRevision] = useState(0);
+  const [papersOnly, setPapersOnly] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [readerTools, setReaderTools] = useState<HTMLElement | null>(null);
   const [fileRevisions, setFileRevisions] = useState<Record<string, number>>(
     {},
   );
@@ -117,6 +122,19 @@ export function Workbench({
   const currentConversation = conversations.find(
     (item) => item.id === conversationId,
   );
+  const lastOpened = useRef('');
+  const openDocument = useCallback((target: ReadingContext) => {
+    setFile(target.path);
+    setViewMode(target.mode ?? 'preview');
+    setPdfPosition({ path: target.path, page: target.page ?? 1 });
+    updateQuery('file', target.path);
+    // Reopening the same document at the same place keeps the open viewer instead of reloading it.
+    const key = `${target.path}|${target.mode ?? ''}|${target.page ?? ''}`;
+    if (lastOpened.current === key) return;
+    lastOpened.current = key;
+    setReaderRequest({ ...target, id: crypto.randomUUID() });
+  }, []);
+
   const displayDocument = useEffectEvent((request: ReaderRequest) => {
     if (request.conversationId !== conversationId) return;
     openDocument(request);
@@ -203,18 +221,8 @@ export function Workbench({
     updateQuery('conversation', id);
   }
 
-  function openDocument(target: ReadingContext) {
-    setFile(target.path);
-    setDirectory(target.path.slice(0, Math.max(0, target.path.lastIndexOf('/'))));
-    setViewMode(target.mode ?? 'preview');
-    setPdfPosition({ path: target.path, page: target.page ?? 1 });
-    setReaderRequest({ ...target, id: crypto.randomUUID() });
-    updateQuery('file', target.path);
-  }
-
   function openFile(path: string) {
     openDocument({ path });
-    if (layout.tablet) layout.setOpen('materials', false);
   }
 
   function createdConversation(conversation: Conversation) {
@@ -232,66 +240,91 @@ export function Workbench({
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell workspace-shell" style={layout.style} data-materials-open={materialsOpen} data-conversation-open={conversationOpen}>
       <WorkbenchHeader
+        style={layout.columns.header}
         workspace={workspace}
         onRenamed={setWorkspace}
         workspaces={workspaces}
-      />
+        identityInCenter={!materialsOpen}
+        start={<>
+          <button className="icon-button" aria-label={t(materialsOpen ? 'workspaces.collapseMaterials' : 'workspaces.expandMaterials')}
+          title={t(materialsOpen ? 'workspaces.collapseMaterials' : 'workspaces.expandMaterials')}
+          aria-expanded={materialsOpen} aria-controls="materials-panel"
+          onClick={() => layout.setOpen('materials', !materialsOpen)}>
+          {materialsOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+        </button></>}
+        end={conversationOpen ? (
+          <div className="conversation-heading">
+            <button
+              className="icon-button"
+              aria-label={t('workspaces.collapseConversation')}
+              title={t('workspaces.collapseConversation')}
+              aria-expanded={conversationOpen}
+              aria-controls="conversation-panel"
+              onClick={() => layout.setOpen('conversation', false)}
+            >
+              <PanelRightClose size={16} />
+            </button>
+            <EntitySwitcher key={conversationId} className="conversation-name" value={conversationId ?? ''}
+              label={t('conversations.switch')} nameLabel={t('conversations.name')}
+              items={conversations} onSelect={selectConversation}
+              createLabel={t('conversations.create')} onCreate={() => setCreatingConversation(true)}
+              onSave={async name => {
+                const renamed = await requestJson<Conversation>(
+                  `/api/workspaces/${workspaceId}/conversations/${currentConversation!.id}`,
+                  { method: 'PATCH', body: JSON.stringify({ name }) },
+                );
+                setConversations(current => current.map(item => item.id === renamed.id ? renamed : item));
+              }} />
+          </div>
+        ) : (
+          <button className="icon-button" aria-label={t('workspaces.expandConversation')}
+            title={t('workspaces.expandConversation')} aria-expanded={false} aria-controls="conversation-panel"
+            onClick={() => layout.setOpen('conversation', true)}>
+            <PanelRightOpen size={18} />
+          </button>
+        )}
+      >
+        <FilePreviewHeader workspaceId={workspaceId} path={file} mode={viewMode} onModeChange={setViewMode}
+          onReload={() => setFileRevisions(current => ({ ...current, [file!]: (current[file!] ?? 0) + 1 }))}
+          toolbarRef={setReaderTools} />
+      </WorkbenchHeader>
+      <CommandPalette workspaceId={workspaceId} workspaces={workspaces} revision={filesRevision} onOpenFile={openFile}
+        actions={{
+          toggleMaterials: () => layout.setOpen('materials', !materialsOpen),
+          toggleConversation: () => layout.setOpen('conversation', !conversationOpen),
+          newConversation: () => setCreatingConversation(true),
+        }} />
+      {creatingConversation && <CreateConversationDialog workspaceId={workspaceId} onCreated={createdConversation}
+        open onOpenChange={setCreatingConversation} />}
       <main
         ref={workbenchRef}
-        style={layout.style}
-        className={`workbench${layout.dragging ? ' is-resizing' : ''}`}
+        style={layout.columns.main}
+        className={clsx('workbench', layout.dragging && 'is-resizing')}
       >
         <aside
-          className={`materials-panel${layout.closing === 'materials' ? ' collapse-pending' : ''}`}
+          className={clsx('materials-panel', layout.closing === 'materials' && 'collapse-pending')}
           id="materials-panel"
           data-collapse-label={t('workspaces.collapseMaterials')}
           aria-label={t('files.materials')}
           data-open={materialsOpen}
         >
-          <div className="collapsed-rail" inert={materialsOpen} aria-hidden={materialsOpen}>
-            <button
-              className="icon-button"
-              aria-label={t('workspaces.expandMaterials')}
-              title={t('workspaces.expandMaterials')}
-              aria-expanded={materialsOpen}
-              aria-controls="materials-panel"
-              onClick={() => layout.setOpen('materials', true)}
-            >
-              <PanelLeftOpen size={18} />
-            </button>
-          </div>
           <div className="panel-content" inert={!materialsOpen} aria-hidden={!materialsOpen}>
             {fileError && (
               <p className="error-message" role="alert">
                 {fileError}
               </p>
             )}
-            <div className="panel-heading">
-              <span>
-                {t('files.materials')}
-              </span>
-              <div className="toolbar">
-                <button
-                  className="icon-button"
-                  aria-label={t('workspaces.collapseMaterials')}
-                  title={t('workspaces.collapseMaterials')}
-                  aria-expanded={materialsOpen}
-                  aria-controls="materials-panel"
-                  onClick={() => layout.setOpen('materials', false)}
-                >
-                  <PanelLeftClose size={16} />
-                </button>
-              </div>
-            </div>
+            <FileBrowserToolbar workspaceId={workspaceId} papersOnly={papersOnly} onPapersOnlyChange={setPapersOnly}
+              onChanged={() => filesChanged([''])} onOpenFile={openFile} />
             <FileBrowser
               workspaceId={workspaceId}
-              directory={directory}
-              onDirectoryChange={setDirectory}
+              papersOnly={papersOnly}
               revision={filesRevision}
               activePath={file}
               onOpenFile={openFile}
+              onChanged={() => filesChanged([''])}
             />
           </div>
         </aside>
@@ -299,13 +332,13 @@ export function Workbench({
           className="split-handle materials-handle"
           {...layout.separator('materials')}
         />
+        <ReaderToolbarProvider value={readerTools}>
         <FilePreview
           workspaceId={workspaceId}
           path={file}
           revision={(fileRevisions[file ?? ''] ?? 0) + (fileRevisions[''] ?? 0)}
           onPageChange={(page) => setPdfPosition({ path: file!, page })}
           mode={viewMode}
-          onModeChange={setViewMode}
           request={readerRequest}
           onOpenFile={openFile}
           onBrowse={() => layout.setOpen('materials', true)}
@@ -323,80 +356,19 @@ export function Workbench({
             layout.setOpen('conversation', true);
           }}
         />
+        </ReaderToolbarProvider>
         <div
           className="split-handle conversation-handle"
           {...layout.separator('conversation')}
         />
         <section
-          className={`conversation-panel${layout.closing === 'conversation' ? ' collapse-pending' : ''}`}
+          className={clsx('conversation-panel', layout.closing === 'conversation' && 'collapse-pending')}
           id="conversation-panel"
           data-collapse-label={t('workspaces.collapseConversation')}
           aria-label={t('conversations.title')}
           data-open={conversationOpen}
         >
-          <div className="collapsed-rail" inert={conversationOpen} aria-hidden={conversationOpen}>
-            <button
-              className="icon-button"
-              aria-label={t('workspaces.expandConversation')}
-              title={t('workspaces.expandConversation')}
-              aria-expanded={conversationOpen}
-              aria-controls="conversation-panel"
-              onClick={() => layout.setOpen('conversation', true)}
-            >
-              <PanelRightOpen size={18} />
-            </button>
-          </div>
           <div className="panel-content" inert={!conversationOpen} aria-hidden={!conversationOpen}>
-            <div className="panel-heading conversation-heading">
-              <button
-                className="icon-button"
-                aria-label={t('workspaces.collapseConversation')}
-                title={t('workspaces.collapseConversation')}
-                aria-expanded={conversationOpen}
-                aria-controls="conversation-panel"
-                onClick={() => layout.setOpen('conversation', false)}
-              >
-                <PanelRightClose size={16} />
-              </button>
-              <MessageSquare
-                size={16}
-                className="panel-icon"
-                aria-hidden="true"
-              />
-              {currentConversation && (
-                <EditableText
-                  className="conversation-name"
-                  value={currentConversation.name}
-                  label={t('conversations.name')}
-                  onSave={async (name) => {
-                    const renamed = await requestJson<Conversation>(
-                      `/api/workspaces/${workspaceId}/conversations/${currentConversation.id}`,
-                      { method: 'PATCH', body: JSON.stringify({ name }) },
-                    );
-                    setConversations((current) =>
-                      current.map((item) =>
-                        item.id === renamed.id ? renamed : item,
-                      ),
-                    );
-                  }}
-                />
-              )}
-              {conversations.length ? (
-                <ChoiceSelect
-                  label={t('conversations.switch')}
-                  value={conversationId ?? ''}
-                  items={conversations}
-                  onChange={selectConversation}
-                  iconOnly
-                />
-              ) : (
-                <span className="conversation-heading-label">{t('conversations.title')}</span>
-              )}
-              <CreateConversationDialog
-                workspaceId={workspaceId}
-                onCreated={createdConversation}
-              />
-            </div>
             {modelError && (
               <p className="error-message" role="alert">
                 {modelError}
@@ -420,10 +392,8 @@ export function Workbench({
                 onClipsChange={value => setClips(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
                 quotes={quotes[currentConversation.id] ?? []}
                 onQuotesChange={value => setQuotes(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
-                onOpenQuote={quote => {
-                  openDocument(quote);
-                  if (layout.tablet) layout.setOpen('materials', false);
-                }}
+                onOpenQuote={openDocument}
+                onOpenDocument={openDocument}
               />
             ) : (
               <div className="chat-empty">

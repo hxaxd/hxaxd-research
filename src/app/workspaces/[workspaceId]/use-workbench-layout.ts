@@ -16,10 +16,10 @@ import {
 type Side = 'materials' | 'conversation';
 type Panel = { open: boolean; width: number };
 type Preferences = Partial<Record<Side, Panel>>;
-type Drag = { side: Side; width: number; closing: boolean };
-const minimum = { materials: 200, conversation: 300 };
-const railWidth = 44;
+type Drag = { side: Side; width: number; closing: boolean; left: number; right: number; scale: number; maximum: number };
+const minimum = { materials: 240, conversation: 300 };
 const key = 'research-layout';
+const duration = 180;
 
 function subscribe(listener: () => void) {
   window.addEventListener('research-layout', listener);
@@ -27,6 +27,13 @@ function subscribe(listener: () => void) {
   return () => {
     window.removeEventListener('research-layout', listener);
     window.removeEventListener('storage', listener);
+  };
+}
+
+function columns(materials: number, conversation: number) {
+  return {
+    main: { gridTemplateColumns: `${materials}px 0 minmax(0, 1fr) 0 ${conversation}px` },
+    header: { gridTemplateColumns: `${Math.max(44, materials)}px minmax(0, 1fr) ${Math.max(146, conversation)}px` },
   };
 }
 
@@ -47,19 +54,27 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
       width: tablet ? 340 : 384,
     },
   };
-  const [drag, setDrag] = useState<Drag | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [closing, setClosing] = useState<Side | null>(null);
   const dragRef = useRef<Drag | null>(null);
+  const frame = useRef(0);
+  const lastFrame = useRef(0);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) =>
       setAvailable(entry.contentRect.width),
     );
     observer.observe(ref.current!);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame.current);
+      clearTimeout(settleTimer.current);
+    };
   }, [ref]);
 
   const widths = {
     materials: Math.max(
-      200,
+      minimum.materials,
       Math.min(320, panels.materials.width, available - 620),
     ),
     conversation: panels.conversation.width,
@@ -70,14 +85,55 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     Math.min(
       widths.conversation,
       available * 0.6,
-      available - (panels.materials.open ? widths.materials : railWidth) - 320,
+      available - (panels.materials.open ? widths.materials : 0) - 320,
     ),
   );
-  if (drag) widths[drag.side] = drag.width;
+
+  function beginLayoutChange() {
+    clearTimeout(settleTimer.current);
+    const element = ref.current!;
+    const reader = element.querySelector<HTMLElement>('.reader-panel')!;
+    if (reader.dataset.resizeMode === 'deferred') {
+      const scale = element.getBoundingClientRect().width / element.offsetWidth;
+      const width = reader.getBoundingClientRect().width / scale;
+      (reader.firstElementChild as HTMLElement).style.width = `${width}px`;
+    }
+    element.parentElement!.dataset.layoutMoving = 'true';
+  }
+  function finishLayoutChange() {
+    const element = ref.current!;
+    (element.querySelector('.reader-panel')!.firstElementChild as HTMLElement).style.removeProperty('width');
+    delete element.parentElement!.dataset.layoutMoving;
+  }
+  function moveDivider(side: Side, width: number) {
+    const element = ref.current!;
+    const next = columns(side === 'materials' ? width : panels.materials.open ? widths.materials : 0,
+      side === 'conversation' ? width : panels.conversation.open ? widths.conversation : 0);
+    element.style.gridTemplateColumns = next.main.gridTemplateColumns;
+    const header = element.parentElement!.querySelector<HTMLElement>('.app-header')!;
+    header.style.gridTemplateColumns = next.header.gridTemplateColumns;
+  }
+  function updateDrag(time: number) {
+    const current = dragRef.current!;
+    if (time - lastFrame.current < 16) {
+      frame.current = requestAnimationFrame(updateDrag);
+      return;
+    }
+    lastFrame.current = time;
+    frame.current = 0;
+    moveDivider(current.side, current.width);
+  }
+  function settle() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      finishLayoutChange();
+      return;
+    }
+    settleTimer.current = setTimeout(finishLayoutChange, duration + 32);
+  }
 
   function maximum(side: Side) {
     const other = side === 'materials' ? 'conversation' : 'materials';
-    const room = available - (panels[other].open ? widths[other] : railWidth) - 320;
+    const room = available - (panels[other].open ? widths[other] : 0) - 320;
     return Math.max(
       minimum[side],
       Math.min(side === 'materials' ? 320 : available * 0.6, room),
@@ -95,18 +151,29 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     window.dispatchEvent(new Event('research-layout'));
   }
   function setOpen(side: Side, open: boolean) {
+    if (panels[side].open === open) return;
+    beginLayoutChange();
     save(side, { ...panels[side], open });
+    settle();
   }
   function finish(event: PointerEvent<HTMLDivElement>, cancelled = false) {
     const current = dragRef.current;
     if (!current) return;
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+    const open = cancelled ? panels[current.side].open : !current.closing;
+    const width = cancelled ? widths[current.side] : current.width;
+    moveDivider(current.side, open ? width : 0);
     if (!cancelled)
       save(current.side, {
         open: !current.closing,
         width: current.closing ? panels[current.side].width : current.width,
       });
     dragRef.current = null;
-    setDrag(null);
+    setDragging(false);
+    setClosing(null);
+    if (!cancelled && current.closing) settle();
+    else finishLayoutChange();
     event.currentTarget.releasePointerCapture(event.pointerId);
   }
   function separator(side: Side) {
@@ -124,26 +191,27 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
         if (event.button !== 0) return;
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
-        const next = { side, width: widths[side], closing: false };
-        dragRef.current = next;
-        setDrag(next);
-      },
-      onPointerMove(event: PointerEvent<HTMLDivElement>) {
-        if (dragRef.current?.side !== side) return;
         const element = ref.current!;
         const rect = element.getBoundingClientRect();
-        const scale = rect.width / element.offsetWidth;
+        beginLayoutChange();
+        const next = { side, width: widths[side], closing: false, left: rect.left, right: rect.right,
+          scale: rect.width / element.offsetWidth, maximum: maximum(side) };
+        dragRef.current = next;
+        lastFrame.current = 0;
+        setDragging(true);
+      },
+      onPointerMove(event: PointerEvent<HTMLDivElement>) {
+        const current = dragRef.current;
+        if (current?.side !== side) return;
         const requested =
           side === 'materials'
-            ? (event.clientX - rect.left) / scale
-            : (rect.right - event.clientX) / scale;
-        const next = {
-          side,
-          width: Math.max(minimum[side], Math.min(maximum(side), requested)),
-          closing: requested <= 48,
-        };
-        dragRef.current = next;
-        setDrag(next);
+            ? (event.clientX - current.left) / current.scale
+            : (current.right - event.clientX) / current.scale;
+        current.width = Math.max(minimum[side], Math.min(current.maximum, requested));
+        const willClose = requested <= 48;
+        if (current.closing !== willClose) setClosing(willClose ? side : null);
+        current.closing = willClose;
+        if (!frame.current) frame.current = requestAnimationFrame(updateDrag);
       },
       onPointerUp: finish,
       onPointerCancel: (event: PointerEvent<HTMLDivElement>) =>
@@ -166,26 +234,29 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
             : event.key === 'End'
               ? maximum(side)
               : widths[side] + delta;
+        beginLayoutChange();
         save(side, {
           open: true,
           width: Math.max(minimum[side], Math.min(maximum(side), next)),
         });
+        settle();
       },
       onDoubleClick() {
+        beginLayoutChange();
         save(side, { open: true, width: side === 'materials' ? 248 : 384 });
+        settle();
       },
     };
   }
   return {
-    tablet,
     panels,
     setOpen,
     separator,
-    closing: drag?.closing ? drag.side : null,
-    dragging: Boolean(drag),
+    closing,
+    dragging,
+    columns: columns(panels.materials.open ? widths.materials : 0, panels.conversation.open ? widths.conversation : 0),
     style: {
-      '--materials-width': `${panels.materials.open ? widths.materials : railWidth}px`,
-      '--conversation-width': `${panels.conversation.open ? widths.conversation : railWidth}px`,
+      '--layout-duration': `${duration}ms`,
       '--materials-content-width': `${widths.materials}px`,
       '--conversation-content-width': `${widths.conversation}px`,
     } as CSSProperties,

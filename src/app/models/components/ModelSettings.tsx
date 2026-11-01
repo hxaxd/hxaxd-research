@@ -18,6 +18,7 @@ type Section = 'text' | 'speech';
 type Editor =
   | { kind: Section; method: 'choose' }
   | { kind: Section; method: 'authorization'; providerId?: string }
+  | { kind: 'speech'; method: 'chatgpt' }
   | { kind: 'text'; method: 'api'; connection?: ModelConnection }
   | { kind: 'speech'; method: 'api'; connection?: SpeechConnection };
 
@@ -31,7 +32,6 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
   const [deleting, setDeleting] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string }>>({});
-  const [editingChatgpt, setEditingChatgpt] = useState(false);
   const [chatgptModel, setChatgptModel] = useState('');
 
   useEffect(() => { if (speech) setChatgptModel(speech.chatgpt.model); }, [speech]);
@@ -56,7 +56,7 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
   }
   async function disconnect(providerId: string) {
     setSettings(await requestJson<ProviderSettings>('/api/model-providers/' + providerId, { method: 'DELETE' }));
-    setEditingChatgpt(false);
+    setEditor(null);
     setTestResults({});
     await refreshSpeech(); await onModelsChanged();
   }
@@ -101,6 +101,20 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
   }
   function connectionEditor(section: Section) {
     if (!settings || editor?.kind !== section) return null;
+    if (editor.method === 'chatgpt') return <form className="connection-form" onSubmit={event => {
+      event.preventDefault();
+      void act(async () => {
+        publishSpeechSettings(await requestJson<SpeechSettings>('/api/speech/chatgpt', { method: 'PATCH', body: JSON.stringify({ model: chatgptModel.trim() }) }));
+        setEditor(null);
+      });
+    }}>
+      <div className="connection-form-heading"><strong>{t('speech.editChatgptModel')}</strong>
+        <button type="button" className="icon-button" aria-label={t('models.cancelEdit')} onClick={() => setEditor(null)} disabled={busy}><X size={17} /></button>
+      </div>
+      <label className="field-label" htmlFor="chatgpt-speech-model">{t('speech.model')}</label>
+      <input id="chatgpt-speech-model" value={chatgptModel} onChange={event => setChatgptModel(event.target.value)} required />
+      <div className="connection-form-actions"><button className="button primary" disabled={busy}>{t('common.save')}</button></div>
+    </form>;
     if (editor.method === 'choose') return <div className="connection-form">
       <div className="connection-form-heading"><strong>{t('models.addConnection')}</strong>
         <button className="icon-button" aria-label={t('common.close')} onClick={() => setEditor(null)}><X size={17} /></button>
@@ -123,6 +137,11 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
       <button className="text-action danger" disabled={busy} onClick={() => void act(() => disconnect(providerId))}>{t('common.disconnect')}</button>
     </>;
   }
+
+  if (editor && settings) return <div className="model-settings model-editor">
+    {error && <p className="error-message" role="alert">{error}</p>}
+    {connectionEditor(editor.kind)}
+  </div>;
 
   return <div className="model-settings">
     {error && <p className="error-message" role="alert">{error}</p>}
@@ -149,7 +168,6 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
         </div>)}
         {!settings.providers.length && !settings.connections.length && <p className="connection-empty">{t('models.noConnections')}</p>}
       </>}
-      {connectionEditor('text')}
     </section>
     <section className="model-section" aria-labelledby="model-section-speech">
       <div className="connection-section-heading"><h3 id="model-section-speech">{t('speech.title')}</h3>
@@ -163,18 +181,10 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
             </label>
             <div className="connection-row-actions">
               <button className="text-action" disabled={busy || testing !== null} onClick={() => void testSpeech('chatgpt')}>{testing === 'chatgpt' ? t('models.testing') : t('models.test')}</button>
-              <button className="icon-button" aria-label={t('speech.editChatgptModel')} onClick={() => setEditingChatgpt(value => !value)}><Pencil size={16} /></button>
+              <button className="icon-button" aria-label={t('speech.editChatgptModel')} onClick={() => setEditor({ kind: 'speech', method: 'chatgpt' })}><Pencil size={16} /></button>
               {authorizationActions('openai', 'speech')}
             </div>
           </div>
-          {editingChatgpt && <form className="connection-inline-form" onSubmit={event => { event.preventDefault(); void act(async () => {
-            publishSpeechSettings(await requestJson<SpeechSettings>('/api/speech/chatgpt', { method: 'PATCH', body: JSON.stringify({ model: chatgptModel.trim() }) }));
-            setEditingChatgpt(false);
-          }); }}>
-            <label className="field-label" htmlFor="chatgpt-speech-model">{t('speech.model')}</label>
-            <input id="chatgpt-speech-model" value={chatgptModel} onChange={event => setChatgptModel(event.target.value)} required />
-            <button className="button secondary" disabled={busy}>{t('common.save')}</button>
-          </form>}
           {testResults.chatgpt && <p className={testResults.chatgpt.ok ? 'connection-result' : 'error-message'} role="status">{testResults.chatgpt.message}</p>}
         </div>}
         {speech.connections.map(connection => <div className={'connection-row' + (speech.activeId === connection.id ? ' is-active' : '')} key={connection.id}>
@@ -192,7 +202,6 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
         </div>)}
         {!speech.chatgpt.connected && !speech.connections.length && <p className="connection-empty">{t('models.noConnections')}</p>}
       </>}
-      {connectionEditor('speech')}
     </section>
   </div>;
 }

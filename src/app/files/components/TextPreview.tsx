@@ -4,7 +4,7 @@ import { useTranslations } from 'use-intl';
 
 import { useEffect, useState } from 'react';
 import type { z } from 'zod';
-import { defaultUrlTransform } from 'react-markdown';
+import { defaultUrlTransform } from 'streamdown';
 
 import { requestJson } from '@/shared/http/request-json';
 import { Markdown } from '@/shared/ui/Markdown';
@@ -40,8 +40,8 @@ export function TextPreview({ url, markdown, onOpenFile }: { url: string; markdo
       {file.truncated && <p className="preview-notice">{t('files.truncated')}</p>}
       {markdown ? (
         <Markdown
-          urlTransform={(url) => {
-            const safe = defaultUrlTransform(url);
+          urlTransform={(url, key, node) => {
+            const safe = defaultUrlTransform(url, key, node);
             if (!safe || /^(?:[a-z][a-z\d+.-]*:|#|\/\/)/i.test(safe)) return safe;
             const target = new URL(safe, base);
             return `${target.pathname}${target.search}${target.hash}`;

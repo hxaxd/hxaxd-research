@@ -1,26 +1,38 @@
-.inline-name {
+.entity-switcher {
   position: relative;
   display: inline-flex;
+  align-items: center;
   min-width: 0;
+  border-radius: 9px;
+  background: var(--entity-background, transparent);
+  transition: background-color 140ms ease;
 }
 
-.inline-name > button {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.entity-switcher-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   padding: 5px 7px;
   min-width: 0;
-  border-radius: 6px;
+  border-radius: inherit;
   max-width: 100%;
   font: inherit;
 }
 
-.inline-name > button:hover {
+.entity-switcher-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.entity-switcher:hover,
+.entity-switcher[data-open='true'] {
   background: var(--hover);
 }
 
-.inline-name input {
+.entity-switcher input {
   min-width: 0;
   width: 100%;
   padding: 4px 6px;
@@ -45,4 +57,65 @@
   background: var(--danger-soft);
   font-size: 0.857143rem;
   font-weight: 400;
+}
+
+.entity-switcher-name,
+.entity-switcher input {
+  flex: 1;
+  width: 0;
+  min-height: 34px;
+}
+
+.entity-switcher-menu {
+  width: min(292px, calc(var(--viewport-width) - 24px));
+  max-height: min(340px, calc(var(--radix-popover-content-available-height) / var(--ui-scale, 1)));
+  display: flex;
+  flex-direction: column;
+}
+
+.entity-switcher-list {
+  min-height: 0;
+  max-height: 264px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.entity-switcher-menu .menu-item {
+  width: 100%;
+  text-align: left;
+}
+
+.entity-switcher-menu .menu-item:hover,
+.entity-switcher-menu .menu-item:focus-visible {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.entity-switcher-list .menu-item > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-switcher-list [aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--soft);
+}
+
+.entity-switcher-create {
+  flex: none;
+  color: var(--accent);
+}
+
+.entity-switcher-list:not(:empty) + .entity-switcher-create {
+  margin-top: 6px;
+}
+
+@media (pointer: coarse) {
+  .entity-switcher-name,
+  .entity-switcher input {
+    min-height: 44px;
+  }
 }

@@ -14,40 +14,18 @@
   font-size: 1rem;
 }
 
-.message-author {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.857143rem;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.author-avatar {
-  display: inline-grid;
-  place-items: center;
-  width: 23px;
-  height: 23px;
-  border-radius: 6px;
-  background: var(--ground);
-  color: var(--muted);
-}
-
-.chat-message.user {
-  border: 0;
-  border-radius: 12px;
-  padding: 12px 14px;
+.conversation-messages > .chat-message.user {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(88%, 720px);
+  margin-inline: auto 0;
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px;
   background: var(--user-message);
 }
 
-.chat-message.assistant .message-author {
-  color: var(--accent);
-}
-
-.chat-message.assistant .author-avatar {
-  background: var(--soft);
-  color: var(--accent);
+.chat-message {
+  animation: fade-in var(--duration-base) var(--ease-out);
 }
 
 .run-status {
