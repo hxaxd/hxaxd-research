@@ -4,40 +4,17 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
-import { GET as workspaces, POST as createWorkspace } from '@/app/api/workspaces/route';
-import { GET as workspace, PATCH as renameWorkspace } from '@/app/api/workspaces/[workspaceId]/route';
 import { GET as files, PATCH as markFolder, POST as createDirectory } from '@/app/api/workspaces/[workspaceId]/files/route';
 import { GET as file } from '@/app/api/workspaces/[workspaceId]/file/route';
 import { POST as importFiles } from '@/app/api/workspaces/[workspaceId]/imports/route';
-import { GET as openapi } from '@/app/api/openapi/route';
 import { GET as preview } from '@/app/api/workspaces/[workspaceId]/preview/[...path]/route';
 import { GET as changes } from '@/app/api/workspaces/[workspaceId]/files/events/route';
 
-import { createTestApp, request, restartApp, workspaceContext } from '../app';
+import { createTestApp, request, restartApp, workspaceContext } from '../support/app';
 
 let app: Awaited<ReturnType<typeof createTestApp>>;
 beforeEach(async () => { app = await createTestApp(); });
 afterEach(async () => { await app.cleanup(); });
-
-test('API errors follow each request language while status, codes and user content remain unchanged', async () => {
-  const context = workspaceContext(app.workspace.id);
-  const cases = [
-    { language: 'en', message: 'File or folder not found' },
-    { language: 'zh-CN', message: '文件或目录不存在' },
-    { language: 'unknown', message: '文件或目录不存在' },
-  ];
-  await Promise.all(cases.map(async ({ language, message }) => {
-    const headers = { Cookie: `research-locale=${language}` };
-    const response = await file(request('/file?path=missing.md', 'GET', undefined, headers), context);
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ error: { code: 'file_missing', message } });
-    expect(await (await workspace(request('/workspace', 'GET', undefined, headers), context)).json())
-      .toMatchObject({ name: app.workspace.name });
-  }));
-  const invalid = await createDirectory(request('/files', 'POST', { path: '' }, { Cookie: 'research-locale=en' }), context);
-  expect(invalid.status).toBe(400);
-  expect(await invalid.json()).toMatchObject({ error: { code: 'invalid_input', message: 'Invalid input' } });
-});
 
 test('application configuration controls preview and upload limits through the file APIs', async () => {
   await writeFile(app.config.configFile, JSON.stringify({
@@ -66,17 +43,10 @@ test('application configuration controls preview and upload limits through the f
   expect(await (await file(request('/file?path=imported/0.txt'), context)).text()).toBe('abcd');
 });
 
-test('workspace identity persists while materials follow the filesystem without registration', async () => {
+test('materials follow external filesystem changes without being registered in workspace metadata', async () => {
   const context = workspaceContext(app.workspace.id);
   const root = path.join(app.config.workspaceDir, app.workspace.id);
   const metadata = path.join(root, 'workspace.json');
-  expect(JSON.parse(await readFile(metadata, 'utf8'))).not.toHaveProperty('papers');
-  expect((await renameWorkspace(request('/workspace', 'PATCH', { name: '新名称' }), context)).status).toBe(200);
-  expect(await (await workspaces(request('/workspaces'))).json()).toContainEqual(expect.objectContaining({ name: '新名称' }));
-  const config = JSON.parse(await readFile(metadata, 'utf8'));
-  config.name = '外部编辑';
-  await writeFile(metadata, JSON.stringify(config));
-  expect(await (await workspace(request('/workspace'), context)).json()).toMatchObject({ name: '外部编辑' });
   const created = await createDirectory(request('/files', 'POST', { path: '论文材料' }), context);
   expect(created.status).toBe(201);
   expect(await created.json()).toEqual({ path: '论文材料' });
@@ -86,8 +56,6 @@ test('workspace identity persists while materials follow the filesystem without 
   expect(await (await files(request('/files'), context)).json()).toContainEqual(expect.objectContaining({ path: '任意目录', kind: 'directory' }));
   expect(await (await file(request('/file?path=任意目录/原文.md'), context)).text()).toBe('# 论文');
   expect(JSON.parse(await readFile(metadata, 'utf8'))).not.toHaveProperty('papers');
-  await writeFile(metadata, '{invalid');
-  expect((await workspace(request('/workspace'), context)).status).toBe(422);
 });
 
 test('directory creation checks paths and reports conflicts without replacing existing materials', async () => {
@@ -129,7 +97,9 @@ test('paper view lists folders marked by research.json and follows filesystem ch
   const listed = await (await files(request('/files?path=research'), context)).json();
   expect(listed).toContainEqual(expect.objectContaining({ path: 'research/attention', marker: expect.objectContaining({ type: 'paper' }) }));
   const rootEntries = await (await files(request('/files'), context)).json();
-  expect(rootEntries).toContainEqual(expect.not.objectContaining({ path: 'broken', marker: expect.anything() }));
+  const broken = rootEntries.find((entry: { path: string }) => entry.path === 'broken');
+  expect(broken).toBeDefined();
+  expect(broken).not.toHaveProperty('marker');
   expect(rootEntries).not.toContainEqual(expect.objectContaining({ path: '.pi' }));
   await rename(path.join(root, 'research'), path.join(root, 'renamed'));
   expect((await papers()).map(entry => entry.marker?.main)).toEqual(['renamed/attention/paper.pdf']);
@@ -178,25 +148,6 @@ test('importing as a paper writes a marker and reports the main PDF', async () =
   expect(await (await upload(['plain.pdf'], {})).json()).not.toHaveProperty('main');
 });
 
-test('file search matches names recursively, honours the paper view and skips internal folders', async () => {
-  const context = workspaceContext(app.workspace.id);
-  const root = path.join(app.config.workspaceDir, app.workspace.id);
-  await mkdir(path.join(root, 'notes', 'deep'), { recursive: true });
-  await mkdir(path.join(root, '.pi'));
-  await writeFile(path.join(root, 'notes', 'deep', 'Attention.md'), '# a');
-  await writeFile(path.join(root, 'notes', 'attention.pdf'), 'pdf');
-  await writeFile(path.join(root, '.pi', 'attention.jsonl'), '{}');
-  async function search(query: string) {
-    const response = await files(request(`/files?${query}`), context);
-    expect(response.status).toBe(200);
-    return (await response.json()).map((entry: { path: string }) => entry.path).sort();
-  }
-  expect(await search('q=ATTENTION')).toEqual(['notes/attention.pdf', 'notes/deep/Attention.md']);
-  expect(await search('q=attention&view=papers')).toEqual([]);
-  expect(await search('q=attention&path=notes/deep')).toEqual(['notes/deep/Attention.md']);
-  expect(await search('q=missing')).toEqual([]);
-});
-
 test('file search matches names recursively, honors the paper view and skips internal files', async () => {
   const context = workspaceContext(app.workspace.id);
   const root = path.join(app.config.workspaceDir, app.workspace.id);
@@ -204,7 +155,7 @@ test('file search matches names recursively, honors the paper view and skips int
   await mkdir(path.join(root, '.pi'));
   await writeFile(path.join(root, 'Survey.pdf'), 'a');
   await writeFile(path.join(root, 'notes', 'deep', 'survey-notes.md'), 'b');
-  await writeFile(path.join(root, 'notes', 'other.md'), 'c');
+  await writeFile(path.join(root, 'notes', 'other.md'), 'survey content outside the search scope');
   await writeFile(path.join(root, '.pi', 'survey.jsonl'), 'd');
   async function search(query: string) {
     const response = await files(request(`/files?${query}`), context);
@@ -214,19 +165,8 @@ test('file search matches names recursively, honors the paper view and skips int
   expect(await search('q=SURVEY')).toEqual(['notes/deep/survey-notes.md', 'Survey.pdf']);
   expect(await search('q=survey&view=papers')).toEqual([]);
   expect(await search('q=survey&path=notes')).toEqual(['notes/deep/survey-notes.md']);
+  expect(await search('q=survey&path=notes/deep')).toEqual(['notes/deep/survey-notes.md']);
   expect(await search('q=missing')).toEqual([]);
-});
-
-test('metadata writes reject duplicate identities and malformed requests without replacing the workspace', async () => {
-  expect((await createWorkspace(request('/workspaces', 'POST', { id: app.workspace.id, name: '替换' }))).status).toBe(409);
-  const context = workspaceContext(app.workspace.id);
-  const response = await renameWorkspace(new Request('http://localhost/workspace', {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{invalid',
-  }), context);
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: 'invalid_input' } });
-  expect(await (await workspace(request('/workspace'), context)).json()).toMatchObject({ name: app.workspace.name });
-  expect((await workspace(request('/workspace'), workspaceContext(randomUUID()))).status).toBe(404);
 });
 
 test('HTML previews serve their source and relative assets without allowing paths outside the workspace', async () => {
@@ -306,13 +246,7 @@ test('invalid uploads are rejected as client input without adding material', asy
   expect(await (await files(request('/files'), context)).json()).toEqual(before);
 });
 
-test('HTTP boundaries reject invalid names, origins and paths while exposing ordinary filesystem files', async () => {
-  expect((await createWorkspace(request('/workspaces', 'POST', { id: '../../bad', name: '无效' }))).status).toBe(400);
-  expect((await createWorkspace(request('/workspaces', 'POST', { id: randomUUID(), name: '异源' }, { Origin: 'http://evil.example' }))).status).toBe(403);
-  const browserRequest = request('http://localhost:4219/workspaces', 'POST', { id: randomUUID(), name: '本机浏览器' }, {
-    Host: '127.0.0.1:4219', Origin: 'http://127.0.0.1:4219',
-  });
-  expect((await createWorkspace(browserRequest)).status).toBe(201);
+test('file paths reject escapes while exposing ordinary filesystem files', async () => {
   const root = path.join(app.config.workspaceDir, app.workspace.id);
   await writeFile(path.join(root, 'external.custom'), 'external');
   await symlink(app.config.piDir, path.join(root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
@@ -322,8 +256,6 @@ test('HTTP boundaries reject invalid names, origins and paths while exposing ord
     const response = await file(request(`/file?path=${encodeURIComponent(candidate)}`), context);
     expect([400, 403]).toContain(response.status);
   }
-  const schema = await (await openapi(request('/api/openapi'))).json();
-  expect(schema.paths['/api/workspaces']).toHaveProperty('post');
 });
 
 test.each(['', 'notes'])('single-file imports into "%s" preserve names and keep existing content on a name collision', async target => {

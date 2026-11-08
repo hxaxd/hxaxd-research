@@ -16,10 +16,11 @@
     "start": "next start --hostname 127.0.0.1 --port 8642",
     "typecheck": "next typegen && tsc",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "node tests/run.mjs",
+    "test:node": "node tests/run.mjs --node",
     "predev": "node src/app/files/copy-pdf-assets.mjs",
     "prebuild": "node src/app/files/copy-pdf-assets.mjs",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "node tests/run.mjs --node --coverage",
     "analyze": "knip"
   },
   "dependencies": {

@@ -60,6 +60,10 @@ export async function startModelServer() {
       frame({ tool_calls: [{ index: 0, id: 'search-paper', type: 'function', function: {
         name: 'web_search', arguments: JSON.stringify({ query: 'Find the official paper' }),
       } }] }, 'tool_calls');
+    } else if (prompt.includes('[OPEN]') && messages.at(-1)!.role !== 'tool') {
+      frame({ tool_calls: [{ index: 0, id: 'open-paper', type: 'function', function: {
+        name: 'open_document', arguments: JSON.stringify({ path: 'paper.pdf', page: 3 }),
+      } }] }, 'tool_calls');
     } else if (prompt.includes('[ASK]') || prompt.includes('[SEARCH]')) {
       frame({ content: text(messages.at(-1)!.content) }, 'stop');
     } else if (prompt.includes('[EDIT]') && messages.at(-1)!.role !== 'tool') {
@@ -77,8 +81,8 @@ export async function startModelServer() {
     } else if (prompt.includes('[READING]')) {
       const context = messages.filter(message => message.role === 'user').map(message => text(message.content))
         .findLast(content => content.startsWith('<research-workbench-materials>'))!;
-      const reading = JSON.parse(context.split('\n').find(line => line.startsWith('{'))!);
-      frame({ content: `当前文件：${reading.path}；当前页码：${reading.page}` }, 'stop');
+      const [reading, ...quotes] = context.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+      frame({ content: JSON.stringify({ reading, quotes }) }, 'stop');
     } else {
       frame({ role: 'assistant', content: '测试回答' }, 'stop');
     }

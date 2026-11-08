@@ -11,10 +11,11 @@ import { GET as events } from '@/app/api/workspaces/[workspaceId]/conversations/
 import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/images/route';
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
 import { POST as answer } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/answers/route';
+import { GET as fileEvents } from '@/app/api/workspaces/[workspaceId]/files/events/route';
 import type { ConversationSnapshot } from '@/app/conversations/schema';
 
-import { startModelServer } from '../model-server';
-import { createTestApp, request, restartApp, workspaceContext } from '../app';
+import { startModelServer } from '../support/model-server';
+import { createTestApp, request, restartApp, workspaceContext } from '../support/app';
 
 let app: Awaited<ReturnType<typeof createTestApp>>;
 let model: Awaited<ReturnType<typeof startModelServer>>;
@@ -127,9 +128,34 @@ test('current reading and quotes reach the model without altering user text, liv
   await message(text, { reading: { path: 'note.md', page: 2 }, quotes: [quote] });
   const live = await complete();
   expect(live.messages.filter(item => item.role === 'user')).toEqual([expect.objectContaining({ text, quotes: [quote] })]);
-  expect(live.messages.find(item => item.role === 'assistant')?.text).toContain('当前文件：note.md；当前页码：2');
+  expect(JSON.parse(live.messages.find(item => item.role === 'assistant')!.text)).toEqual({
+    reading: { path: 'note.md', page: 2 },
+    quotes: [{ kind: 'text-quote', path: 'note.md', mode: 'preview', text: '阅读笔记' }],
+  });
   restartApp();
   expect((await snapshot()).messages).toEqual(live.messages);
+});
+
+test('opening a document from a conversation tells the workspace reader which file and page to display', async () => {
+  await writeFile(path.join(app.config.workspaceDir, app.workspace.id, 'paper.pdf'), '%PDF-1.7');
+  const stream = await fileEvents(
+    new Request('http://localhost/files/events', { signal: AbortSignal.timeout(8000) }),
+    workspaceContext(app.workspace.id),
+  );
+  const reader = stream.body!.getReader();
+  try {
+    await reader.read();
+    expect((await message('[OPEN]')).status).toBe(202);
+    await complete();
+    const decoder = new TextDecoder();
+    let event = '';
+    while (!event.includes('event: reader\n')) {
+      const chunk = await reader.read();
+      expect(chunk.done).toBe(false);
+      event = decoder.decode(chunk.value);
+    }
+    expect(JSON.parse(event.split('data: ')[1])).toMatchObject({ conversationId, path: 'paper.pdf', page: 3 });
+  } finally { await reader.cancel(); }
 });
 
 test('unsupported image input fails without saving the question', async () => {

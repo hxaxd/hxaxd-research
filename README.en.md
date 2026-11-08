@@ -132,6 +132,8 @@ The default listening address is `127.0.0.1`, on port `8642`. Open **<http://127
 
 ## Contributing
 
+Run `npm run translation:setup` once to install the Python environment for translation tests. Use `npm test` to run the API and command suites or `npm run test:node` to run just the TypeScript tests.
+
 Share your research workflows, report usability issues, or contribute code. Please submit questions and suggestions through [Issues](https://github.com/hxaxd/hxaxd-research/issues).
 
 <p align="center">

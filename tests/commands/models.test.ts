@@ -2,13 +2,14 @@ import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect, test } from 'vitest';
 
-import { createTestApp } from '../app';
-import { startModelServer } from '../model-server';
+import { createTestApp, request } from '../support/app';
+import { startModelServer } from '../support/model-server';
+import { cancel, login, state, submit } from '../support/chatgpt-authorization';
 
 const execute = promisify(execFile);
 
@@ -49,6 +50,7 @@ test.each(['configuration', 'environment'])('native model requests use the %s pr
     expect(JSON.parse(await readFile(output, 'utf8'))).toMatchObject({ text: '测试回答' });
     expect(forwarded).toEqual(['model.invalid']);
     await writeFile(models, JSON.stringify(server.config));
+    await unlink(output);
     await execute(process.execPath, args, { env });
     expect(JSON.parse(await readFile(output, 'utf8'))).toMatchObject({ text: '测试回答' });
     expect(forwarded).toEqual(['model.invalid']);
@@ -116,6 +118,29 @@ test('native model command uses registered providers without exposing credential
     expect(JSON.stringify(response)).not.toContain('test-only-key');
   } finally {
     await server.close();
+    await app.cleanup();
+  }
+});
+
+test('the model command can read credentials saved by web authorization', async () => {
+  const app = await createTestApp();
+  try {
+    const { id, callback } = await login();
+    expect((await submit(request('/callback', 'POST', { id, url: String(callback) }))).status).toBe(200);
+    await expect.poll(async () => (await state()).authorization?.status).toBe('connected');
+    const upstream = `globalThis.fetch = async input => {
+      if (String(input) !== 'https://api.openai.com/v1/models') throw new Error('Unexpected external request');
+      return Response.json({ models: [{ slug: 'gpt-6-luna', display_name: '账号可用模型', visibility: 'list' }] });
+    };`;
+    const args = ['--import', 'data:text/javascript,' + encodeURIComponent(upstream),
+      path.resolve('src/app/models/invoke.mjs'), '--pi-dir', app.config.piDir, '--list'];
+    const native = JSON.parse((await execute(process.execPath, args)).stdout);
+    expect(native.models).toEqual([expect.objectContaining({ id: 'openai/gpt-6-luna', name: '账号可用模型' })]);
+    expect(JSON.stringify(native)).not.toContain('private-');
+    await expect(execute(process.execPath, [...args, '--model', 'openai/gpt-4.1'])).rejects.toThrow('模型不可用');
+  } finally {
+    const { authorization } = await state();
+    if (authorization) await cancel(request('/authorization', 'DELETE', { id: authorization.id }));
     await app.cleanup();
   }
 });

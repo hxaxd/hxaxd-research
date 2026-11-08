@@ -9,17 +9,29 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = ROOT / "src/app/translation/pipeline.py"
+MODEL_COMMAND = ROOT / "tests/support/translation-model.py"
 
 
 class TranslationCommands(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         test_root = ROOT / ".runtime/dev"
         test_root.mkdir(parents=True, exist_ok=True)
-        self.directory = tempfile.TemporaryDirectory(dir=test_root)
+        directory = tempfile.TemporaryDirectory(dir=test_root)
+        cls.addClassCleanup(directory.cleanup)
+        cls.runtime = Path(directory.name)
+        cls.templates = cls.runtime / "templates"
+        cls.app_config = cls.runtime / "app.jsonc"
+        cls.app_config.write_text(json.dumps({"templateDir": str(cls.templates)}), encoding="utf-8")
+        cls.env = {**os.environ, "APP_CONFIG_FILE": str(cls.app_config)}
+        subprocess.run(["node", str(ROOT / "src/app/install.mjs")], env=cls.env, check=True, capture_output=True)
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(dir=self.runtime)
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         self.config = self.root / "config.json"
-        self.config.write_text(json.dumps({"katex": str(ROOT / "node_modules/katex/dist")}), encoding="utf-8")
+        self.config.write_text("{}", encoding="utf-8")
         self.document = self.root / "document.json"
         self.blocks = [{"id": f"b{index}", "page": 1, "label": "text", "text": f"Paragraph {index}.",
                         "preserve": False, "bbox": [0, index, 100, index + 1]}
@@ -30,7 +42,7 @@ class TranslationCommands(unittest.TestCase):
 
     def command(self, *args):
         return subprocess.run([sys.executable, "-X", "utf8", str(PIPELINE), "--config", str(self.config),
-                               *map(str, args)], capture_output=True, text=True, encoding="utf-8")
+                               *map(str, args)], env=self.env, capture_output=True, text=True, encoding="utf-8")
 
     def test_prepare_exposes_the_complete_document_for_translation(self):
         output = self.root / "request.json"
@@ -38,7 +50,28 @@ class TranslationCommands(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         request = json.loads(output.read_text(encoding="utf-8"))
         payload = json.loads(request["prompt"])
-        self.assertEqual([block["id"] for block in payload["blocks"]], [block["id"] for block in self.blocks])
+        self.assertEqual(payload, {
+            "title": "A document", "target": "zh-CN", "instructions": "", "glossary": "",
+            "blocks": [{"id": "b0", "label": "formula", "text": "E=mc^2", "preserve": True}] + [
+                {"id": f"b{index}", "label": "text", "text": f"Paragraph {index}.", "preserve": False}
+                for index in range(1, 100)
+            ],
+        })
+
+    def test_translate_batches_a_document_and_writes_all_translations_in_order(self):
+        self.config.write_text(json.dumps({"modelsCommand": [sys.executable, str(MODEL_COMMAND)]}), encoding="utf-8")
+        output = self.root / "translated"
+        result = self.command("translate", "--document", self.document, "--output", output,
+                              "--target", "zh-CN", "--model", "test/translator")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        progress = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertGreater(len(progress), 1)
+        self.assertEqual(sum(batch["blocks"] for batch in progress), 100)
+        self.assertEqual(json.loads((output / "translations.json").read_text(encoding="utf-8")), {
+            "blocks": [{"id": "b0", "text": "E=mc^2"}] + [
+                {"id": f"b{index}", "text": f"译文：Paragraph {index}."} for index in range(1, 100)
+            ],
+        })
 
     def test_commands_use_the_configured_runtime_prompt_and_html_template(self):
         templates = self.root / "templates"
@@ -62,34 +95,47 @@ class TranslationCommands(unittest.TestCase):
 
     def test_render_markdown_uses_application_configuration_from_a_workspace_directory(self):
         config = self.root / "app-config.json"
-        config.write_text(json.dumps({"envDir": str(self.root / "env")}), encoding="utf-8")
+        templates = self.root / "templates"
+        template = templates / "app/translation/skills/paper-translation/assets/paper.html"
+        template.parent.mkdir(parents=True)
+        template.write_text("<html><body data-template='workspace'>{{CONTENT}}</body></html>", encoding="utf-8")
+        config.write_text(json.dumps({"templateDir": str(templates)}), encoding="utf-8")
         source = self.root / "source.md"
         source.write_text("# 标题\n\n中文译稿。", encoding="utf-8")
         output = self.root / "rendered.html"
         result = subprocess.run([sys.executable, "-X", "utf8", str(PIPELINE), "render-markdown",
                                  "--input", str(source), "--output", str(output), "--target", "zh-CN"],
-                                cwd=self.root, env={**os.environ, "APP_CONFIG_FILE": str(config)},
+                                cwd=self.root, env={**self.env, "APP_CONFIG_FILE": str(config)},
                                 capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("中文译稿", output.read_text(encoding="utf-8"))
+        html = output.read_text(encoding="utf-8")
+        self.assertIn("data-template='workspace'", html)
+        self.assertIn("中文译稿", html)
 
     def test_render_accepts_complete_translations_and_reports_missing_duplicate_or_changed_formula(self):
         translated = [{"id": block["id"], "text": block["text"] if block["preserve"] else "译文"}
                       for block in self.blocks]
         source = self.root / "translations.json"
+        source.write_text(json.dumps({"blocks": translated}), encoding="utf-8")
         output = self.root / "reading"
-        for items in [translated, translated[:-1], translated + [translated[0]],
-                      [{"id": "b0", "text": "changed"}] + translated[1:]]:
-            source.write_text(json.dumps({"blocks": items}), encoding="utf-8")
-            result = self.command("render", "--document", self.document, "--translations", source,
-                                  "--output", output, "--target", "zh-CN")
-            if items is translated:
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("译文", (output / "translated.html").read_text(encoding="utf-8"))
-                self.assertIn("E=mc^2", (output / "translated.md").read_text(encoding="utf-8"))
-            else:
-                self.assertNotEqual(result.returncode, 0)
-                self.assertTrue(result.stderr.strip())
+        result = self.command("render", "--document", self.document, "--translations", source,
+                              "--output", output, "--target", "zh-CN")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("译文", (output / "translated.html").read_text(encoding="utf-8"))
+        self.assertIn("E=mc^2", (output / "translated.md").read_text(encoding="utf-8"))
+        for case, items, error in [
+            ("missing", translated[:-1], "缺少 ['b99']"),
+            ("duplicate", translated + [translated[0]], "译块 ID 不完整"),
+            ("formula", [{"id": "b0", "text": "changed"}] + translated[1:], "保留块 b0 被修改"),
+        ]:
+            with self.subTest(case=case):
+                source.write_text(json.dumps({"blocks": items}), encoding="utf-8")
+                output = self.root / case
+                result = self.command("render", "--document", self.document, "--translations", source,
+                                      "--output", output, "--target", "zh-CN")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(error, result.stderr)
+                self.assertFalse((output / "translated.html").exists())
 
 
 if __name__ == "__main__":

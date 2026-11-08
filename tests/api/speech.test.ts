@@ -12,13 +12,19 @@ import { POST as realtime } from '@/app/api/speech/realtime/route';
 import { POST as transcribe } from '@/app/api/speech/transcriptions/route';
 import { POST as testConnection } from '@/app/api/speech/test/route';
 
-import { createTestApp, request, restartApp } from '../app';
+import { createTestApp, request, restartApp } from '../support/app';
+import { cancel, login, openCallback, state as authorizationState } from '../support/chatgpt-authorization';
 
 let app: Awaited<ReturnType<typeof createTestApp>>;
 const input = { name: '本地转写', protocol: 'file', baseUrl: 'http://127.0.0.1:8000/v1/', model: 'whisper-1', key: 'sk-private' };
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
 beforeEach(async () => { app = await createTestApp(); });
-afterEach(async () => { await app.cleanup(); });
+afterEach(async () => {
+  try {
+    const { authorization } = await authorizationState();
+    if (authorization) await cancel(request('/authorization', 'DELETE', { id: authorization.id }));
+  } finally { await app.cleanup(); }
+});
 async function state() { return (await settings(request('/speech'))).json(); }
 async function connection(extra: object = {}) {
   const response = await create(request('/connections', 'POST', { ...input, ...extra }));
@@ -31,6 +37,11 @@ function audio(connectionId: string) {
   form.set('audio', new Blob(['audio'], { type: 'audio/webm' }), 'recording.webm');
   return new Request('http://localhost/transcriptions', { method: 'POST', body: form });
 }
+
+test('an unconnected ChatGPT account cannot be selected for speech', async () => {
+  expect(await state()).toMatchObject({ activeId: null, connections: [], chatgpt: { connected: false } });
+  expect((await select(request('/speech', 'PATCH', { activeId: 'chatgpt' }))).status).toBe(409);
+});
 
 test('the annotated speech configuration loads through the API without exposing its key', async () => {
   const sample = await readFile(path.resolve('src/app/settings/skills/workbench-guide/references/speech.example.jsonc'), 'utf8');
@@ -102,6 +113,26 @@ test('editing or removing another speech connection preserves the selected conne
   expect((await remove(request('/connection', 'DELETE'), context(other))).status).toBe(200);
   restartApp();
   expect(await state()).toMatchObject({ activeId: active, connections: [selected] });
+});
+
+test('moving a saved speech connection to another origin drops the old credential', async () => {
+  const id = await connection();
+  const response = await update(request('/connection', 'PATCH', {
+    ...input, baseUrl: 'https://speech.example/v1', key: '',
+  }), context(id));
+  expect(response.status).toBe(200);
+  restartApp();
+  expect((await state()).connections).toContainEqual(expect.objectContaining({
+    id, baseUrl: 'https://speech.example/v1', hasKey: false,
+  }));
+  const outbound = vi.fn<(url: string, init: RequestInit) => Promise<Response>>()
+    .mockImplementation(async () => Response.json({ text: '转写结果' }));
+  vi.stubGlobal('fetch', outbound);
+  expect(await (await transcribe(audio(id))).json()).toEqual({ text: '转写结果' });
+  expect(outbound).toHaveBeenCalledTimes(1);
+  const [url, init] = outbound.mock.calls[0];
+  expect(url).toBe('https://speech.example/v1/audio/transcriptions');
+  expect(new Headers(init.headers).has('Authorization')).toBe(false);
 });
 
 test('invalid addresses and malformed local configuration are rejected without overwriting the file', async () => {
@@ -176,22 +207,33 @@ test('upstream authentication, malformed responses and network failure return re
   expect(await response.json()).toMatchObject({ error: { code: 'speech_unreachable' } });
 });
 
-test('transcription distinguishes invalid responses, timeouts and cancelled requests', async () => {
+test('transcription rejects a response that does not contain text', async () => {
   const id = await connection();
   vi.stubGlobal('fetch', async () => Response.json({ text: 42 }));
   expect(await (await transcribe(audio(id))).json()).toMatchObject({ error: { code: 'speech_response_invalid' } });
-  vi.stubGlobal('fetch', async () => { throw new DOMException('timeout', 'TimeoutError'); });
-  expect((await transcribe(audio(id))).status).toBe(504);
+});
+
+test('cancelling a recording request aborts the in-flight upstream transcription', async () => {
+  const id = await connection();
+  const upstream = Promise.withResolvers<AbortSignal>();
+  vi.stubGlobal('fetch', async (_url: string, { signal }: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
+    upstream.resolve(signal!);
+  }));
   const controller = new AbortController();
+  const response = transcribe(new Request(audio(id), { signal: controller.signal }));
+  const signal = await upstream.promise;
   controller.abort();
-  const input = audio(id);
-  const cancelled = new Request(input, { signal: controller.signal });
-  vi.stubGlobal('fetch', async () => { throw new DOMException('cancelled', 'AbortError'); });
-  expect((await transcribe(cancelled)).status).toBe(408);
+  expect(signal.aborted).toBe(true);
+  const result = await response;
+  expect(result.status).toBe(408);
+  expect(await result.json()).toMatchObject({ error: { code: 'request_cancelled' } });
 });
 
 test('recording requests reject missing or oversized audio before contacting a speech service', async () => {
   const id = await connection();
+  const upstream = vi.fn();
+  vi.stubGlobal('fetch', upstream);
   const form = new FormData();
   form.set('connectionId', id);
   const missing = await transcribe(new Request('http://localhost/transcriptions', { method: 'POST', body: form }));
@@ -201,6 +243,7 @@ test('recording requests reject missing or oversized audio before contacting a s
     method: 'POST', headers: { 'Content-Length': '40000001' }, body: 'audio',
   }));
   expect(oversized.status).toBe(413);
+  expect(upstream).not.toHaveBeenCalled();
   expect((await realtime(request('/realtime', 'POST', { connectionId: 'chatgpt', sdp: 'offer' }))).status).toBe(409);
 });
 
@@ -236,4 +279,29 @@ test('realtime setup uses HTTPS and keeps long-lived API credentials on the serv
   expect(JSON.stringify(session)).not.toContain('sk-private');
   vi.stubGlobal('fetch', async () => Response.json({ value: '' }));
   expect(await (await realtime(request('/realtime', 'POST', { connectionId: id }))).json()).toMatchObject({ error: { code: 'speech_response_invalid' } });
+});
+
+test('connected ChatGPT authorization issues temporary realtime speech credentials without returning the account token', async () => {
+  const { callback } = await login();
+  await openCallback(callback);
+  await expect.poll(async () => (await authorizationState()).authorization?.status).toBe('connected');
+  const authorizationFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/realtime/client_secrets')) {
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer private-access');
+      return Response.json({ value: 'temporary-speech-key' });
+    }
+    return authorizationFetch(input, init);
+  });
+  const answer = await realtime(request('/speech/realtime', 'POST', { connectionId: 'chatgpt' }));
+  const session = await answer.json();
+  expect(session).toMatchObject({ url: 'wss://api.openai.com/v1/realtime?intent=transcription', key: 'temporary-speech-key' });
+  expect(JSON.stringify(session)).not.toContain('private-access');
+  const testResult = await testConnection(request('/speech/test', 'POST', { connectionId: 'chatgpt' }));
+  expect(await testResult.json()).toMatchObject({ ok: true });
+  const form = new FormData();
+  form.set('connectionId', 'chatgpt');
+  form.set('audio', new Blob(['audio']), 'audio.wav');
+  expect((await transcribe(new Request('http://localhost/transcriptions', { method: 'POST', body: form }))).status).toBe(409);
 });

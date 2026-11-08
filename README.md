@@ -132,6 +132,8 @@ npm start -- --hostname 127.0.0.1 --port 8642
 
 ## 参与项目
 
+首次运行测试前，执行 `npm run translation:setup` 安装翻译测试所需的 Python 环境。之后用 `npm test` 运行接口和命令测试，或用 `npm run test:node` 单独运行 TypeScript 测试。
+
 欢迎分享你的科研使用场景、提交体验反馈或贡献代码。问题与建议请提交到 [Issues](https://github.com/hxaxd/hxaxd-research/issues)。
 
 <p align="center">
