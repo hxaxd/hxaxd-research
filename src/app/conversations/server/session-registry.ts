@@ -11,6 +11,7 @@ import { readAssistantPrompt } from '@/app/settings/server/assistant-prompt';
 import { ApiError, isApiError } from '@/shared/http/api-error';
 
 import type { Conversation, ConversationRun, ConversationSnapshot, QueuedMessage, SendMessage, UserQuestion } from '../schema';
+import { skillCommandPrefix } from '../skill-command';
 import { getConversation, openConversation, renameConversation } from './conversations';
 import { readConversationHistory, savedSubmissionDigest, submissionEntryType } from './history';
 import { mapPiEvent } from './pi-events';
@@ -289,7 +290,7 @@ export class PiSessionRegistry {
         });
         signal.throwIfAborted();
         await session.prompt(input.text, {
-          expandPromptTemplates: false,
+          expandPromptTemplates: input.text.startsWith(skillCommandPrefix),
           images: input.clips?.map(({ data }) => ({ type: 'image', mimeType: 'image/png', data })),
         });
         const last = session.messages.findLast((message) => message.role === 'assistant');

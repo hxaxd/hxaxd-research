@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { listConversations } from '@/app/conversations/server/conversations';
+import { listSkillCommands } from '@/app/conversations/server/skills';
 import {
   getWorkspace,
   listWorkspaces,
@@ -42,6 +43,7 @@ export default async function WorkspacePage({
       initialWorkspace={workspace}
       workspaces={listWorkspaces(app.config.workspaceDir)}
       initialConversations={conversations}
+      skillCommands={listSkillCommands(app.config, workspaceId)}
       initialFile={typeof query.file === 'string' ? query.file : null}
       initialConversation={
         typeof query.conversation === 'string' &&

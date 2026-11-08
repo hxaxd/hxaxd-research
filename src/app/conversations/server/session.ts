@@ -20,6 +20,7 @@ import { workspaceContextTool } from './tools/workspace-context';
 import { openDocumentTool } from './tools/open-document';
 import { askUserTool } from './tools/ask-user';
 import { webSearchTool } from './tools/web-search';
+import { workbenchSkillPaths } from './skills';
 import type { UserQuestion } from '../schema';
 
 export type ModelSelection = {
@@ -44,12 +45,7 @@ export async function createPiSession(
     agentDir: config.piDir,
     noExtensions: true,
     noSkills: true,
-    additionalSkillPaths: [
-      path.join(config.templateDir, 'app/settings/skills'),
-      path.join(config.templateDir, 'app/latex/skills'),
-      path.join(config.templateDir, 'app/translation/skills'),
-      path.join(config.templateDir, 'app/conversations/skills'),
-    ],
+    additionalSkillPaths: workbenchSkillPaths(config.templateDir),
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,

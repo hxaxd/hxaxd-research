@@ -255,6 +255,7 @@
     "pendingImages": "待发送图片",
     "removeImage": "移除图片 {value0}",
     "message": "消息",
+    "skills": "技能",
     "stopAnswer": "停止回答",
     "sending": "正在发送",
     "connectionRetry": "连接失败，正在重试",

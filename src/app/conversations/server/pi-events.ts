@@ -1,9 +1,10 @@
 import 'server-only';
 
-import type { AgentSessionEvent, SessionMessageEntry } from '@earendil-works/pi-coding-agent';
+import { parseSkillBlock, type AgentSessionEvent, type SessionMessageEntry } from '@earendil-works/pi-coding-agent';
 
 import type { ChatMessage } from '../schema';
 import { questionSchema } from '../schema';
+import { skillCommandPrefix } from '../skill-command';
 import type { TextQuote } from '@/app/files/schema';
 
 type PiMessage = SessionMessageEntry['message'];
@@ -32,7 +33,9 @@ export function toolCallArgs(value: PiMessage): [string, Record<string, unknown>
 
 export function mapPiMessage(id: string, value: PiMessage, imageBase: string, args?: Map<string, Record<string, unknown>>): ChatMessage | null {
   if (value.role === 'user' || value.role === 'assistant') {
-    const text = textOf(value.content);
+    const content = textOf(value.content);
+    const skill = value.role === 'user' ? parseSkillBlock(content) : null;
+    const text = skill ? `${skillCommandPrefix}${skill.name}${skill.userMessage ? ` ${skill.userMessage}` : ''}` : content;
     const images = typeof value.content === 'string' ? [] : value.content
       .filter(item => item.type === 'image')
       .map((_, index) => ({ url: `${imageBase}?message=${value.timestamp}&index=${index}` }));

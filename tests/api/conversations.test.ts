@@ -198,6 +198,18 @@ test('a rejected model request is reported as a failure', async () => {
   expect(failed.error).toContain('Test authentication failure');
 });
 
+test('a skill command sends the installed skill and keeps the command readable in conversation history', async () => {
+  const command = '/skill:workbench-guide 这些配置保存在哪里？';
+  expect((await message(command)).status).toBe(202);
+  const finished = await waitForRun();
+  expect(model.userPrompts.at(-1)).toMatch(/^<skill name="workbench-guide"/);
+  expect(model.userPrompts.at(-1)).toContain('# 科研工作台使用与配置');
+  expect(model.userPrompts.at(-1)).toMatch(/<\/skill>\n\n这些配置保存在哪里？$/);
+  expect(finished.messages.find(item => item.role === 'user')?.text).toBe(command);
+  restartApp();
+  expect((await snapshot()).messages.find(item => item.role === 'user')?.text).toBe(command);
+});
+
 test('the global assistant prompt is saved, takes effect in an open conversation, and can be cleared', async () => {
   const url = '/api/settings/assistant-prompt';
   const workspacePi = path.join(app.config.workspaceDir, app.workspace.id, '.pi');

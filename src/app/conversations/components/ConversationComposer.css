@@ -69,6 +69,43 @@
   color: var(--muted);
 }
 
+.composer-skills {
+  display: grid;
+  max-height: 210px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  padding: 4px;
+  border: 1px solid var(--control-line);
+  border-radius: 9px;
+  background: var(--paper);
+}
+
+.composer-skills button {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.composer-skills button:hover,
+.composer-skills button[aria-selected='true'] {
+  background: var(--soft);
+}
+
+.composer-skills code,
+.composer-skills span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-skills span {
+  color: var(--muted);
+  font-size: 0.857143rem;
+}
+
 .composer-bottom {
   display: flex;
   align-items: center;

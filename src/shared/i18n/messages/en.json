@@ -255,6 +255,7 @@
     "pendingImages": "Attached images",
     "removeImage": "Remove image {value0}",
     "message": "Message",
+    "skills": "Skills",
     "stopAnswer": "Stop response",
     "sending": "Sending",
     "connectionRetry": "Connection failed. Retrying…",

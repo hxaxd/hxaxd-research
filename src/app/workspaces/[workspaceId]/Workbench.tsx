@@ -18,6 +18,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 
 import { ConversationPanel } from '@/app/conversations/components/ConversationPanel';
 import { useMessageDelivery } from '@/app/conversations/components/use-message-delivery';
+import type { SkillCommand } from '@/app/conversations/skill-command';
 import { CreateConversationDialog } from '@/app/conversations/components/CreateConversationDialog';
 import type { Conversation } from '@/app/conversations/schema';
 import { FilePreview, FilePreviewHeader } from '@/app/files/components/FilePreview';
@@ -51,6 +52,7 @@ type WorkbenchProps = {
   initialWorkspace: Workspace;
   workspaces: Workspace[];
   initialConversations: Conversation[];
+  skillCommands: SkillCommand[];
   initialFile: string | null;
   initialConversation: string | null;
 };
@@ -71,6 +73,7 @@ export function Workbench({
   initialWorkspace,
   workspaces,
   initialConversations,
+  skillCommands,
   initialFile,
   initialConversation,
 }: WorkbenchProps) {
@@ -386,6 +389,7 @@ export function Workbench({
                 workspaceId={workspaceId}
                 conversation={currentConversation}
                 delivery={delivery}
+                skillCommands={skillCommands}
                 models={models}
                 model={model}
                 onModelChange={selectModel}

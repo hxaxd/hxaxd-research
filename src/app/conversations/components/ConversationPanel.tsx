@@ -10,6 +10,7 @@ import { ModelSelector } from '@/app/models/components/ModelSelector';
 import type { ConfiguredModel, ThinkingLevel } from '@/app/models/schema';
 
 import type { Conversation } from '../schema';
+import type { SkillCommand } from '../skill-command';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationMessages } from './ConversationMessages';
 import { useConversationStream } from './use-conversation-stream';
@@ -19,6 +20,7 @@ export function ConversationPanel({
   workspaceId,
   conversation,
   delivery,
+  skillCommands,
   models,
   model,
   onModelChange,
@@ -32,6 +34,7 @@ export function ConversationPanel({
   workspaceId: string;
   conversation: Conversation;
   delivery: ReturnType<typeof useMessageDelivery>;
+  skillCommands: SkillCommand[];
   models: ConfiguredModel[];
   model: string;
   onModelChange: (id: string) => void;
@@ -66,6 +69,7 @@ export function ConversationPanel({
         onStopDelivery={input => delivery.stop(url, input)} onOpenDocument={onOpenDocument} url={url} />
       <ConversationComposer
         url={url}
+        skillCommands={skillCommands}
         model={model}
         thinkingLevel={thinking}
         run={snapshot?.run ?? null}
