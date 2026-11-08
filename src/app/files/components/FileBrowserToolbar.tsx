@@ -27,7 +27,7 @@ export function FileBrowserToolbar({ workspaceId, papersOnly, onPapersOnlyChange
       onClick={() => onPapersOnlyChange(!papersOnly)}>
       <BookOpen size={17} />
     </button>
-    <ImportFilesDialog workspaceId={workspaceId} target="" onImported={result => {
+    <ImportFilesDialog workspaceId={workspaceId} onImported={result => {
       onChanged();
       if (result.main) onOpenFile(result.main);
     }} />

@@ -15,13 +15,8 @@ import type { AppConfig } from '@/app/config.mjs';
 import { ApiError } from '@/shared/http/api-error';
 
 import { folderMarkerFile, importMetadataSchema, type FolderMarker, type ImportResult } from '@/app/files/schema';
+import { isPdfPath, selectMainPdf } from '@/app/files/server/main-pdf';
 import { resolveWorkspacePath, validateRelativePath } from '@/app/files/server/paths';
-
-/** The shallowest PDF is the paper itself; deeper PDFs are usually supplements or outputs. */
-function mainPdf(files: string[]) {
-  return files.filter(file => /\.pdf$/i.test(file))
-    .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b, 'en', { numeric: true }))[0];
-}
 
 async function importDestination(root: string, workspaceId: string, target: string, name: string, single: boolean) {
   const parsed = path.parse(name);
@@ -138,7 +133,7 @@ export async function importWorkspaceFiles(
     await Promise.all(tasks);
     request.signal.throwIfAborted();
     if (!metadata || !files.length) throw new ApiError(400, 'invalid_input', t('errors.filesMissing'));
-    const main = metadata.paper ? mainPdf(files) : undefined;
+    const main = metadata.paper ? selectMainPdf(files.filter(isPdfPath)) : undefined;
     if (metadata.paper && !main) throw new ApiError(400, 'invalid_input', t('errors.paperPdfMissing'));
     const single = !metadata.paper && files.length === 1 && !metadata.folderName && !files[0].includes('/');
     const topName = single ? files[0]

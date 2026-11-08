@@ -11,7 +11,10 @@ import { Markdown } from '@/shared/ui/Markdown';
 
 import { textFileSchema } from '../schema';
 
-export function TextPreview({ url, markdown, onOpenFile }: { url: string; markdown?: { workspaceId: string; path: string }; onOpenFile?: (path: string) => void }) {
+export function TextPreview({ url, markdown }: {
+  url: string;
+  markdown?: { workspaceId: string; path: string; onOpenFile: (path: string) => void };
+}) {
   const t = useTranslations();
   const [file, setFile] = useState<z.infer<typeof textFileSchema> | null>(null);
   const [error, setError] = useState('');
@@ -48,9 +51,9 @@ export function TextPreview({ url, markdown, onOpenFile }: { url: string; markdo
           }}
           components={{ a: ({ href, children }) => (
             <a href={href} onClick={event => {
-              if (href?.startsWith(previewRoot) && onOpenFile) {
+              if (href?.startsWith(previewRoot)) {
                 event.preventDefault();
-                onOpenFile(decodeURIComponent(new URL(href, base).pathname.slice(previewRoot.length)));
+                markdown.onOpenFile(decodeURIComponent(new URL(href, base).pathname.slice(previewRoot.length)));
               }
             }} target={href?.startsWith('http') ? '_blank' : undefined} rel="noreferrer">{children}</a>
           ) }}

@@ -1,36 +1,6 @@
-.file-folder {
-  min-width: 40px;
-  height: 40px;
-}
-
-.file-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  border-radius: 8px;
-}
-
-.file-list > div + div {
-  margin-top: 3px;
-}
-
-.file-row:hover {
-  background: var(--hover);
-}
-
 .selected {
   background: var(--soft);
   color: var(--accent);
-}
-
-.file-row.selected::before {
-  position: absolute;
-  inset: 10px auto 10px 0;
-  width: 3px;
-  border-radius: 2px;
-  content: '';
-  background: var(--accent);
 }
 
 .file-open {
@@ -112,33 +82,6 @@
   height: 26px;
 }
 
-.directory-back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 4px 8px;
-  margin-bottom: 3px;
-  color: var(--accent);
-  font-size: 0.857143rem;
-  border-radius: 10px;
-}
-
-.directory-back:hover {
-  background: var(--soft);
-}
-
-.directory-path {
-  margin: 2px 8px 10px;
-  padding: 6px 8px;
-  background: var(--ground);
-  color: var(--muted);
-  border-radius: 8px;
-  font: 0.785714rem/1.6 Consolas,
-    monospace;
-  overflow-wrap: anywhere;
-}
-
 .empty-small {
   padding: 20px 10px;
   color: var(--muted);
@@ -211,11 +154,7 @@
 }
 
 @media (pointer: coarse) {
-  .file-open,
-  .file-folder {
+  .file-open {
     min-height: 44px;
-  }
-  .file-folder {
-    min-width: 44px;
   }
 }

@@ -16,6 +16,20 @@ let app: Awaited<ReturnType<typeof createTestApp>>;
 beforeEach(async () => { app = await createTestApp(); });
 afterEach(async () => { await app.cleanup(); });
 
+test('raw and preview requests both require an existing workspace', async () => {
+  const workspaceId = randomUUID();
+  const directory = path.join(app.config.workspaceDir, workspaceId);
+  await mkdir(directory);
+  await writeFile(path.join(directory, 'private.txt'), 'outside the workspace registry');
+  const raw = await file(request('/file?path=private.txt'), workspaceContext(workspaceId));
+  const rendered = await preview(request('/preview/private.txt'), {
+    params: Promise.resolve({ workspaceId, path: ['private.txt'] }),
+  });
+  expect(raw.status).toBe(404);
+  expect(rendered.status).toBe(404);
+  expect((await rendered.json()).error.code).toBe((await raw.json()).error.code);
+});
+
 test('application configuration controls preview and upload limits through the file APIs', async () => {
   await writeFile(app.config.configFile, JSON.stringify({
     dataDir: app.config.dataDir,
@@ -178,10 +192,15 @@ test('HTML previews serve their source and relative assets without allowing path
   const html = await preview(request('/preview/panel/index.html'), context(['panel', 'index.html']));
   expect(html.status).toBe(200);
   expect(html.headers.get('Content-Type')).toContain('text/html');
+  expect(html.headers.get('Content-Security-Policy')).toBe('sandbox allow-same-origin');
   expect(await html.text()).toContain('./figure.svg');
   const asset = await preview(request('/preview/panel/figure.svg'), context(['panel', 'figure.svg']));
   expect(asset.headers.get('Content-Type')).toBe('image/svg+xml');
+  expect(asset.headers.get('Content-Security-Policy')).toBe('sandbox allow-same-origin');
   expect(await asset.text()).toContain('<svg');
+  const direct = await file(request('/file?path=panel/index.html'), workspaceContext(app.workspace.id));
+  expect(direct.headers.get('Content-Security-Policy')).toBe('sandbox allow-same-origin');
+  expect(await direct.text()).toContain('./figure.svg');
   expect((await preview(request('/preview/outside'), context(['..', 'outside']))).status).toBe(400);
   expect((await preview(request('/preview/missing'), context(['missing']))).status).toBe(404);
 });
@@ -208,7 +227,7 @@ test('material events report external file changes and exclude internal conversa
   }
 });
 
-test('file downloads support suffix ranges and empty files; binary content cannot be read as text', async () => {
+test('file downloads support byte ranges and empty files; binary content cannot be read as text', async () => {
   const root = path.join(app.config.workspaceDir, app.workspace.id);
   const context = workspaceContext(app.workspace.id);
   await writeFile(path.join(root, 'bytes.bin'), Buffer.from([0, 1, 2, 3]));
@@ -222,6 +241,13 @@ test('file downloads support suffix ranges and empty files; binary content canno
     expect([...new Uint8Array(await result.arrayBuffer())]).toEqual([...expected]);
   }
   expect((await file(request('/file?path=bytes.bin', 'GET', undefined, { Range: 'bytes=3-2' }), context)).status).toBe(416);
+  const bytes = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
+  await writeFile(path.join(root, 'sample.bin'), bytes);
+  const response = await file(request('/file?path=sample.bin', 'GET', undefined, { Range: 'bytes=0-9' }), context);
+  expect(response.status).toBe(206);
+  expect(response.headers.get('Content-Range')).toBe(`bytes 0-9/${bytes.length}`);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes.subarray(0, 10));
+  expect((await file(request('/file?path=sample.bin', 'GET', undefined, { Range: 'bytes=99999999-' }), context)).status).toBe(416);
   expect((await file(request('/file?path=bytes.bin&format=text'), context)).status).toBe(400);
   await writeFile(path.join(root, 'empty.txt'), '');
   expect(await (await file(request('/file?path=empty.txt'), context)).text()).toBe('');
@@ -290,7 +316,7 @@ test('batch imports without a directory name group their files under the returne
     expect(await (await file(request(`/file?path=${result.path}/${name}`), context)).text()).toBe(text);
 });
 
-test('imports preserve directories and existing material; file responses serve text and byte ranges', async () => {
+test('imports preserve directories and existing material and reject paths outside the workspace', async () => {
   const context = workspaceContext(app.workspace.id);
   function upload(name = 'source', filename = 'sections/body.tex') {
     const form = new FormData();
@@ -304,11 +330,4 @@ test('imports preserve directories and existing material; file responses serve t
   expect(await (await importFiles(upload(), context)).json()).toMatchObject({ path: 'source (1)' });
   expect((await importFiles(upload('batch', '../escape.txt'), context)).status).toBe(400);
   expect(await (await files(request('/files'), context)).json()).not.toContainEqual(expect.objectContaining({ name: 'batch' }));
-  const bytes = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
-  await writeFile(path.join(app.config.workspaceDir, app.workspace.id, 'sample.bin'), bytes);
-  const response = await file(request('/file?path=sample.bin', 'GET', undefined, { Range: 'bytes=0-9' }), context);
-  expect(response.status).toBe(206);
-  expect(response.headers.get('Content-Range')).toBe(`bytes 0-9/${bytes.length}`);
-  expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes.subarray(0, 10));
-  expect((await file(request('/file?path=sample.bin', 'GET', undefined, { Range: 'bytes=99999999-' }), context)).status).toBe(416);
 });

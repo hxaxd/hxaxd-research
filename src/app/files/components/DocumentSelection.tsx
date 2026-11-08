@@ -48,9 +48,11 @@ export function DocumentSelection({ reading, onQuote, children }: {
       };
     }
     const unbind = observe(document, element);
-    const frame = element.querySelector('iframe');
-    function loaded() {
+    function loaded(event?: Event) {
+      const frame = element.querySelector('iframe');
+      if (event && event.target !== frame) return;
       unbindFrame?.();
+      unbindFrame = undefined;
       selectedDocument = undefined;
       setQuote(null);
       // Only the same-origin workspace document is accessible after navigation.
@@ -61,9 +63,9 @@ export function DocumentSelection({ reading, onQuote, children }: {
         unbindFrame = undefined;
       }
     }
-    frame?.addEventListener('load', loaded);
+    element.addEventListener('load', loaded, true);
     loaded();
-    return () => { unbind(); unbindFrame?.(); frame?.removeEventListener('load', loaded); };
+    return () => { unbind(); unbindFrame?.(); element.removeEventListener('load', loaded, true); };
   }, [path, mode, t]);
 
   return <div className="resource-body" ref={root}>

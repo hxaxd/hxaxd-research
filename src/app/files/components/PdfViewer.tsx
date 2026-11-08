@@ -96,7 +96,6 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
   useEffect(() => {
     const controller = new AbortController();
     const pageHost = pages.current!;
-    let viewer: Viewer | undefined;
     let task: PDFDocumentLoadingTask | undefined;
     let observer: ResizeObserver | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -105,18 +104,19 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
       const library = await import('pdfjs-dist');
       const { PDFViewer, PDFLinkService, EventBus, ScrollMode } = await import('pdfjs-dist/web/pdf_viewer.mjs');
       if (controller.signal.aborted) return;
+      const container = scroll.current!;
       setCount(0);
       setError('');
       setOutline(null);
-      scroll.current!.scrollTop = 0;
+      container.scrollTop = 0;
       library.GlobalWorkerOptions.workerSrc = '/pdf-assets/pdf.worker.min.mjs';
       const eventBus = new EventBus();
       const links = new PDFLinkService({ eventBus, externalLinkTarget: 2, ignoreDestinationZoom: true });
       const options = {
-        container: scroll.current!, viewer: pageHost, eventBus, linkService: links,
+        container, viewer: pageHost, eventBus, linkService: links,
         annotationMode: library.AnnotationMode.ENABLE, abortSignal: controller.signal,
       };
-      viewer = new PDFViewer(options);
+      const viewer = new PDFViewer(options);
       links.setViewer(viewer);
       engine.current = { viewer, links };
       eventBus.on('pagesinit', () => {
@@ -132,12 +132,12 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
         }
         const savedMode = localStorage.getItem('research-pdf-mode') ?? 'continuous';
         setMode(savedMode);
-        viewer!.scrollMode = savedMode === 'page' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
-        viewer!.currentScaleValue = 'page-width';
-        setCount(viewer!.pagesCount);
-        viewer!.currentPageNumber = Math.min(request?.page ?? savedPage, viewer!.pagesCount);
+        viewer.scrollMode = savedMode === 'page' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
+        viewer.currentScaleValue = 'page-width';
+        setCount(viewer.pagesCount);
+        viewer.currentPageNumber = Math.min(request?.page ?? savedPage, viewer.pagesCount);
         ready = true;
-        reportPage(viewer!.currentPageNumber, request ?? undefined);
+        reportPage(viewer.currentPageNumber, request ?? undefined);
       });
       eventBus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => {
         if (ready && !controller.signal.aborted) reportPage(pageNumber);
@@ -153,30 +153,29 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
       observer = new ResizeObserver(() => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
-          if (!viewer!.pdfDocument) return;
-          if (['page-width', 'page-fit'].includes(viewer!.currentScaleValue))
-            viewer!.currentScaleValue = viewer!.currentScaleValue;
-          viewer!.update();
+          if (!viewer.pdfDocument) return;
+          if (['page-width', 'page-fit'].includes(viewer.currentScaleValue))
+            viewer.currentScaleValue = viewer.currentScaleValue;
+          viewer.update();
         }, 100);
       });
-      observer.observe(scroll.current!);
+      observer.observe(container);
       let wheelTime = 0;
-      scroll.current!.addEventListener('wheel', (event) => {
-        if (event.ctrlKey || viewer!.scrollMode !== ScrollMode.PAGE) return;
-        const element = scroll.current!;
+      container.addEventListener('wheel', (event) => {
+        if (event.ctrlKey || viewer.scrollMode !== ScrollMode.PAGE) return;
         const down = event.deltaY > 0;
         const atEdge = down
-          ? element.scrollTop + element.clientHeight >= element.scrollHeight - 2
-          : element.scrollTop <= 1;
+          ? container.scrollTop + container.clientHeight >= container.scrollHeight - 2
+          : container.scrollTop <= 1;
         if (!atEdge || !event.deltaY) return;
         event.preventDefault();
         const now = performance.now();
         if (now - wheelTime < 350) return;
-        const next = viewer!.currentPageNumber + (down ? 1 : -1);
-        if (next < 1 || next > viewer!.pagesCount) return;
+        const next = viewer.currentPageNumber + (down ? 1 : -1);
+        if (next < 1 || next > viewer.pagesCount) return;
         wheelTime = now;
-        viewer!.currentPageNumber = next;
-        if (!down) element.scrollTop = element.scrollHeight;
+        viewer.currentPageNumber = next;
+        if (!down) container.scrollTop = container.scrollHeight;
       }, { passive: false, signal: controller.signal });
       task = library.getDocument({ url, cMapUrl: '/pdf-assets/cmaps/', cMapPacked: true,
         standardFontDataUrl: '/pdf-assets/standard_fonts/', wasmUrl: '/pdf-assets/wasm/' });

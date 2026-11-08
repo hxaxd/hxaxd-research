@@ -13,6 +13,7 @@ import {
   type FileEntry,
   type FolderMarker,
 } from '@/app/files/schema';
+import { isPdfPath, selectMainPdf } from '@/app/files/server/main-pdf';
 import { resolveWorkspacePath, validateRelativePath } from '@/app/files/server/paths';
 import { getWorkspace } from '@/app/workspaces/workspaces';
 import { getAppRuntime } from '@/app/runtime';
@@ -120,13 +121,12 @@ export function PATCH(request: Request, context: Context) {
     async function find(absolute: string, prefix: string, depth: number) {
       for (const entry of await readdir(absolute, { withFileTypes: true })) {
         const name = prefix ? `${prefix}/${entry.name}` : entry.name;
-        if (entry.isFile() && /\.pdf$/i.test(entry.name)) pdfs.push(name);
+        if (entry.isFile() && isPdfPath(entry.name)) pdfs.push(name);
         else if (entry.isDirectory() && depth < 2) await find(path.join(absolute, entry.name), name, depth + 1);
       }
     }
     await find(directory, '', 0);
-    const main = pdfs.sort((a, b) => a.split('/').length - b.split('/').length
-      || a.localeCompare(b, 'en', { numeric: true }))[0];
+    const main = selectMainPdf(pdfs);
     if (!main) throw new ApiError(400, 'invalid_input', t('errors.paperPdfMissing'));
     const marker: FolderMarker = { type: input.type, title: path.parse(main).name, main };
     await writeFile(target, `${JSON.stringify(marker, null, 2)}\n`);

@@ -22,6 +22,7 @@ import { PdfViewer } from './PdfViewer';
 import { TextPreview } from './TextPreview';
 import { DocumentSelection } from './DocumentSelection';
 import { ImagePreview } from './ImagePreview';
+import { HtmlPreview } from './HtmlPreview';
 
 const textExtensions = new Set([
   'tex',
@@ -105,9 +106,9 @@ export function FilePreview({
             onCapture={clip => onCapture({ ...clip, path })}
             fileActions={<FileMenuItems url={url} onReload={onReload} />} />
         ) : html && mode === 'preview' ? (
-          <iframe className="html-preview" title={t('files.htmlPreview')} src={`${previewUrl}?revision=${revision}`} allowFullScreen referrerPolicy="no-referrer" />
+          <HtmlPreview url={`${previewUrl}?revision=${revision}`} />
         ) : markdown && mode === 'preview' ? (
-          <TextPreview url={url} markdown={{ workspaceId, path }} onOpenFile={onOpenFile} />
+          <TextPreview url={url} markdown={{ workspaceId, path, onOpenFile }} />
         ) : html || markdown || textExtensions.has(extension) || textPath === path ? (
           <TextPreview url={url} />
         ) : imageExtensions.has(extension) ? (

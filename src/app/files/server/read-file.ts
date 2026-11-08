@@ -12,8 +12,6 @@ export async function readWorkspaceText(
   config: AppConfig,
   workspaceId: string,
   relative: string,
-  offset = 0,
-  limit = 30000,
 ) {
   const file = await resolveWorkspacePath(config.workspaceDir, workspaceId, relative);
   const info = await stat(file);
@@ -23,12 +21,12 @@ export async function readWorkspaceText(
   const bytes = await readFile(file);
   if (bytes.includes(0))
     throw new ApiError(400, 'binary_file', t('errors.binaryFile'));
-  const slice = bytes.subarray(offset, offset + limit);
+  const slice = bytes.subarray(0, config.files.previewBytes);
   return {
     path: relative,
     text: slice.toString('utf8'),
-    offset,
-    truncated: offset + slice.length < bytes.length,
+    offset: 0,
+    truncated: slice.length < bytes.length,
     size: bytes.length,
   };
 }

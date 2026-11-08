@@ -1,9 +1,11 @@
 'use client';
 
 import { useTranslations } from 'use-intl';
+import { z } from 'zod';
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -15,11 +17,25 @@ import {
 
 type Side = 'materials' | 'conversation';
 type Panel = { open: boolean; width: number };
-type Preferences = Partial<Record<Side, Panel>>;
 type Drag = { side: Side; width: number; closing: boolean; left: number; right: number; scale: number; maximum: number };
 const minimum = { materials: 240, conversation: 300 };
 const key = 'research-layout';
 const duration = 180;
+const savedPanel = z.object({ open: z.boolean(), width: z.number().positive() }).optional().catch(undefined);
+const savedLayout = z.object({ materials: savedPanel, conversation: savedPanel });
+
+function parseLayout(saved: string | null): z.infer<typeof savedLayout> {
+  if (!saved) return {};
+  let value: unknown;
+  try {
+    value = JSON.parse(saved);
+  } catch (error) {
+    if (error instanceof SyntaxError) return {};
+    throw error;
+  }
+  const result = savedLayout.safeParse(value);
+  return result.success ? result.data : {};
+}
 
 function subscribe(listener: () => void) {
   window.addEventListener('research-layout', listener);
@@ -46,7 +62,7 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
   );
   const [available, setAvailable] = useState(1400);
   const tablet = available <= 1180;
-  const preferences: Preferences = saved ? JSON.parse(saved) : {};
+  const preferences = useMemo(() => parseLayout(saved), [saved]);
   const panels = {
     materials: preferences.materials ?? { open: !tablet, width: 248 },
     conversation: preferences.conversation ?? {
@@ -145,7 +161,7 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     localStorage.setItem(
       key,
       JSON.stringify({
-        ...(current ? JSON.parse(current) : {}),
+        ...parseLayout(current),
         [side]: panel,
       }),
     );

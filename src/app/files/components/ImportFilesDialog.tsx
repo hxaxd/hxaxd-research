@@ -13,11 +13,9 @@ import type { ImportResult } from '../schema';
 
 export function ImportFilesDialog({
   workspaceId,
-  target,
   onImported,
 }: {
   workspaceId: string;
-  target: string;
   onImported: (result: ImportResult) => void;
 }) {
   const t = useTranslations();
@@ -142,7 +140,7 @@ export function ImportFilesDialog({
                 const form = new FormData();
                 const folderName =
                   files.length > 1 || files[0]?.webkitRelativePath ? name.trim() : undefined;
-                form.append('metadata', JSON.stringify({ target, folderName, paper: hasPdf && paper }));
+                form.append('metadata', JSON.stringify({ target: '', folderName, paper: hasPdf && paper }));
                 for (const file of files) {
                   const relative = file.webkitRelativePath
                     ? file.webkitRelativePath.split('/').slice(1).join('/')

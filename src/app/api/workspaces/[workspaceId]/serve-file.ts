@@ -46,7 +46,7 @@ export async function serveWorkspaceFile(request: Request, config: AppConfig, wo
   const url = new URL(request.url);
   const relative = previewPath ?? url.searchParams.get('path') ?? '';
   if (!previewPath && url.searchParams.get('format') === 'text')
-    return Response.json(await readWorkspaceText(config, workspaceId, relative, 0, config.files.previewBytes));
+    return Response.json(await readWorkspaceText(config, workspaceId, relative));
   const target = await resolveWorkspacePath(config.workspaceDir, workspaceId, relative);
   const info = await stat(target);
   if (!info.isFile()) throw new ApiError(400, 'invalid_file', t('errors.fileRequired'));
@@ -56,6 +56,8 @@ export async function serveWorkspaceFile(request: Request, config: AppConfig, wo
     'Accept-Ranges': 'bytes',
     'Content-Disposition': `${url.searchParams.has('download') || type === 'application/octet-stream' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(path.basename(target))}`,
   });
+  if (type === mime['.html'] || type === mime['.svg'])
+    headers.set('Content-Security-Policy', 'sandbox allow-same-origin');
   const range = request.headers.get('range');
   const bounds = range ? requestedRange(range, info.size) : { start: 0, end: info.size - 1 };
   if (!bounds) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${info.size}` } });
