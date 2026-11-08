@@ -13,8 +13,9 @@ function escapeRegExp(value: string) {
 }
 
 function pageHint(value: string) {
-  const match = /[?#&]page=(\d+)(?![0-9])/i.exec(value);
-  return match ? Number(match[1]) : undefined;
+  const match = /[?#&]page=(\d+)(?=$|[&#])/i.exec(value);
+  const page = Number(match?.[1]);
+  return Number.isSafeInteger(page) && page > 0 ? page : undefined;
 }
 
 function decode(value: string) {
@@ -31,11 +32,11 @@ function normalize(value: string) {
 }
 
 function documentPath(value: string, page?: number): ReadingContext | null {
-  const trimmed = decode(normalize(value)).replace(/^(?:\.\/)+/, '').replace(/^\/+/, '').replace(/\/+$/, '');
+  const trimmed = value.replaceAll('\\', '/').replace(/^(?:\.\/)+/, '').replace(/^\/+/, '').replace(/\/+$/, '');
   if (!trimmed) return null;
   const parts = trimmed.split('/');
   if (parts.some((part) => !part || part === '.' || part === '..')) return null;
-  return { path: parts.join('/'), ...(page ? { page } : {}) };
+  return { path: trimmed, ...(/\.pdf$/i.test(trimmed) && page !== undefined ? { page } : {}) };
 }
 
 export function resolveWorkspaceLink(href: string, workspaceId: string, origin?: string): ReadingContext | null {
@@ -52,7 +53,7 @@ export function resolveWorkspaceLink(href: string, workspaceId: string, origin?:
     const prefix = `/api/workspaces/${workspaceId}`;
     if (url.pathname === `${prefix}/file`) {
       const path = url.searchParams.get('path');
-      return path ? documentPath(decode(path), page) : null;
+      return path ? documentPath(path, page) : null;
     }
     const preview = `${prefix}/preview/`;
     return url.pathname.startsWith(preview) ? documentPath(decode(url.pathname.slice(preview.length)), page) : null;
@@ -61,8 +62,8 @@ export function resolveWorkspaceLink(href: string, workspaceId: string, origin?:
 
   // Absolute paths that pass through the workspace folder, such as C:/…/workspaces/<id>/papers/a.pdf.
   const marker = new RegExp(`/workspaces/${escapeRegExp(workspaceId)}/`, 'i').exec(normalize(value));
-  if (marker) return documentPath(normalize(value).slice(marker.index + marker[0].length), page);
+  if (marker) return documentPath(decode(normalize(value).slice(marker.index + marker[0].length)), page);
 
   if (scheme.test(normalize(value)) || normalize(value).startsWith('//')) return null;
-  return documentPath(value, page);
+  return documentPath(decode(normalize(value)), page);
 }
