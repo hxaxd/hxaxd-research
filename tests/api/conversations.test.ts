@@ -12,6 +12,7 @@ import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
 import { POST as answer } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/answers/route';
 import { GET as fileEvents } from '@/app/api/workspaces/[workspaceId]/files/events/route';
+import { GET as getPrompt, PUT as savePrompt } from '@/app/api/settings/assistant-prompt/route';
 import type { ConversationSnapshot, SendMessage } from '@/app/conversations/schema';
 import type { TextQuote } from '@/app/files/schema';
 
@@ -136,6 +137,43 @@ test('a rejected model request is reported as a failure', async () => {
   await message('[FAIL]');
   const failed = await waitForRun('failed');
   expect(failed.error).toContain('Test authentication failure');
+});
+
+test('the global assistant prompt is saved, takes effect in an open conversation, and can be cleared', async () => {
+  const url = '/api/settings/assistant-prompt';
+  const workspacePi = path.join(app.config.workspaceDir, app.workspace.id, '.pi');
+  await writeFile(path.join(workspacePi, 'APPEND_SYSTEM.md'), 'Workspace prompt marker');
+  await writeFile(path.join(app.config.piDir, 'APPEND_SYSTEM.md'), 'Runtime prompt marker');
+  expect(await (await getPrompt(request(url))).json()).toEqual({ prompt: '' });
+  expect((await savePrompt(request(url, 'PUT', { prompt: 1 }))).status).toBe(400);
+  expect((await savePrompt(request(url, 'PUT', { prompt: 'Foreign prompt' }, { Origin: 'http://foreign.example' }))).status).toBe(403);
+  const prompt = 'Use SI units.\nCite the original sources.';
+  expect((await savePrompt(request(url, 'PUT', { prompt }))).status).toBe(200);
+  restartApp();
+  expect(await (await getPrompt(request(url))).json()).toEqual({ prompt });
+
+  const stream = await events(request('/events'), context());
+  const reader = stream.body!.getReader();
+  try {
+    await reader.read();
+    await message('First question');
+    await waitForRun();
+    expect(model.systemPrompts.at(-1)).toContain(prompt);
+    expect(model.systemPrompts.at(-1)).toContain('你是科研工作台中的助手');
+    expect(model.systemPrompts.at(-1)).not.toMatch(/Workspace prompt marker|Runtime prompt marker/);
+
+    expect((await savePrompt(request(url, 'PUT', { prompt: '' }))).status).toBe(200);
+    await message('Second question');
+    const current = await waitForRun();
+    expect(model.systemPrompts.at(-1)).not.toMatch(/Use SI units|Workspace prompt marker|Runtime prompt marker/);
+    expect(current.messages.filter(message => message.role === 'user').map(message => message.text))
+      .toEqual(['First question', 'Second question']);
+  } finally {
+    await reader.cancel();
+  }
+
+  restartApp();
+  expect(await (await getPrompt(request(url))).json()).toEqual({ prompt: '' });
 });
 
 test('current reading and quotes reach the model without altering user text, live or restored', async () => {

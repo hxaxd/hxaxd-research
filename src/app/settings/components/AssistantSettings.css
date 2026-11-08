@@ -1,0 +1,32 @@
+.assistant-settings {
+  display: grid;
+  gap: 20px;
+}
+
+.assistant-settings h3 {
+  font-size: 1.071429rem;
+  font-weight: 600;
+}
+
+.assistant-prompt-form {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-prompt-form textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  background: var(--control);
+  color: var(--ink);
+}
+
+.assistant-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}

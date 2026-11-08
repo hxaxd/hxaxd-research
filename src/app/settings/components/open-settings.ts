@@ -1,6 +1,6 @@
 'use client';
 
-export type SettingsTab = 'general' | 'appearance' | 'models';
+export type SettingsTab = 'general' | 'appearance' | 'models' | 'assistant';
 
 export const settingsEvent = 'research-open-settings';
 

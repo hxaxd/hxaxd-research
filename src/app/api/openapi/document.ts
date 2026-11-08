@@ -57,6 +57,7 @@ import {
 } from '@/app/workspaces/schema';
 import { apiErrorSchema } from '@/shared/http/api-error';
 import { idSchema, renameSchema } from '@/shared/schema';
+import { assistantPromptSchema } from '@/app/settings/assistant-prompt';
 
 extendZodWithOpenApi(z);
 
@@ -65,7 +66,7 @@ export function generateOpenapi() {
   const prefix = '/api/workspaces/{workspaceId}';
   const conversation = `${prefix}/conversations/{conversationId}`;
   const routes: {
-    method: 'get' | 'post' | 'patch' | 'delete';
+    method: 'get' | 'post' | 'put' | 'patch' | 'delete';
     path: string;
     response: z.ZodType;
     body?: z.ZodType;
@@ -142,6 +143,8 @@ export function generateOpenapi() {
       body: stopRunSchema,
     },
     { method: 'get', path: '/api/models', response: modelCatalogSchema },
+    { method: 'get', path: '/api/settings/assistant-prompt', response: assistantPromptSchema },
+    { method: 'put', path: '/api/settings/assistant-prompt', body: assistantPromptSchema, response: assistantPromptSchema },
     {
       method: 'get',
       path: '/api/model-providers',

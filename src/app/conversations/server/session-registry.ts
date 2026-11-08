@@ -7,6 +7,7 @@ import type { AgentSession } from '@earendil-works/pi-coding-agent';
 import type { ModelProviders } from '@/app/models/server/providers';
 import type { AppConfig } from '@/app/config.mjs';
 import type { ReaderController } from '@/app/files/server/reader';
+import { readAssistantPrompt } from '@/app/settings/server/assistant-prompt';
 import { ApiError, isApiError } from '@/shared/http/api-error';
 
 import type { Conversation, ConversationRun, ConversationSnapshot, SendMessage, UserQuestion } from '../schema';
@@ -19,7 +20,7 @@ import { createPiSession } from './session';
 type LiveConversation = {
   snapshot: ConversationSnapshot;
   listeners: Set<(snapshot: ConversationSnapshot) => void>;
-  session?: AgentSession;
+  session?: { agent: AgentSession; additionalPrompt: string };
   execution?: Promise<void>;
   controller?: AbortController;
   requestDigest?: string;
@@ -87,7 +88,7 @@ export class PiSessionRegistry {
   private release(key: string, record: LiveConversation) {
     if (record.execution || record.listeners.size || this.conversations.get(key) !== record) return;
     this.conversations.delete(key);
-    record.session?.dispose();
+    record.session?.agent.dispose();
     const { revision, run, error } = record.snapshot;
     if (!run) return;
     this.recent.delete(key);
@@ -102,11 +103,17 @@ export class PiSessionRegistry {
     const selection = await this.providers.resolve(input.model, signal);
     if (input.clips?.length && !selection.model.input.includes('image'))
       throw new ApiError(400, 'image_not_supported', t('models.noImages'));
-    const session = record.session ?? (await createPiSession(
-      this.config, selection, conversation.workspaceId, conversation.id, this.reader,
-      (question, signal) => this.ask(record, question, signal),
-    ));
-    record.session = session;
+    const additionalPrompt = readAssistantPrompt(this.config.dataDir);
+    if (record.session?.additionalPrompt !== additionalPrompt) {
+      const agent = await createPiSession(
+        this.config, selection, conversation.workspaceId, conversation.id, this.reader, additionalPrompt,
+        (question, signal) => this.ask(record, question, signal),
+        record.session?.agent.sessionManager,
+      );
+      record.session?.agent.dispose();
+      record.session = { agent, additionalPrompt };
+    }
+    const session = record.session.agent;
     await session.setModel(selection.model);
     if (input.thinkingLevel) session.setThinkingLevel(input.thinkingLevel);
     signal.throwIfAborted();
@@ -252,7 +259,7 @@ export class PiSessionRegistry {
   }
 
   rename(workspaceId: string, id: string, name: string) {
-    const manager = this.conversations.get(`${workspaceId}/${id}`)?.session?.sessionManager;
+    const manager = this.conversations.get(`${workspaceId}/${id}`)?.session?.agent.sessionManager;
     return renameConversation(this.config.workspaceDir, workspaceId, id, name, manager);
   }
 
@@ -261,7 +268,7 @@ export class PiSessionRegistry {
     const record = this.conversations.get(`${workspaceId}/${id}`);
     if (record?.snapshot.run?.id === runId && record.execution) {
       record.controller?.abort();
-      if (record.session) await record.session.abort();
+      await record.session?.agent.abort();
       await record.execution;
     }
     return record?.snapshot.run ?? this.recent.get(`${workspaceId}/${id}`)?.run ?? null;

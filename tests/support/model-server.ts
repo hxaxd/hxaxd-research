@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 export async function startModelServer() {
+  const systemPrompts: string[] = [];
   const server = createServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/v1/models') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -37,6 +38,8 @@ export async function startModelServer() {
     };
     const text = (content: string | { text?: string }[]) =>
       typeof content === 'string' ? content : content.map(part => part.text ?? '').join('');
+    systemPrompts.push(messages.filter(message => message.role === 'system' || message.role === 'developer')
+      .map(message => text(message.content)).join('\n'));
     const prompt = text(messages.findLast(message => message.role === 'user')!.content);
     if (prompt.includes('[FAIL]')) {
       response.writeHead(401, { 'Content-Type': 'application/json' });
@@ -90,6 +93,7 @@ export async function startModelServer() {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   return {
+    systemPrompts,
     config: {
       providers: {
         test: {

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ModelSettings } from '@/app/models/components/ModelSettings';
 import { notifyModelsChanged } from '@/app/models/components/model-events';
 import { AppearanceSettings } from './AppearanceSettings';
+import { AssistantSettings } from './AssistantSettings';
 import { GeneralSettings } from './GeneralSettings';
 import { settingsEvent, type SettingsTab } from './open-settings';
 import { useAppearance } from './use-appearance';
@@ -94,6 +95,14 @@ export function SettingsDialog() {
                 >
                   {t('models.model')}
                 </button>
+                <button
+                  type="button"
+                  className={tab === 'assistant' ? 'is-active' : undefined}
+                  aria-current={tab === 'assistant' ? 'page' : undefined}
+                  onClick={() => setTab('assistant')}
+                >
+                  {t('settings.assistant')}
+                </button>
               </nav>
               <div className="settings-body">
                 <div className="settings-page" hidden={tab !== 'general'}>
@@ -104,6 +113,9 @@ export function SettingsDialog() {
                 </div>
                 <div className="settings-page" hidden={tab !== 'models'}>
                   <ModelSettings onModelsChanged={modelsChanged} />
+                </div>
+                <div className="settings-page" hidden={tab !== 'assistant'}>
+                  <AssistantSettings />
                 </div>
               </div>
             </div>
