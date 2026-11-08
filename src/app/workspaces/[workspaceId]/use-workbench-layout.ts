@@ -30,10 +30,10 @@ function subscribe(listener: () => void) {
   };
 }
 
-function columns(materials: number, conversation: number) {
+function columns(materials: number, conversation: number, materialsHeader: number) {
   return {
     main: { gridTemplateColumns: `${materials}px 0 minmax(0, 1fr) 0 ${conversation}px` },
-    header: { gridTemplateColumns: `${Math.max(44, materials)}px minmax(0, 1fr) ${Math.max(146, conversation)}px` },
+    header: { gridTemplateColumns: `${materialsHeader}px minmax(0, 1fr) ${Math.max(146, conversation)}px` },
   };
 }
 
@@ -85,7 +85,7 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     Math.min(
       widths.conversation,
       available * 0.6,
-      available - (panels.materials.open ? widths.materials : 0) - 320,
+      available - widths.materials - 320,
     ),
   );
 
@@ -108,7 +108,8 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
   function moveDivider(side: Side, width: number) {
     const element = ref.current!;
     const next = columns(side === 'materials' ? width : panels.materials.open ? widths.materials : 0,
-      side === 'conversation' ? width : panels.conversation.open ? widths.conversation : 0);
+      side === 'conversation' ? width : panels.conversation.open ? widths.conversation : 0,
+      side === 'materials' && width > 0 ? width : widths.materials);
     element.style.gridTemplateColumns = next.main.gridTemplateColumns;
     const header = element.parentElement!.querySelector<HTMLElement>('.app-header')!;
     header.style.gridTemplateColumns = next.header.gridTemplateColumns;
@@ -133,7 +134,7 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
 
   function maximum(side: Side) {
     const other = side === 'materials' ? 'conversation' : 'materials';
-    const room = available - (panels[other].open ? widths[other] : 0) - 320;
+    const room = available - (side === 'conversation' || panels[other].open ? widths[other] : 0) - 320;
     return Math.max(
       minimum[side],
       Math.min(side === 'materials' ? 320 : available * 0.6, room),
@@ -254,7 +255,7 @@ export function useWorkbenchLayout(ref: RefObject<HTMLElement | null>) {
     separator,
     closing,
     dragging,
-    columns: columns(panels.materials.open ? widths.materials : 0, panels.conversation.open ? widths.conversation : 0),
+    columns: columns(panels.materials.open ? widths.materials : 0, panels.conversation.open ? widths.conversation : 0, widths.materials),
     style: {
       '--layout-duration': `${duration}ms`,
       '--materials-content-width': `${widths.materials}px`,

@@ -34,9 +34,12 @@
   display: grid;
 }
 
-.workbench-header .header-materials,
 .workbench-header .header-actions {
   padding-inline: 6px;
+}
+
+.workbench-header .header-materials {
+  padding-inline: 8px 2px;
 }
 
 .workbench-header .header-center {
@@ -47,10 +50,6 @@
 
 .workbench-header .header-materials > .workspace-name {
   flex: 1;
-}
-
-.workbench-header .header-center > .workspace-name {
-  flex: 0 1 220px;
 }
 
 .workspace-name {

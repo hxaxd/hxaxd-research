@@ -20,7 +20,6 @@ export function WorkbenchHeader({
   workspace,
   onRenamed,
   workspaces,
-  identityInCenter = false,
   children,
   start,
   end,
@@ -29,7 +28,6 @@ export function WorkbenchHeader({
   workspace: Workspace | null;
   onRenamed?: (workspace: Workspace) => void;
   workspaces: Workspace[];
-  identityInCenter?: boolean;
   children?: ReactNode;
   start?: ReactNode;
   end?: ReactNode;
@@ -54,9 +52,9 @@ export function WorkbenchHeader({
   ) : <span className="header-identity">{brand}<span className="workspace-name">{t('app.name')}</span></span>;
   return (
     <header className={clsx('app-header', workspace && 'workbench-header')} style={style}>
-      {workspace && <div className="header-materials">{!identityInCenter && identity}{start}</div>}
+      {workspace && <div className="header-materials">{identity}{start}</div>}
       <div className="header-center">
-        {(!workspace || identityInCenter) && identity}
+        {!workspace && identity}
         {children}
       </div>
       <div className="header-actions">

@@ -9,21 +9,15 @@
 
 .pdf-controls {
   display: flex;
-  flex: 1;
-  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2px 6px;
+  gap: 2px;
   min-width: 0;
   color: var(--muted);
 }
 
 .pdf-viewer > .pdf-controls {
-  flex: none;
   flex-wrap: wrap;
-  justify-content: flex-start;
   padding: 5px 10px;
-  min-height: 42px;
 }
 
 .pdf-controls .icon-button {
@@ -32,76 +26,52 @@
   height: 30px;
 }
 
-.pdf-wide {
-  display: inline-flex;
-}
-
-.pdf-options {
+.pdf-controls .pdf-toolbar-extra {
   display: none;
 }
 
-.pdf-options-panel {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  width: min(320px, calc(var(--viewport-width) - 24px));
-  max-height: calc(var(--radix-popover-content-available-height) / var(--ui-scale, 1));
-  overflow: auto;
+@container header-center (min-width: 450px) {
+  .pdf-controls .pdf-toolbar-extra {
+    display: inline-flex;
+  }
 }
 
-.pdf-options-zoom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.928571rem;
+.pdf-menu {
+  width: min(238px, calc(var(--viewport-width) - 24px));
+  max-height: calc(var(--radix-dropdown-menu-content-available-height) / var(--ui-scale, 1));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.pdf-options-scales {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
+.pdf-submenu {
+  width: min(164px, calc(var(--viewport-width) - 24px));
 }
 
-.pdf-options-scales button {
-  min-height: 36px;
-  border-radius: 7px;
-  background: var(--inset);
-  font-size: 0.857143rem;
-}
-
-.pdf-options-scales button:nth-child(-n + 2) {
-  grid-column: span 2;
-}
-
-.pdf-options-scales button[aria-pressed='true'] {
-  background: var(--soft);
-  color: var(--accent);
-}
-
-.pdf-options-panel .preview-modes button {
+.pdf-menu-choice > span:first-of-type {
   flex: 1;
 }
 
-.pdf-controls .choice-trigger {
-  min-height: 30px;
-  font-size: 0.785714rem;
-  padding-inline: 6px;
-  gap: 5px;
+.pdf-menu-choice[data-state='checked'] [data-state='checked'] {
+  display: flex;
+  color: var(--accent);
+}
+
+.pdf-submenu-trigger > span {
+  margin-inline-start: auto;
+  color: var(--muted);
+  font-size: 0.857143rem;
+}
+
+.pdf-menu .menu-item[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .pdf-navigation,
-.pdf-navigation form,
-.pdf-zoom {
+.pdf-navigation form {
   display: flex;
   align-items: center;
   gap: 2px;
-}
-
-.pdf-navigation,
-.pdf-zoom {
-  padding: 2px;
-  border-radius: 9px;
-  background: var(--inset);
 }
 
 .pdf-navigation form {
@@ -126,11 +96,7 @@
 
 .pdf-navigation input:hover,
 .pdf-navigation input:focus {
-  background: var(--paper);
-}
-
-.pdf-zoom {
-  margin-inline: auto;
+  background: var(--hover);
 }
 
 .pdf-stage {
@@ -138,7 +104,6 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: var(--inset);
 }
 
 .pdf-scroll {
@@ -173,23 +138,6 @@
 
 .pdf-inverted .pdfViewer .page {
   filter: invert(90%) hue-rotate(180deg);
-}
-
-.pdf-select-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  color: var(--ink);
-  font-size: 0.857143rem;
-  white-space: nowrap;
-}
-
-.pdf-select-button:hover {
-  background: var(--hover);
 }
 
 .pdf-controls[inert] {
@@ -346,40 +294,7 @@
   color: var(--muted);
 }
 
-@media (pointer: coarse) {
-  .pdf-controls .icon-button,
-  .pdf-controls .choice-trigger {
-    min-width: 44px;
-    min-height: 44px;
-  }
-}
-
-@container (max-width: 560px) {
-  .pdf-controls,
-  .pdf-viewer > .pdf-controls {
-    flex-wrap: nowrap;
-    gap: 2px;
-  }
-  .pdf-viewer > .pdf-controls {
-    padding: 4px;
-  }
-  .pdf-controls .pdf-wide,
-  .pdf-select-button span {
-    display: none;
-  }
-  .pdf-options {
-    display: inline-flex;
-  }
-  .pdf-navigation {
-    flex: none;
-  }
-  .pdf-select-button {
-    min-width: 34px;
-    padding-inline: 0;
-  }
-}
-
-@container (max-width: 300px) {
+@container header-center (max-width: 300px) {
   .pdf-navigation input {
     width: 28px;
   }
@@ -393,21 +308,11 @@
   .pdf-scroll {
     padding: 14px 22px 24px;
   }
-  .pdf-controls .icon-button {
-    min-width: 40px;
-    height: 40px;
-  }
 }
 
 @media (pointer: coarse) {
-  .pdf-controls .icon-button,
-  .pdf-controls .choice-trigger,
-  .pdf-select-button {
+  .pdf-controls .icon-button {
     min-width: 44px;
-    min-height: 44px;
-  }
-  .pdf-options-scales button,
-  .pdf-options-panel .preview-modes button {
     min-height: 44px;
   }
   .pdf-navigation input {

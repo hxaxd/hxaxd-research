@@ -29,7 +29,7 @@ import {
   maxTextQuotes,
   readerRequestSchema,
   type ReadingContext,
-  type DocumentRequest,
+  type PdfPageRequest,
   type ReaderRequest,
   type ViewMode,
   type ImageClip,
@@ -79,7 +79,7 @@ export function Workbench({
   const [conversations, setConversations] = useState(initialConversations);
   const [file, setFile] = useState(initialFile);
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
-  const [readerRequest, setReaderRequest] = useState<DocumentRequest | null>(null);
+  const [pdfPageRequest, setPdfPageRequest] = useState<PdfPageRequest | null>(null);
   const [filesRevision, setFilesRevision] = useState(0);
   const [papersOnly, setPapersOnly] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
@@ -114,25 +114,17 @@ export function Workbench({
     ? {
         path: file,
         ...(/\.(md|markdown|html?)$/i.test(file) ? { mode: viewMode } : {}),
-        ...(file.toLowerCase().endsWith('.pdf')
-          ? { page: pdfPosition?.path === file ? pdfPosition.page : 1 }
-          : {}),
+        ...(pdfPosition?.path === file ? { page: pdfPosition.page } : {}),
       }
     : null;
   const currentConversation = conversations.find(
     (item) => item.id === conversationId,
   );
-  const lastOpened = useRef('');
   const openDocument = useCallback((target: ReadingContext) => {
     setFile(target.path);
     setViewMode(target.mode ?? 'preview');
-    setPdfPosition({ path: target.path, page: target.page ?? 1 });
+    setPdfPageRequest(target.page === undefined ? null : { path: target.path, page: target.page });
     updateQuery('file', target.path);
-    // Reopening the same document at the same place keeps the open viewer instead of reloading it.
-    const key = `${target.path}|${target.mode ?? ''}|${target.page ?? ''}`;
-    if (lastOpened.current === key) return;
-    lastOpened.current = key;
-    setReaderRequest({ ...target, id: crypto.randomUUID() });
   }, []);
 
   const displayDocument = useEffectEvent((request: ReaderRequest) => {
@@ -225,6 +217,10 @@ export function Workbench({
     openDocument({ path });
   }
 
+  function reloadFile() {
+    if (file) setFileRevisions(current => ({ ...current, [file]: (current[file] ?? 0) + 1 }));
+  }
+
   function createdConversation(conversation: Conversation) {
     setConversations((current) => [...current, conversation]);
     selectConversation(conversation.id);
@@ -246,14 +242,13 @@ export function Workbench({
         workspace={workspace}
         onRenamed={setWorkspace}
         workspaces={workspaces}
-        identityInCenter={!materialsOpen}
-        start={<>
+        start={
           <button className="icon-button" aria-label={t(materialsOpen ? 'workspaces.collapseMaterials' : 'workspaces.expandMaterials')}
           title={t(materialsOpen ? 'workspaces.collapseMaterials' : 'workspaces.expandMaterials')}
           aria-expanded={materialsOpen} aria-controls="materials-panel"
           onClick={() => layout.setOpen('materials', !materialsOpen)}>
           {materialsOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-        </button></>}
+        </button>}
         end={conversationOpen ? (
           <div className="conversation-heading">
             <button
@@ -287,7 +282,7 @@ export function Workbench({
         )}
       >
         <FilePreviewHeader workspaceId={workspaceId} path={file} mode={viewMode} onModeChange={setViewMode}
-          onReload={() => setFileRevisions(current => ({ ...current, [file!]: (current[file!] ?? 0) + 1 }))}
+          onReload={reloadFile}
           toolbarRef={setReaderTools} />
       </WorkbenchHeader>
       <CommandPalette workspaceId={workspaceId} workspaces={workspaces} revision={filesRevision} onOpenFile={openFile}
@@ -336,10 +331,14 @@ export function Workbench({
         <FilePreview
           workspaceId={workspaceId}
           path={file}
+          onReload={reloadFile}
           revision={(fileRevisions[file ?? ''] ?? 0) + (fileRevisions[''] ?? 0)}
-          onPageChange={(page) => setPdfPosition({ path: file!, page })}
+          onPageChange={(page, request) => {
+            setPdfPosition({ path: file!, page });
+            if (request) setPdfPageRequest(current => current === request ? null : current);
+          }}
           mode={viewMode}
-          request={readerRequest}
+          pageRequest={pdfPageRequest}
           onOpenFile={openFile}
           onBrowse={() => layout.setOpen('materials', true)}
           onCapture={async clip => {

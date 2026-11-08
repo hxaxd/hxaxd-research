@@ -2,9 +2,6 @@
   display: grid;
   grid-template-areas: 'materials materials-handle reader conversation-handle conversation';
   min-height: 0;
-  height: calc(var(--viewport-height) - var(--header-height) - 12px);
-  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
-  border-radius: 12px;
   overflow: clip;
   background: var(--reader);
   transition: grid-template-columns var(--layout-duration) cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -86,18 +83,21 @@
 }
 
 .workspace-shell {
-  --header-height: 48px;
-  padding: 4px;
+  --header-height: 46px;
+  display: grid;
+  grid-template-rows: var(--header-height) minmax(0, 1fr);
+  margin: 4px;
+  padding: 0;
   min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  border-radius: 12px;
+  background: var(--paper);
   overflow: clip;
-  width: var(--viewport-width);
+  width: calc(var(--viewport-width) - 8px);
+  height: calc(var(--viewport-height) - 8px);
 }
 
 .workspace-shell > .app-header {
-  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  background: var(--paper);
   padding: 0;
   gap: 0;
   transition: grid-template-columns var(--layout-duration) cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -110,29 +110,9 @@
   background: var(--sidebar);
 }
 
-.workspace-shell > .app-header .header-materials {
-  border-top-left-radius: 12px;
-}
-
-.workspace-shell > .app-header .header-actions {
-  border-top-right-radius: 12px;
-}
-
 .workspace-shell[data-materials-open='false'] > .app-header .header-materials,
 .workspace-shell[data-conversation-open='false'] > .app-header .header-actions {
   background: var(--paper);
-}
-
-.workspace-shell > .workbench {
-  height: calc(var(--viewport-height) - var(--header-height) - 8px);
-  border-top: 0;
-  border-radius: 0 0 12px 12px;
-}
-
-.workspace-shell .workspace-name {
-  flex-basis: 204px;
-  width: 204px;
-  max-width: 204px;
 }
 
 .conversation-heading {
@@ -145,14 +125,6 @@
 
 .workspace-shell:has(.is-resizing) > .app-header {
   transition: none;
-}
-
-@container (max-width: 400px) {
-  .workspace-shell .workspace-name {
-    flex-basis: 172px;
-    width: 172px;
-    max-width: 172px;
-  }
 }
 
 .workbench > [hidden] {

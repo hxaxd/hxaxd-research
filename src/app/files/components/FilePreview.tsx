@@ -16,7 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
-import type { ImageClip, DocumentRequest, ViewMode, TextQuote } from '../schema';
+import type { ImageClip, PdfPageRequest, ViewMode, TextQuote } from '../schema';
 
 import { PdfViewer } from './PdfViewer';
 import { TextPreview } from './TextPreview';
@@ -52,8 +52,9 @@ export function FilePreview({
   revision,
   onPageChange,
   onBrowse,
+  onReload,
   mode,
-  request,
+  pageRequest,
   onOpenFile,
   onCapture,
   onQuote,
@@ -61,10 +62,11 @@ export function FilePreview({
   workspaceId: string;
   path: string | null;
   revision: number;
-  onPageChange: (page: number) => void;
+  onPageChange: (page: number, request?: PdfPageRequest) => void;
   onBrowse: () => void;
+  onReload: () => void;
   mode: ViewMode;
-  request: DocumentRequest | null;
+  pageRequest: PdfPageRequest | null;
   onOpenFile: (path: string) => void;
   onCapture: (clip: ImageClip) => Promise<void>;
   onQuote: (quote: TextQuote) => Promise<void>;
@@ -96,10 +98,12 @@ export function FilePreview({
   return (
     <section className="reader-panel" id="reader-panel" aria-label={t('files.reader')}
       data-resize-mode={extension === 'pdf' ? 'deferred' : undefined}>
-      <DocumentSelection key={`${path}:${mode}:${revision}:${request?.id ?? ''}`}
+      <DocumentSelection key={`${path}:${mode}:${revision}`}
         reading={{ path, ...((markdown || html) ? { mode } : {}) }} onQuote={onQuote}>
         {extension === 'pdf' ? (
-          <PdfViewer url={url} onPageChange={onPageChange} initialPage={request?.page ?? 1} onCapture={clip => onCapture({ ...clip, path })} />
+          <PdfViewer url={url} onPageChange={onPageChange} pageRequest={pageRequest?.path === path ? pageRequest : null}
+            onCapture={clip => onCapture({ ...clip, path })}
+            fileActions={<FileMenuItems url={url} onReload={onReload} />} />
         ) : html && mode === 'preview' ? (
           <iframe className="html-preview" title={t('files.htmlPreview')} src={`${previewUrl}?revision=${revision}`} allowFullScreen referrerPolicy="no-referrer" />
         ) : markdown && mode === 'preview' ? (
@@ -128,6 +132,18 @@ export function FilePreview({
   );
 }
 
+function FileMenuItems({ url, onReload }: { url: string; onReload: () => void }) {
+  const t = useTranslations();
+  return <>
+    <Menu.Item className="menu-item" onSelect={onReload}>
+      <RefreshCw size={16} aria-hidden="true" />{t('files.reload')}
+    </Menu.Item>
+    <Menu.Item className="menu-item" asChild>
+      <a href={`${url}&download=1`}><Download size={16} aria-hidden="true" />{t('files.download')}</a>
+    </Menu.Item>
+  </>;
+}
+
 export function FilePreviewHeader({ workspaceId, path, mode, onModeChange, onReload, toolbarRef }: {
   workspaceId: string;
   path: string | null;
@@ -145,21 +161,14 @@ export function FilePreviewHeader({ workspaceId, path, mode, onModeChange, onRel
       <button aria-pressed={mode === 'source'} onClick={() => onModeChange('source')}>{t('files.source')}</button>
     </div>}
     <div className="reader-tools" ref={toolbarRef} />
-    {path && <Menu.Root modal={false}>
+    {path && !/\.pdf$/i.test(path) && <Menu.Root modal={false}>
       <Menu.Trigger className="icon-button" aria-label={t('files.actions')} title={t('files.actions')}>
         <Ellipsis size={18} />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content className="menu-surface" align="end" sideOffset={6}>
           <Menu.Label className="menu-label file-menu-name">{path}</Menu.Label>
-          <Menu.Item className="menu-item" onSelect={onReload}>
-            <RefreshCw size={16} aria-hidden="true" />{t('files.reload')}
-          </Menu.Item>
-          <Menu.Item className="menu-item" asChild>
-            <a href={`/api/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}&download=1`}>
-              <Download size={16} aria-hidden="true" />{t('files.download')}
-            </a>
-          </Menu.Item>
+          <FileMenuItems url={`/api/workspaces/${workspaceId}/file?path=${encodeURIComponent(path)}`} onReload={onReload} />
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>}

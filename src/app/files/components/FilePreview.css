@@ -11,7 +11,7 @@
 }
 
 .reader-title {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -26,16 +26,6 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-}
-
-@container header-center (max-width: 760px) {
-  .reader-tools .pdf-wide,
-  .reader-tools .pdf-select-button span {
-    display: none;
-  }
-  .reader-tools .pdf-options {
-    display: inline-flex;
-  }
 }
 
 

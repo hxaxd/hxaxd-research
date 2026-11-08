@@ -6,17 +6,16 @@ import { ReaderToolbar } from './ReaderToolbar';
 
 
 import { useTranslations } from 'use-intl';
-import * as Popover from '@radix-ui/react-popover';
+import * as Menu from '@radix-ui/react-dropdown-menu';
 
-import { ChevronLeft, ChevronRight, Contrast, FileText, ListTree, Minus, Plus, Scan, SlidersHorizontal } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Ellipsis, FileText, ListTree, Minus, Plus, Scan } from 'lucide-react';
 import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist';
 import { clsx } from 'clsx';
 import type { PDFViewer as Viewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs';
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { useAppearance } from '@/app/settings/components/use-appearance';
-import { ChoiceSelect } from '@/shared/ui/ChoiceSelect';
-import type { ImageClip } from '../schema';
+import type { ImageClip, PdfPageRequest } from '../schema';
 import { PdfRegionSelection } from './PdfRegionSelection';
 
 type Outline = NonNullable<Awaited<ReturnType<PDFDocumentProxy['getOutline']>>>;
@@ -52,7 +51,20 @@ function OutlineItems({ items, navigate }: { items: Outline; navigate: (dest: st
   );
 }
 
-export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { url: string; onPageChange: (page: number) => void; initialPage?: number; onCapture: (clip: Omit<ImageClip, 'path'>) => Promise<void> }) {
+function PdfMenuChoice({ value, disabled, children }: { value: string; disabled?: boolean; children: ReactNode }) {
+  return <Menu.RadioItem className="menu-item pdf-menu-choice" value={value} disabled={disabled}>
+    <span>{children}</span>
+    <Menu.ItemIndicator><Check size={16} aria-hidden="true" /></Menu.ItemIndicator>
+  </Menu.RadioItem>;
+}
+
+export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActions }: {
+  url: string;
+  onPageChange: (page: number, request?: PdfPageRequest) => void;
+  pageRequest: PdfPageRequest | null;
+  onCapture: (clip: Omit<ImageClip, 'path'>) => Promise<void>;
+  fileActions: ReactNode;
+}) {
   const t = useTranslations();
   const { resolvedMode } = useAppearance();
   const [page, setPage] = useState(1);
@@ -67,8 +79,19 @@ export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { u
   const scroll = useRef<HTMLDivElement>(null);
   const pages = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
-  const notifyPage = useEffectEvent(onPageChange);
-  const inverted = (colors ?? resolvedMode) === 'dark';
+  const pageKey = `research-pdf-page:${url}`;
+  const currentRequest = useEffectEvent(() => pageRequest);
+  const reportPage = useEffectEvent((pageNumber: number, request?: PdfPageRequest) => {
+    setPage(pageNumber);
+    try {
+      localStorage.setItem(pageKey, String(pageNumber));
+    } catch {
+      // Navigation still works when browser storage is unavailable.
+    }
+    onPageChange(pageNumber, request);
+  });
+  const colorMode = colors === 'light' || colors === 'dark' ? colors : 'appearance';
+  const inverted = (colorMode === 'appearance' ? resolvedMode : colorMode) === 'dark';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,6 +100,7 @@ export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { u
     let task: PDFDocumentLoadingTask | undefined;
     let observer: ResizeObserver | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    let ready = false;
     void (async () => {
       const library = await import('pdfjs-dist');
       const { PDFViewer, PDFLinkService, EventBus, ScrollMode } = await import('pdfjs-dist/web/pdf_viewer.mjs');
@@ -96,18 +120,27 @@ export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { u
       links.setViewer(viewer);
       engine.current = { viewer, links };
       eventBus.on('pagesinit', () => {
+        const request = currentRequest();
+        let savedPage = 1;
+        if (!request) {
+          try {
+            const saved = Number(localStorage.getItem(pageKey));
+            if (Number.isSafeInteger(saved) && saved > 0) savedPage = saved;
+          } catch {
+            // Start on the first page when browser storage is unavailable.
+          }
+        }
         const savedMode = localStorage.getItem('research-pdf-mode') ?? 'continuous';
         setMode(savedMode);
         viewer!.scrollMode = savedMode === 'page' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
         viewer!.currentScaleValue = 'page-width';
         setCount(viewer!.pagesCount);
-        viewer!.currentPageNumber = Math.min(initialPage, viewer!.pagesCount);
-        setPage(viewer!.currentPageNumber);
-        notifyPage(viewer!.currentPageNumber);
+        viewer!.currentPageNumber = Math.min(request?.page ?? savedPage, viewer!.pagesCount);
+        ready = true;
+        reportPage(viewer!.currentPageNumber, request ?? undefined);
       });
       eventBus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => {
-        setPage(pageNumber);
-        notifyPage(pageNumber);
+        if (ready && !controller.signal.aborted) reportPage(pageNumber);
       });
       eventBus.on('scalechanging', ({ scale, presetValue }: { scale: number; presetValue?: string }) => {
         setScale(presetValue || String(Math.round(scale * 100)));
@@ -190,9 +223,14 @@ export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { u
         }
       })();
     };
-  // The initial page only changes with a new request, which remounts the viewer through FilePreview's key.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url]);
+  }, [url, pageKey]);
+
+  useEffect(() => {
+    const viewer = engine.current?.viewer;
+    if (!pageRequest || !viewer?.pagesCount) return;
+    viewer.scrollPageIntoView({ pageNumber: Math.min(pageRequest.page, viewer.pagesCount) });
+    reportPage(viewer.currentPageNumber, pageRequest);
+  }, [pageRequest]);
 
   function jumpTo(next: number) {
     engine.current!.viewer.currentPageNumber = Math.max(1, Math.min(count, next));
@@ -205,21 +243,34 @@ export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { u
   function changeScale(next: string) {
     engine.current!.viewer.currentScaleValue = ['page-width', 'page-fit'].includes(next) ? next : String(Number(next) / 100);
   }
-  function invertColors() {
-    localStorage.setItem('research-pdf-colors', inverted ? 'light' : 'dark');
+  function changeColors(next: string) {
+    if (next === 'appearance') localStorage.removeItem('research-pdf-colors');
+    else localStorage.setItem('research-pdf-colors', next);
     window.dispatchEvent(new Event('research-pdf-colors'));
   }
-  const scales = [
-    { id: 'page-width', name: t('files.fitWidth') }, { id: 'page-fit', name: t('files.fitPage') },
-    ...[50, 75, 100, 125, 150, 200, 300].map(value => ({ id: String(value), name: `${value}%` })),
+  function startCapture() {
+    setOutlineOpen(false);
+    setSelecting(true);
+  }
+  const fitScales = [{ id: 'page-width', name: t('files.fitWidth') }, { id: 'page-fit', name: t('files.fitPage') }];
+  const zoomLevels = ['50', '75', '100', '125', '150', '200', '300'];
+  if (/^\d+$/.test(scale) && !zoomLevels.includes(scale)) {
+    zoomLevels.push(scale);
+    zoomLevels.sort((a, b) => Number(a) - Number(b));
+  }
+  const scaleLabel = fitScales.find(item => item.id === scale)?.name ?? `${scale}%`;
+  const colorChoices = [
+    { id: 'appearance', name: t('files.followAppearance') },
+    { id: 'light', name: t('settings.light') },
+    { id: 'dark', name: t('settings.dark') },
   ];
-  if (!scales.some(item => item.id === scale)) scales.push({ id: scale, name: `${scale}%` });
+  const colorLabel = colorChoices.find(item => item.id === colorMode)!.name;
 
   return (
     <div className={clsx('pdf-viewer', `pdf-mode-${mode}`, inverted && 'pdf-inverted')}>
       <ReaderToolbar>
       <div className="pdf-controls" role="toolbar" aria-label={t('files.pdfTools')} inert={selecting}>
-        <button className="icon-button" aria-label={t('files.outline')} title={t('files.outline')} aria-expanded={outlineOpen}
+        <button className="icon-button pdf-toolbar-extra" aria-label={t('files.outline')} title={t('files.outline')} aria-expanded={outlineOpen} disabled={!count}
           onClick={() => setOutlineOpen(value => !value)}><ListTree size={17} /></button>
         <div className="pdf-navigation">
           <button className="icon-button" aria-label={t('files.previousPage')} disabled={!count || page <= 1} onClick={() => jumpTo(page - 1)}><ChevronLeft size={17} /></button>
@@ -229,34 +280,58 @@ export function PdfViewer({ url, onPageChange, initialPage = 1, onCapture }: { u
           </form>
           <button className="icon-button" aria-label={t('files.nextPage')} disabled={!count || page >= count} onClick={() => jumpTo(page + 1)}><ChevronRight size={17} /></button>
         </div>
-        <div className="pdf-zoom pdf-wide">
-          <button className="icon-button" aria-label={t('files.zoomOut')} disabled={!count} onClick={() => engine.current!.viewer.decreaseScale()}><Minus size={16} /></button>
-          <ChoiceSelect label={t('files.zoom')} value={scale} items={scales} onChange={changeScale} disabled={!count} />
-          <button className="icon-button" aria-label={t('files.zoomIn')} disabled={!count} onClick={() => engine.current!.viewer.increaseScale()}><Plus size={16} /></button>
-        </div>
-        <span className="pdf-wide"><ChoiceSelect label={t('files.scrollMode')} value={mode} items={[{ id: 'continuous', name: t('files.continuous') }, { id: 'page', name: t('files.singlePage') }]} onChange={changeMode} disabled={!count} /></span>
-        <button className="icon-button pdf-wide" aria-label={t('files.invert')} title={t('files.invert')} aria-pressed={inverted} onClick={invertColors}><Contrast size={17} /></button>
-        <button className="pdf-select-button" disabled={!count} aria-label={t('files.capture')} title={t('files.capture')} aria-pressed={selecting} onClick={() => { setOutlineOpen(false); setSelecting(true); }}><Scan size={17} aria-hidden="true" /><span>{t('files.capture')}</span></button>
-        <Popover.Root>
-          <Popover.Trigger className="icon-button pdf-options" aria-label={t('files.pdfOptions')} title={t('files.pdfOptions')} disabled={!count}><SlidersHorizontal size={17} /></Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Content className="pdf-options-panel menu-surface" side="bottom" align="end" sideOffset={8} collisionPadding={10} aria-label={t('files.pdfOptions')}>
-              <div className="pdf-options-zoom">
-                <button className="icon-button" aria-label={t('files.zoomOut')} onClick={() => engine.current!.viewer.decreaseScale()}><Minus size={16} /></button>
-                <span>{scales.find(item => item.id === scale)!.name}</span>
-                <button className="icon-button" aria-label={t('files.zoomIn')} onClick={() => engine.current!.viewer.increaseScale()}><Plus size={16} /></button>
-              </div>
-              <div className="pdf-options-scales" role="group" aria-label={t('files.zoom')}>
-                {scales.map(item => <button key={item.id} aria-pressed={scale === item.id} onClick={() => changeScale(item.id)}>{item.name}</button>)}
-              </div>
-              <div className="preview-modes" role="group" aria-label={t('files.scrollMode')}>
-                <button aria-pressed={mode === 'continuous'} onClick={() => changeMode('continuous')}>{t('files.continuous')}</button>
-                <button aria-pressed={mode === 'page'} onClick={() => changeMode('page')}>{t('files.singlePage')}</button>
-              </div>
-              <button className="menu-item" aria-pressed={inverted} onClick={invertColors}><Contrast size={17} aria-hidden="true" />{t('files.invert')}</button>
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover.Root>
+        <button className="icon-button pdf-toolbar-extra" disabled={!count} aria-label={t('files.capture')} title={t('files.capture')} onClick={startCapture}>
+          <Scan size={17} aria-hidden="true" />
+        </button>
+        <Menu.Root modal={false}>
+          <Menu.Trigger className="icon-button" aria-label={t('files.pdfOptions')} title={t('files.pdfOptions')}><Ellipsis size={18} /></Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content className="menu-surface pdf-menu" align="end" sideOffset={6} collisionPadding={10} aria-label={t('files.pdfOptions')}>
+              <Menu.RadioGroup value={mode} onValueChange={changeMode} aria-label={t('files.scrollMode')}>
+                <PdfMenuChoice value="continuous" disabled={!count}>{t('files.continuous')}</PdfMenuChoice>
+                <PdfMenuChoice value="page" disabled={!count}>{t('files.singlePage')}</PdfMenuChoice>
+              </Menu.RadioGroup>
+              <Menu.Separator className="menu-separator" />
+              <Menu.RadioGroup value={scale} onValueChange={changeScale} aria-label={t('files.zoom')}>
+                {fitScales.map(item => <PdfMenuChoice key={item.id} value={item.id} disabled={!count}>{item.name}</PdfMenuChoice>)}
+              </Menu.RadioGroup>
+              <Menu.Sub>
+                <Menu.SubTrigger className="menu-item pdf-submenu-trigger" disabled={!count}>
+                  {t('files.zoom')}<span>{scaleLabel}</span><ChevronRight size={14} aria-hidden="true" />
+                </Menu.SubTrigger>
+                <Menu.Portal>
+                  <Menu.SubContent className="menu-surface pdf-menu pdf-submenu" sideOffset={6} collisionPadding={10}>
+                    <Menu.Item className="menu-item" onSelect={() => engine.current!.viewer.decreaseScale()}><Minus size={16} aria-hidden="true" />{t('files.zoomOut')}</Menu.Item>
+                    <Menu.Item className="menu-item" onSelect={() => engine.current!.viewer.increaseScale()}><Plus size={16} aria-hidden="true" />{t('files.zoomIn')}</Menu.Item>
+                    <Menu.Separator className="menu-separator" />
+                    <Menu.RadioGroup value={scale} onValueChange={changeScale} aria-label={t('files.zoom')}>
+                      {zoomLevels.map(level => <PdfMenuChoice key={level} value={level}>{level}%</PdfMenuChoice>)}
+                    </Menu.RadioGroup>
+                  </Menu.SubContent>
+                </Menu.Portal>
+              </Menu.Sub>
+              <Menu.Separator className="menu-separator" />
+              <Menu.Item className="menu-item" disabled={!count} onSelect={() => setOutlineOpen(value => !value)}>
+                <ListTree size={16} aria-hidden="true" />{t(outlineOpen ? 'files.closeOutline' : 'files.outline')}
+              </Menu.Item>
+              <Menu.Item className="menu-item" disabled={!count} onSelect={startCapture}><Scan size={16} aria-hidden="true" />{t('files.capture')}</Menu.Item>
+              <Menu.Sub>
+                <Menu.SubTrigger className="menu-item pdf-submenu-trigger">
+                  {t('files.pageColors')}<span>{colorLabel}</span><ChevronRight size={14} aria-hidden="true" />
+                </Menu.SubTrigger>
+                <Menu.Portal>
+                  <Menu.SubContent className="menu-surface pdf-menu pdf-submenu" sideOffset={6} collisionPadding={10}>
+                    <Menu.RadioGroup value={colorMode} onValueChange={changeColors} aria-label={t('files.pageColors')}>
+                      {colorChoices.map(item => <PdfMenuChoice key={item.id} value={item.id}>{item.name}</PdfMenuChoice>)}
+                    </Menu.RadioGroup>
+                  </Menu.SubContent>
+                </Menu.Portal>
+              </Menu.Sub>
+              <Menu.Separator className="menu-separator" />
+              {fileActions}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
       </ReaderToolbar>
       <div className="pdf-stage">

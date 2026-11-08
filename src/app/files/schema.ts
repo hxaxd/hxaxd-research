@@ -44,7 +44,7 @@ export const readerRequestSchema = readingContextSchema.extend({
   id: z.string(),
   conversationId: z.uuid(),
 });
-export type DocumentRequest = ReadingContext & { id: string };
+export type PdfPageRequest = { path: string; page: number };
 export type ReaderRequest = z.infer<typeof readerRequestSchema>;
 export type ViewMode = 'source' | 'preview';
 export const importResultSchema = z.object({
