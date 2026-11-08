@@ -13,14 +13,26 @@ import { Markdown } from '@/shared/ui/Markdown';
 import type { ReadingContext } from '@/app/files/schema';
 import { resolveWorkspaceLink } from '@/app/files/workspace-link';
 
-import type { ChatMessage, ConversationSnapshot } from '../schema';
+import type { ChatMessage, ConversationSnapshot, SendMessage } from '../schema';
+import type { Delivery } from './use-message-delivery';
 import { ToolExecutionGroup } from './ToolExecutionMessage';
 import { ImageAttachment } from './ImageAttachment';
 import { QuestionMessage } from './QuestionMessage';
 
-export const ConversationMessages = memo(function ConversationMessages({ snapshot, workspaceId, onOpenDocument, url }: {
+const deliveryLabels = {
+  sending: 'conversations.sending',
+  retrying: 'conversations.connectionRetry',
+  accepted: 'conversations.preparing',
+  stopping: 'conversations.stoppingSend',
+  stopped: 'conversations.sendStopped',
+  failed: 'conversations.sendFailed',
+} as const;
+
+export const ConversationMessages = memo(function ConversationMessages({ snapshot, outgoing, workspaceId, onStopDelivery, onOpenDocument, url }: {
   snapshot: ConversationSnapshot | null;
+  outgoing?: Delivery[];
   workspaceId: string;
+  onStopDelivery: (input: SendMessage) => void;
   onOpenDocument: (target: ReadingContext) => void;
   url: string;
 }) {
@@ -28,6 +40,9 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
   const end = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const messages = snapshot?.messages ?? [];
+  const pending = outgoing?.filter(({ input }) =>
+    !messages.some(message => message.id === input.id) && !snapshot?.queue.some(message => message.id === input.id)) ?? [];
+  const deliveries = new Map(pending.map(item => [item.input.id, item]));
   const blocks: (ChatMessage | ChatMessage[])[] = [];
   for (const message of messages) {
     if (message.role === 'assistant' && !message.text.trim()) continue;
@@ -37,13 +52,22 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
       else blocks.push([message]);
     } else blocks.push(message);
   }
+  for (const { input } of pending) {
+    blocks.push({
+      id: input.id,
+      role: 'user',
+      text: input.text,
+      quotes: input.quotes,
+      images: input.clips?.map(({ data }) => ({ url: `data:image/png;base64,${data}` })),
+    });
+  }
   const status = snapshot?.run?.status;
   const running = status === 'accepted' || status === 'running';
   const last = messages.at(-1);
   const streamingId = running && last?.role === 'assistant' ? last.id : null;
   useEffect(() => {
     if (following.current) end.current?.scrollIntoView({ block: 'end' });
-  }, [snapshot?.revision]);
+  }, [snapshot?.revision, outgoing]);
   return (
     <div
       className="conversation-messages"
@@ -52,14 +76,15 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
         following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
       }}
     >
-      {!messages.length && (
+      {!blocks.length && (
         <div className="chat-empty">
           <MessageCircle size={26} strokeWidth={1.3} />
           <h3>{t('conversations.empty')}</h3>
         </div>
       )}
-      {blocks.map((message) =>
-          Array.isArray(message) ? (
+      {blocks.map((message) => {
+        const delivery = Array.isArray(message) ? undefined : deliveries.get(message.id);
+        return Array.isArray(message) ? (
             <ToolExecutionGroup key={message[0].id} messages={message} />
           ) : message.question ? (
             <QuestionMessage key={message.id} question={message.question} url={url} />
@@ -98,15 +123,25 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
                   streaming={message.role === 'assistant' && message.id === streamingId}
                 >{message.text || '…'}</Markdown>
               </div>
+              {delivery && <div className="message-delivery">
+                <span role={delivery.status === 'failed' ? 'alert' : 'status'}>
+                  {t(deliveryLabels[delivery.status])}{delivery.error ? ` · ${delivery.error}` : ''}
+                </span>
+                {(delivery.status === 'sending' || delivery.status === 'retrying' || delivery.status === 'accepted') &&
+                  <button type="button" className="text-action" onClick={() => onStopDelivery(delivery.input)}>
+                    {t('common.stop')}
+                  </button>}
+              </div>}
             </article>
-          ),
-        )}
-      {running && (
+          );
+        })}
+      {running && !pending.some(item => item.input.id === snapshot?.run?.id) && (
         <div className="run-status" role="status">
           <span className="status-dot running" />
-          {messages.some(message => message.question && message.question.answer === undefined)
-            ? t('conversations.waitingAnswer')
-            : status === 'accepted' ? t('conversations.preparing') : t('conversations.responding')}
+          {snapshot?.run?.retrying ? t('conversations.modelConnectionRetry')
+            : messages.some(message => message.question && message.question.answer === undefined)
+              ? t('conversations.waitingAnswer')
+              : status === 'accepted' ? t('conversations.preparing') : t('conversations.responding')}
         </div>
       )}
       {status === 'cancelled' && (

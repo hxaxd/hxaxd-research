@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { POST as create, GET as list } from '@/app/api/workspaces/[workspaceId]/conversations/route';
 import { GET as get, PATCH as rename } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/route';
 import { POST as send } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/messages/route';
+import { DELETE as removeQueued, POST as resumeQueue } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/queue/route';
 import { GET as events } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/events/route';
 import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/images/route';
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
@@ -61,6 +62,10 @@ test('file editing persists, duplicate sends do not repeat work, and conversatio
   restartApp();
   expect(await (await list(request('/conversations'), workspaceContext(app.workspace.id))).json()).toContainEqual(expect.objectContaining({ id: conversationId, name: '新标题' }));
   expect((await snapshot()).messages).toEqual(first.messages);
+  expect(first.messages.find(item => item.role === 'user')?.id).toBe(id);
+  expect(await (await message('[EDIT]', { id })).json()).toEqual({ id, status: 'received' });
+  expect((await message('changed', { id })).status).toBe(409);
+  expect((await snapshot()).messages).toEqual(first.messages);
   expect((await send(request('/messages', 'POST', { id: randomUUID(), text: 'hello', model: 'test/test-model' }), context(randomUUID()))).status).toBe(404);
 });
 
@@ -97,6 +102,45 @@ test('an accepted message can be retried after its reference is removed', async 
   expect((await message('New request', { reading: extra.reading })).status).toBe(404);
 });
 
+test('queued messages wait for the current run, execute in order, and can be removed before sending', async () => {
+  await message('[ASK]');
+  await expect.poll(async () => (await snapshot()).messages.find(item => item.question)?.question).toBeDefined();
+  const pendingQuestion = (await snapshot()).messages.find(item => item.question)!.question!;
+  const id = randomUUID();
+  const extra = { id, queueIfBusy: true };
+  const first = { id, text: 'First queued message', status: 'queued' };
+  expect(await (await message(first.text, extra)).json()).toEqual(first);
+  expect(await (await message(first.text, extra)).json()).toEqual(first);
+  expect((await message('Different content', extra)).status).toBe(409);
+  const removed = await (await message('Remove this', { queueIfBusy: true })).json();
+  const last = await (await message('Last queued message', { queueIfBusy: true })).json();
+  expect((await snapshot()).queue.map(item => item.id)).toEqual([id, removed.id, last.id]);
+  expect(await (await removeQueued(request(`/queue?id=${removed.id}`, 'DELETE'), context())).json()).toEqual({ removed: true });
+  expect(model.userPrompts).toEqual(['[ASK]']);
+  await answer(request('/answers', 'POST', { id: pendingQuestion.id, answer: '当前助手' }), context());
+  await expect.poll(async () => (await snapshot()).run).toMatchObject({ id: last.id, status: 'completed' });
+  const result = await snapshot();
+  expect(result.queue).toEqual([]);
+  expect(result.messages.filter(item => item.role === 'user').map(item => item.text))
+    .toEqual(['[ASK]', first.text, last.text]);
+  expect(await (await message(first.text, extra)).json()).toMatchObject({ id, status: 'completed' });
+  expect((await snapshot()).messages).toEqual(result.messages);
+});
+
+test('stopping the current run pauses queued messages until they are resumed', async () => {
+  const run = await (await message('[SLOW]')).json();
+  await expect.poll(async () => (await snapshot()).run?.status).toBe('running');
+  await writeFile(path.join(app.config.workspaceDir, app.workspace.id, 'queued.md'), '# Queued notes');
+  const queued = await (await message('[READING]', { queueIfBusy: true, reading: { path: 'queued.md' } })).json();
+  expect(await (await stop(request('/stop', 'POST', { id: run.id }), context())).json())
+    .toMatchObject({ id: run.id, status: 'cancelled' });
+  expect((await snapshot()).queue).toEqual([queued]);
+  expect(model.userPrompts).not.toContain('[READING]');
+  expect(await (await resumeQueue(request('/queue', 'POST'), context())).json()).toMatchObject({ id: queued.id });
+  await expect.poll(async () => (await snapshot()).run).toMatchObject({ id: queued.id, status: 'completed' });
+  expect(JSON.parse((await snapshot()).messages.at(-1)!.text).reading).toEqual({ path: 'queued.md' });
+});
+
 test('stopping an idle conversation is harmless and a missing conversation returns not found', async () => {
   const response = await stop(request('/stop', 'POST', { id: randomUUID() }), context());
   expect(response.status).toBe(200);
@@ -105,6 +149,21 @@ test('stopping an idle conversation is harmless and a missing conversation retur
   expect((await get(request('/conversation'), missing)).status).toBe(404);
   expect((await message('开始讨论')).status).toBe(202);
   expect((await waitForRun()).messages.at(-1)?.text).toBe('测试回答');
+});
+
+test('stopping an unconfirmed send rejects late delivery and removes an already queued copy', async () => {
+  const id = randomUUID();
+  expect((await stop(request('/stop', 'POST', { id, pending: true }), context())).status).toBe(200);
+  expect((await message('Stopped before delivery', { id, queueIfBusy: true })).status).toBe(409);
+  expect((await snapshot()).messages).toEqual([]);
+
+  const run = await (await message('[SLOW]')).json();
+  const queued = { id: randomUUID(), queueIfBusy: true };
+  expect(await (await message('Stopped after delivery', queued)).json()).toMatchObject({ status: 'queued' });
+  expect((await stop(request('/stop', 'POST', { id: queued.id, pending: true }), context())).status).toBe(200);
+  expect((await snapshot()).queue).toEqual([]);
+  expect((await snapshot()).run?.id).toBe(run.id);
+  expect((await message('Stopped after delivery', queued)).status).toBe(409);
 });
 
 test('images remain downloadable from conversation history after the runtime is reloaded', async () => {

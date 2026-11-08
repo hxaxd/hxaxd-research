@@ -12,6 +12,6 @@ export function POST(request: Request, context: Context) {
   return handleApiRequest(request, async () => {
     const { workspaceId, conversationId } = await validatedIds(context);
     const body = stopRunSchema.parse(await request.json());
-    return getAppRuntime().sessions.stop(workspaceId, conversationId, body.id);
+    return getAppRuntime().sessions.stop(workspaceId, conversationId, body.id, body.pending);
   });
 }

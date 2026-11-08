@@ -150,6 +150,53 @@
   margin-bottom: 8px;
 }
 
+.composer-queue {
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--control-line);
+  border-radius: 9px;
+  background: var(--control);
+}
+
+.composer-queue-heading,
+.composer-queue li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.composer-queue-heading {
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 0.857143rem;
+}
+
+.composer-queue ol {
+  margin: 0;
+  padding: 0;
+  max-height: 144px;
+  overflow: auto;
+  list-style: none;
+}
+
+.composer-queue li {
+  border-top: 1px solid var(--control-line);
+}
+
+.composer-queue li span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (pointer: coarse) {
+  .composer-queue button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .composer-voice-preview {
   margin-top: 6px;
   overflow: hidden;

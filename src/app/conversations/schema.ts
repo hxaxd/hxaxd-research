@@ -18,8 +18,9 @@ export const sendMessageSchema = z.object({
   reading: readingContextSchema.nullable().default(null),
   clips: z.array(imageClipSchema).max(maxImageClips).optional(),
   quotes: textQuotesSchema.optional(),
+  queueIfBusy: z.boolean().optional(),
 });
-export const stopRunSchema = z.object({ id: idSchema });
+export const stopRunSchema = z.object({ id: idSchema, pending: z.boolean().optional() });
 export const answerQuestionSchema = z.object({
   id: z.string().min(1),
   answer: z.string().trim().min(1).max(10000).nullable(),
@@ -43,7 +44,12 @@ export const runSchema = z.object({
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   errorCode: z.string().nullable(),
+  retrying: z.boolean(),
 });
+export const queuedMessageSchema = z.object({ id: idSchema, text: z.string(), status: z.literal('queued') });
+export const messageSubmissionSchema = z.union([
+  runSchema, queuedMessageSchema, z.object({ id: idSchema, status: z.literal('received') }),
+]);
 const chatMessageSchema = z.object({
   id: z.string(),
   role: z.enum(['user', 'assistant', 'tool']),
@@ -61,6 +67,7 @@ export const conversationSnapshotSchema = z.object({
   revision: z.number(),
   messages: z.array(chatMessageSchema),
   run: runSchema.nullable(),
+  queue: z.array(queuedMessageSchema),
   error: z.string().nullable(),
 });
 export const conversationEventSchema = z.object({
@@ -69,6 +76,7 @@ export const conversationEventSchema = z.object({
 });
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationRun = z.infer<typeof runSchema>;
+export type QueuedMessage = z.infer<typeof queuedMessageSchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type ConversationSnapshot = z.infer<typeof conversationSnapshotSchema>;
 export type SendMessage = z.infer<typeof sendMessageSchema>;

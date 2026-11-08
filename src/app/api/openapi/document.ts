@@ -14,6 +14,7 @@ import {
   conversationSnapshotSchema,
   createConversationSchema,
   runSchema,
+  messageSubmissionSchema,
   sendMessageSchema,
   stopRunSchema,
   answerQuestionSchema,
@@ -132,10 +133,12 @@ export function generateOpenapi() {
     {
       method: 'post',
       path: `${conversation}/messages`,
-      response: runSchema,
+      response: messageSubmissionSchema,
       body: sendMessageSchema,
       status: 202,
     },
+    { method: 'post', path: `${conversation}/queue`, response: runSchema.nullable() },
+    { method: 'delete', path: `${conversation}/queue`, query: z.object({ id: idSchema }), response: z.object({ removed: z.boolean() }) },
     {
       method: 'post',
       path: `${conversation}/stop`,

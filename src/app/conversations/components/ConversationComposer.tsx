@@ -9,6 +9,7 @@ import { useTranslations } from 'use-intl';
 import {
   ArrowUp,
   BookOpen,
+  ListEnd,
   LoaderCircle,
   Mic,
   Square,
@@ -28,7 +29,7 @@ import { requestJson } from '@/shared/http/request-json';
 
 import type { ThinkingLevel } from '@/app/models/schema';
 
-import type { ConversationRun, SendMessage } from '../schema';
+import type { ConversationRun, QueuedMessage, SendMessage } from '../schema';
 import { ImageAttachment } from './ImageAttachment';
 import { useVoiceInput } from './use-voice-input';
 
@@ -42,8 +43,11 @@ export function ConversationComposer({
   model,
   thinkingLevel,
   run,
+  queue,
   reading,
   connected,
+  delivering,
+  onSend,
   clips,
   onClipsChange,
   quotes,
@@ -55,8 +59,11 @@ export function ConversationComposer({
   model: string;
   thinkingLevel?: ThinkingLevel;
   run: ConversationRun | null;
+  queue: QueuedMessage[];
   reading: ReadingContext | null;
   connected: boolean;
+  delivering: boolean;
+  onSend: (input: SendMessage) => void;
   clips: ImageClip[];
   onClipsChange: Dispatch<SetStateAction<ImageClip[]>>;
   quotes: TextQuote[];
@@ -69,7 +76,6 @@ export function ConversationComposer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [voiceNotice, setVoiceNotice] = useState('');
-  const submission = useRef<{ id: string; content: string } | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const { settings, error: speechError } = useSpeechSettings();
   const active = activeSpeech(settings, t);
@@ -78,9 +84,10 @@ export function ConversationComposer({
   const canSend =
     (text.trim() || clips.length || quotes.length) &&
     model &&
-    connected &&
+    !delivering &&
     voice.state === 'idle' &&
     (!clips.length || supportsImages);
+  const sendLabel = t(running || queue.length ? 'conversations.queueMessage' : 'conversations.sendMessage');
 
   function openModelSettings() {
     openSettings('models');
@@ -124,37 +131,33 @@ export function ConversationComposer({
     void voice.start(active);
   }
 
-  async function send() {
-    if (running || submitting || !canSend) return;
-    const sentClips = clips;
-    const sentQuotes = quotes;
-    const payload = {
+  async function runAction(action: () => Promise<unknown>) {
+    setSubmitting(true);
+    setError('');
+    try {
+      await action();
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function send() {
+    if (submitting || !canSend) return;
+    onSend({
+      id: crypto.randomUUID(),
       text: text.trim() || (quotes.length ? t('conversations.explainQuote') : t('conversations.explainImage')),
       model,
       thinkingLevel,
       reading,
       clips,
       quotes,
-    } satisfies Omit<SendMessage, 'id'>;
-    const content = JSON.stringify(payload);
-    if (!submission.current || submission.current.content !== content)
-      submission.current = { id: crypto.randomUUID(), content };
-    setSubmitting(true);
-    setError('');
-    try {
-      await requestJson(`${url}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ id: submission.current.id, ...payload }),
-      });
-      setText('');
-      onClipsChange(current => current.filter(clip => !sentClips.includes(clip)));
-      onQuotesChange(current => current.filter(quote => !sentQuotes.includes(quote)));
-      submission.current = null;
-    } catch (error) {
-      setError((error as Error).message);
-    } finally {
-      setSubmitting(false);
-    }
+      queueIfBusy: true,
+    });
+    setText('');
+    onClipsChange([]);
+    onQuotesChange([]);
   }
 
   return (
@@ -177,6 +180,25 @@ export function ConversationComposer({
           </button>
         </div>
       )}
+      {!!queue.length && <section className="composer-queue" aria-label={t('conversations.queuedMessages')}>
+        <div className="composer-queue-heading">
+          <span role="status">{t(running ? 'conversations.queuedMessages' : 'conversations.queuePaused')} · {queue.length}</span>
+          {!running && <button className="text-action" type="button" disabled={submitting || !connected}
+            onClick={() => void runAction(() => requestJson(`${url}/queue`, { method: 'POST' }))}>
+            {t('conversations.resumeQueue')}
+          </button>}
+        </div>
+        <ol>
+          {queue.map((item, index) => <li key={item.id}>
+            <span title={item.text}>{item.text}</span>
+            <button className="icon-button" type="button" disabled={submitting || !connected}
+              aria-label={t('conversations.removeQueued', { value0: index + 1 })}
+              onClick={() => void runAction(() => requestJson(`${url}/queue?id=${item.id}`, { method: 'DELETE' }))}>
+              <X size={16} />
+            </button>
+          </li>)}
+        </ol>
+      </section>}
       {!!quotes.length && <div className="composer-quotes" aria-label={t('conversations.pendingQuotes')}>
         {quotes.map((quote, index) => <div className="quote-card" key={index}>
           <div><small>{quote.path.split('/').pop()}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}</small>
@@ -210,9 +232,10 @@ export function ConversationComposer({
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === 'Enter' && !event.shiftKey && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
               event.preventDefault();
-              void send();
+              send();
             }
           }}
           maxLength={100000}
@@ -258,41 +281,30 @@ export function ConversationComposer({
               </button>
             )}
           </div>
-          {running ? (
+          {running && (
             <button
               className="send-button stop"
               aria-label={t('conversations.stopAnswer')}
               title={t('conversations.stopAnswer')}
               disabled={submitting}
-              onClick={async () => {
-                setSubmitting(true);
-                setError('');
-                try {
-                  await requestJson(`${url}/stop`, {
-                    method: 'POST',
-                    body: JSON.stringify({ id: run.id }),
-                  });
-                } catch (error) {
-                  setError((error as Error).message);
-                } finally {
-                  setSubmitting(false);
-                }
-              }}
+              onClick={() => void runAction(() => requestJson(`${url}/stop`, {
+                method: 'POST',
+                body: JSON.stringify({ id: run.id }),
+              }))}
             >
               <Square size={14} fill="currentColor" />
               <span>{t('common.stop')}</span>
             </button>
-          ) : (
-            <button
-              className="send-button"
-              aria-label={t('conversations.sendMessage')}
-              title={t('conversations.sendMessage')}
-              disabled={submitting || !canSend}
-              onClick={() => void send()}
-            >
-              <ArrowUp size={19} />
-            </button>
           )}
+          <button
+            className="send-button"
+            aria-label={sendLabel}
+            title={sendLabel}
+            disabled={submitting || !canSend}
+            onClick={send}
+          >
+            {running || queue.length ? <ListEnd size={19} /> : <ArrowUp size={19} />}
+          </button>
         </div>
       </div>
     </div>

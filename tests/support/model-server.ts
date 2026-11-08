@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 
 export async function startModelServer() {
   const systemPrompts: string[] = [];
+  const userPrompts: string[] = [];
   const server = createServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/v1/models') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -41,6 +42,7 @@ export async function startModelServer() {
     systemPrompts.push(messages.filter(message => message.role === 'system' || message.role === 'developer')
       .map(message => text(message.content)).join('\n'));
     const prompt = text(messages.findLast(message => message.role === 'user')!.content);
+    userPrompts.push(prompt);
     if (prompt.includes('[FAIL]')) {
       response.writeHead(401, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'Test authentication failure', type: 'authentication_error' } }));
@@ -94,6 +96,7 @@ export async function startModelServer() {
   await once(server, 'listening');
   return {
     systemPrompts,
+    userPrompts,
     config: {
       providers: {
         test: {

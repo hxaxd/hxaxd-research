@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { ConversationPanel } from '@/app/conversations/components/ConversationPanel';
+import { useMessageDelivery } from '@/app/conversations/components/use-message-delivery';
 import { CreateConversationDialog } from '@/app/conversations/components/CreateConversationDialog';
 import type { Conversation } from '@/app/conversations/schema';
 import { FilePreview, FilePreviewHeader } from '@/app/files/components/FilePreview';
@@ -103,6 +104,7 @@ export function Workbench({
   const [model, setModel] = useState('');
   const [clips, setClips] = useState<Record<string, ImageClip[]>>({});
   const [quotes, setQuotes] = useState<Record<string, TextQuote[]>>({});
+  const delivery = useMessageDelivery();
   const [modelError, setModelError] = useState('');
   const [modelIssues, setModelIssues] = useState<ModelCatalog['issues']>([]);
   const workbenchRef = useRef<HTMLElement>(null);
@@ -383,6 +385,7 @@ export function Workbench({
                 key={currentConversation.id}
                 workspaceId={workspaceId}
                 conversation={currentConversation}
+                delivery={delivery}
                 models={models}
                 model={model}
                 onModelChange={selectModel}

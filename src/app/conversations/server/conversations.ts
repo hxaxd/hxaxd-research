@@ -40,8 +40,7 @@ export function openConversation(root: string, workspaceId: string, id: string) 
   return SessionManager.open(file, directory, cwd);
 }
 
-export function getConversation(root: string, workspaceId: string, id: string): Conversation {
-  const manager = openConversation(root, workspaceId, id);
+export function getConversation(root: string, workspaceId: string, id: string, manager = openConversation(root, workspaceId, id)): Conversation {
   const timestamp = manager.getHeader()!.timestamp;
   const entries = manager.getEntries();
   return {

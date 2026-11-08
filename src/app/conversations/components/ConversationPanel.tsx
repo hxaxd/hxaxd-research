@@ -3,7 +3,7 @@
 import '../conversations.css';
 
 
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
 import type { ImageClip, ReadingContext, TextQuote } from '@/app/files/schema';
 import { ModelSelector } from '@/app/models/components/ModelSelector';
@@ -13,10 +13,12 @@ import type { Conversation } from '../schema';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationMessages } from './ConversationMessages';
 import { useConversationStream } from './use-conversation-stream';
+import type { useMessageDelivery } from './use-message-delivery';
 
 export function ConversationPanel({
   workspaceId,
   conversation,
+  delivery,
   models,
   model,
   onModelChange,
@@ -29,6 +31,7 @@ export function ConversationPanel({
 }: {
   workspaceId: string;
   conversation: Conversation;
+  delivery: ReturnType<typeof useMessageDelivery>;
   models: ConfiguredModel[];
   model: string;
   onModelChange: (id: string) => void;
@@ -46,6 +49,11 @@ export function ConversationPanel({
   const thinking = levels.includes(preferences[model]) ? preferences[model] : levels.includes('medium') ? 'medium' : levels[0];
   const url = `/api/workspaces/${workspaceId}/conversations/${conversation.id}`;
   const { snapshot, connected, error } = useConversationStream(url);
+  const { observe } = delivery;
+  const outgoing = delivery.byUrl[url];
+  useEffect(() => {
+    if (snapshot && outgoing?.length) observe(url, outgoing, snapshot);
+  }, [snapshot, observe, outgoing, url]);
   const running = snapshot?.run?.status === 'accepted' || snapshot?.run?.status === 'running';
   return (
     <>
@@ -54,15 +62,18 @@ export function ConversationPanel({
           {error}
         </p>
       )}
-      <ConversationMessages snapshot={snapshot} workspaceId={workspaceId}
-        onOpenDocument={onOpenDocument} url={url} />
+      <ConversationMessages snapshot={snapshot} outgoing={outgoing} workspaceId={workspaceId}
+        onStopDelivery={input => delivery.stop(url, input)} onOpenDocument={onOpenDocument} url={url} />
       <ConversationComposer
         url={url}
         model={model}
         thinkingLevel={thinking}
         run={snapshot?.run ?? null}
+        queue={snapshot?.queue ?? []}
         reading={reading}
         connected={connected}
+        delivering={outgoing?.some(item => item.status === 'sending' || item.status === 'retrying' || item.status === 'stopping') ?? false}
+        onSend={input => delivery.send(url, input)}
         clips={clips}
         onClipsChange={onClipsChange}
         quotes={quotes}
