@@ -313,5 +313,5 @@ export function useVoiceInput({ text, onTextChange, textarea }: {
     setError('');
   }
 
-  return { state, connecting, error, pending, elapsed, start, stop, cancel, busy: state !== 'idle' };
+  return { state, connecting, error, pending, elapsed, start, stop, cancel };
 }

@@ -15,28 +15,36 @@ export function useConversationStream(url: string) {
   const [error, setError] = useState('');
   useEffect(() => {
     const stream = new EventSource(`${url}/events`);
-    const controller = new AbortController();
+    let fallback: AbortController | undefined;
     stream.onopen = () => {
+      fallback?.abort();
       setConnected(true);
       setError('');
     };
     stream.onmessage = (event) => {
       try {
-        setSnapshot(conversationEventSchema.parse(JSON.parse(event.data)).snapshot);
+        const next = conversationEventSchema.parse(JSON.parse(event.data)).snapshot;
+        fallback?.abort();
+        setSnapshot(next);
       } catch {
         setError(t('errors.conversationData'));
       }
     };
     stream.onerror = () => {
       setConnected(false);
+      fallback?.abort();
+      const controller = new AbortController();
+      fallback = controller;
       void requestJson<ConversationSnapshot>(url, { signal: controller.signal })
-        .then(setSnapshot)
+        .then(value => {
+          if (!controller.signal.aborted) setSnapshot(value);
+        })
         .catch((error) => {
           if (!controller.signal.aborted) setError(error.message);
         });
     };
     return () => {
-      controller.abort();
+      fallback?.abort();
       stream.close();
     };
   }, [url, t]);

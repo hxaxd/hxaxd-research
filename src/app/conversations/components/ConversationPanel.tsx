@@ -25,7 +25,6 @@ export function ConversationPanel({
   onClipsChange,
   quotes,
   onQuotesChange,
-  onOpenQuote,
   onOpenDocument,
 }: {
   workspaceId: string;
@@ -38,12 +37,12 @@ export function ConversationPanel({
   onClipsChange: Dispatch<SetStateAction<ImageClip[]>>;
   quotes: TextQuote[];
   onQuotesChange: Dispatch<SetStateAction<TextQuote[]>>;
-  onOpenQuote: (quote: TextQuote) => void;
   onOpenDocument: (target: ReadingContext) => void;
 }) {
   const [preferences, setPreferences] = useState<Record<string, ThinkingLevel>>(() =>
     typeof window === 'undefined' ? {} : JSON.parse(localStorage.getItem('research-thinking-levels') ?? '{}'));
-  const levels = models.find(item => item.id === model)?.thinkingLevels ?? [];
+  const selectedModel = models.find(item => item.id === model);
+  const levels = selectedModel?.thinkingLevels ?? [];
   const thinking = levels.includes(preferences[model]) ? preferences[model] : levels.includes('medium') ? 'medium' : levels[0];
   const url = `/api/workspaces/${workspaceId}/conversations/${conversation.id}`;
   const { snapshot, connected, error } = useConversationStream(url);
@@ -55,7 +54,7 @@ export function ConversationPanel({
           {error}
         </p>
       )}
-      <ConversationMessages snapshot={snapshot} workspaceId={workspaceId} onOpenQuote={onOpenQuote}
+      <ConversationMessages snapshot={snapshot} workspaceId={workspaceId}
         onOpenDocument={onOpenDocument} url={url} />
       <ConversationComposer
         url={url}
@@ -68,7 +67,7 @@ export function ConversationPanel({
         onClipsChange={onClipsChange}
         quotes={quotes}
         onQuotesChange={onQuotesChange}
-        supportsImages={models.find(item => item.id === model)?.input.includes('image') ?? false}
+        supportsImages={selectedModel?.input.includes('image') ?? false}
         modelControl={<ModelSelector models={models} model={model} onModelChange={onModelChange} thinking={thinking}
           connected={connected} disabled={running}
           onThinkingChange={value => {

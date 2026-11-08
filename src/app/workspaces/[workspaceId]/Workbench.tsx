@@ -391,7 +391,6 @@ export function Workbench({
                 onClipsChange={value => setClips(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
                 quotes={quotes[currentConversation.id] ?? []}
                 onQuotesChange={value => setQuotes(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
-                onOpenQuote={openDocument}
                 onOpenDocument={openDocument}
               />
             ) : (

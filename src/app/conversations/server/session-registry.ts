@@ -1,6 +1,7 @@
 import 'server-only';
 import { text as t } from '@/app/i18n/server.mjs';
 
+import { createHash } from 'node:crypto';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
 
 import type { ModelProviders } from '@/app/models/server/providers';
@@ -21,12 +22,16 @@ type LiveConversation = {
   session?: AgentSession;
   execution?: Promise<void>;
   controller?: AbortController;
-  request?: string;
+  requestDigest?: string;
   questions: Map<string, (answer: string | null) => void>;
 };
 
+type RecentConversation = Omit<ConversationSnapshot, 'messages'> & { requestDigest?: string };
+const recentConversationLimit = 128;
+
 export class PiSessionRegistry {
   private readonly conversations = new Map<string, LiveConversation>();
+  private readonly recent = new Map<string, RecentConversation>();
 
   constructor(
     private readonly config: AppConfig,
@@ -39,27 +44,29 @@ export class PiSessionRegistry {
     let record = this.conversations.get(key);
     if (!record) {
       record = {
-        snapshot: {
-          revision: 0,
-          messages: readConversationHistory(this.config.workspaceDir, workspaceId, id),
-          run: null,
-          error: null,
-        },
+        snapshot: this.snapshot(workspaceId, id),
+        requestDigest: this.recent.get(key)?.requestDigest,
         listeners: new Set(),
         questions: new Map(),
       };
       this.conversations.set(key, record);
     } else if (!record.execution) {
-      record.snapshot = {
-        ...record.snapshot,
-        messages: readConversationHistory(this.config.workspaceDir, workspaceId, id),
-      };
+      record.snapshot = this.snapshot(workspaceId, id);
     }
     return record;
   }
 
   snapshot(workspaceId: string, id: string) {
-    return this.record(workspaceId, id).snapshot;
+    const key = `${workspaceId}/${id}`;
+    const record = this.conversations.get(key);
+    if (record?.execution) return record.snapshot;
+    const latest = record?.snapshot ?? this.recent.get(key);
+    return {
+      revision: latest?.revision ?? 0,
+      run: latest?.run ?? null,
+      error: latest?.error ?? null,
+      messages: readConversationHistory(this.config.workspaceDir, workspaceId, id),
+    };
   }
 
   subscribe(workspaceId: string, id: string, listener: (snapshot: ConversationSnapshot) => void) {
@@ -68,7 +75,7 @@ export class PiSessionRegistry {
     listener(record.snapshot);
     return () => {
       record.listeners.delete(listener);
-      this.release(record);
+      this.release(`${workspaceId}/${id}`, record);
     };
   }
 
@@ -77,10 +84,17 @@ export class PiSessionRegistry {
     for (const listener of record.listeners) listener(record.snapshot);
   }
 
-  private release(record: LiveConversation) {
-    if (!record.execution && !record.listeners.size) {
-      record.session?.dispose();
-      record.session = undefined;
+  private release(key: string, record: LiveConversation) {
+    if (record.execution || record.listeners.size || this.conversations.get(key) !== record) return;
+    this.conversations.delete(key);
+    record.session?.dispose();
+    const { revision, run, error } = record.snapshot;
+    if (!run) return;
+    this.recent.delete(key);
+    this.recent.set(key, { revision, run, error, requestDigest: record.requestDigest });
+    if (this.recent.size > recentConversationLimit) {
+      const oldest = this.recent.keys().next();
+      if (!oldest.done) this.recent.delete(oldest.value);
     }
   }
 
@@ -102,8 +116,19 @@ export class PiSessionRegistry {
   async send(workspaceId: string, id: string, input: SendMessage) {
     const root = this.config.workspaceDir;
     const conversation = getConversation(root, workspaceId, id);
-    const context = await buildReadingContext(root, workspaceId, input.reading, input.clips, input.quotes);
-    return this.start(conversation, input, context);
+    const key = `${workspaceId}/${id}`;
+    const requestDigest = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const previous = this.existingRun(key, input.id, requestDigest);
+    if (previous) return previous;
+    let context: string | null;
+    try {
+      context = await buildReadingContext(root, workspaceId, input.reading, input.clips, input.quotes);
+    } catch (error) {
+      const existing = this.existingRun(key, input.id, requestDigest);
+      if (existing) return existing;
+      throw error;
+    }
+    return this.existingRun(key, input.id, requestDigest) ?? this.start(conversation, input, context, requestDigest);
   }
 
   private ask(record: LiveConversation, question: UserQuestion, toolSignal?: AbortSignal) {
@@ -131,16 +156,24 @@ export class PiSessionRegistry {
     return { accepted: true };
   }
 
-  private start(conversation: Conversation, input: SendMessage, context: string | null) {
-    const { workspaceId, id } = conversation;
-    const record = this.record(workspaceId, id);
-    const request = JSON.stringify(input);
-    if (record.snapshot.run?.id === input.id) {
-      if (record.request !== request)
+  private existingRun(key: string, requestId: string, requestDigest: string) {
+    const active = this.conversations.get(key);
+    const previous = this.recent.get(key);
+    const previousRun = active ? active.snapshot.run : previous?.run;
+    if (active?.execution && previousRun?.id !== requestId)
+      throw new ApiError(409, 'busy', t('errors.conversationBusy'));
+    if (previousRun?.id === requestId) {
+      const previousDigest = active ? active.requestDigest : previous?.requestDigest;
+      if (previousDigest !== requestDigest)
         throw new ApiError(409, 'conflict', t('errors.requestConflict'));
-      return record.snapshot.run;
+      return previousRun;
     }
-    if (record.execution) throw new ApiError(409, 'busy', t('errors.conversationBusy'));
+  }
+
+  private start(conversation: Conversation, input: SendMessage, context: string | null, requestDigest: string) {
+    const { workspaceId, id } = conversation;
+    const key = `${workspaceId}/${id}`;
+    const record = this.record(workspaceId, id);
     const run: ConversationRun = {
       id: input.id,
       conversationId: id,
@@ -149,7 +182,7 @@ export class PiSessionRegistry {
       finishedAt: null,
       errorCode: null,
     };
-    record.request = request;
+    record.requestDigest = requestDigest;
     record.snapshot = { ...record.snapshot, run, error: null };
     record.controller = new AbortController();
     const signal = record.controller.signal;
@@ -205,7 +238,7 @@ export class PiSessionRegistry {
           messages: readConversationHistory(this.config.workspaceDir, workspaceId, id),
         };
         this.emit(record);
-        this.release(record);
+        this.release(key, record);
       }
     })();
     void record.execution.catch((error) => {
@@ -213,7 +246,7 @@ export class PiSessionRegistry {
       record.execution = undefined;
       record.snapshot.error = t('errors.historyRead');
       this.emit(record);
-      this.release(record);
+      this.release(key, record);
     });
     return run;
   }
@@ -231,6 +264,6 @@ export class PiSessionRegistry {
       if (record.session) await record.session.abort();
       await record.execution;
     }
-    return record?.snapshot.run ?? null;
+    return record?.snapshot.run ?? this.recent.get(`${workspaceId}/${id}`)?.run ?? null;
   }
 }

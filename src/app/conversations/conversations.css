@@ -10,7 +10,6 @@
   background: var(--muted);
 }
 
-.status-dot.connected,
 .status-dot.running {
   background: var(--accent);
 }

@@ -10,7 +10,7 @@ import { MessageCircle } from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 
 import { Markdown } from '@/shared/ui/Markdown';
-import type { ReadingContext, TextQuote } from '@/app/files/schema';
+import type { ReadingContext } from '@/app/files/schema';
 import { resolveWorkspaceLink } from '@/app/files/workspace-link';
 
 import type { ChatMessage, ConversationSnapshot } from '../schema';
@@ -18,18 +18,18 @@ import { ToolExecutionGroup } from './ToolExecutionMessage';
 import { ImageAttachment } from './ImageAttachment';
 import { QuestionMessage } from './QuestionMessage';
 
-export const ConversationMessages = memo(function ConversationMessages({ snapshot, workspaceId, onOpenQuote, onOpenDocument, url }: {
+export const ConversationMessages = memo(function ConversationMessages({ snapshot, workspaceId, onOpenDocument, url }: {
   snapshot: ConversationSnapshot | null;
   workspaceId: string;
-  onOpenQuote: (quote: TextQuote) => void;
   onOpenDocument: (target: ReadingContext) => void;
   url: string;
 }) {
   const t = useTranslations();
   const end = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const messages = snapshot?.messages ?? [];
   const blocks: (ChatMessage | ChatMessage[])[] = [];
-  for (const message of snapshot?.messages ?? []) {
+  for (const message of messages) {
     if (message.role === 'assistant' && !message.text.trim()) continue;
     const previous = blocks.at(-1);
     if (message.role === 'tool' && !message.question) {
@@ -37,8 +37,9 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
       else blocks.push([message]);
     } else blocks.push(message);
   }
-  const running = snapshot?.run?.status === 'accepted' || snapshot?.run?.status === 'running';
-  const last = snapshot?.messages.at(-1);
+  const status = snapshot?.run?.status;
+  const running = status === 'accepted' || status === 'running';
+  const last = messages.at(-1);
   const streamingId = running && last?.role === 'assistant' ? last.id : null;
   useEffect(() => {
     if (following.current) end.current?.scrollIntoView({ block: 'end' });
@@ -51,7 +52,7 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
         following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
       }}
     >
-      {!snapshot?.messages.length && (
+      {!messages.length && (
         <div className="chat-empty">
           <MessageCircle size={26} strokeWidth={1.3} />
           <h3>{t('conversations.empty')}</h3>
@@ -69,7 +70,7 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
                 <ImageAttachment key={index} src={image.url} label={t('conversations.imageNumber', {value0: index + 1})} />
               ))}</div>}
               {!!message.quotes?.length && <div className="message-quotes" aria-label={t('conversations.quotedText')}>
-                {message.quotes.map((quote, index) => <button className="quote-card" key={index} onClick={() => onOpenQuote(quote)}>
+                {message.quotes.map((quote, index) => <button className="quote-card" key={index} onClick={() => onOpenDocument(quote)}>
                   <small>{quote.path}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}</small>
                   <blockquote>{quote.text}</blockquote>
                 </button>)}
@@ -86,7 +87,7 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
                         target={target ? undefined : '_blank'}
                         rel={target ? undefined : 'noopener noreferrer'}
                         onClick={event => {
-                          const link = resolveWorkspaceLink(event.currentTarget.getAttribute('href') ?? '', workspaceId);
+                          const link = resolveWorkspaceLink(event.currentTarget.getAttribute('href') ?? '', workspaceId, window.location.origin);
                           if (!link) return;
                           event.preventDefault();
                           onOpenDocument(link);
@@ -100,18 +101,18 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
             </article>
           ),
         )}
-      {(snapshot?.run?.status === 'accepted' || snapshot?.run?.status === 'running') && (
+      {running && (
         <div className="run-status" role="status">
           <span className="status-dot running" />
-          {snapshot.messages.some(message => message.question && message.question.answer === undefined)
+          {messages.some(message => message.question && message.question.answer === undefined)
             ? t('conversations.waitingAnswer')
-            : snapshot.run.status === 'accepted' ? t('conversations.preparing') : t('conversations.responding')}
+            : status === 'accepted' ? t('conversations.preparing') : t('conversations.responding')}
         </div>
       )}
-      {snapshot?.run?.status === 'cancelled' && (
+      {status === 'cancelled' && (
         <p className="run-notice">{t('conversations.cancelled')}</p>
       )}
-      {snapshot?.run?.status === 'failed' && !snapshot.error && (
+      {status === 'failed' && !snapshot?.error && (
         <p role="alert" className="error-message">
           {t('conversations.failed')}
         </p>

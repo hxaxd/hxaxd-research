@@ -28,7 +28,7 @@ import { requestJson } from '@/shared/http/request-json';
 
 import type { ThinkingLevel } from '@/app/models/schema';
 
-import type { ConversationRun } from '../schema';
+import type { ConversationRun, SendMessage } from '../schema';
 import { ImageAttachment } from './ImageAttachment';
 import { useVoiceInput } from './use-voice-input';
 
@@ -128,7 +128,15 @@ export function ConversationComposer({
     if (running || submitting || !canSend) return;
     const sentClips = clips;
     const sentQuotes = quotes;
-    const content = JSON.stringify({ text: text.trim() || (quotes.length ? t('conversations.explainQuote') : t('conversations.explainImage')), model, thinkingLevel, reading, clips, quotes });
+    const payload = {
+      text: text.trim() || (quotes.length ? t('conversations.explainQuote') : t('conversations.explainImage')),
+      model,
+      thinkingLevel,
+      reading,
+      clips,
+      quotes,
+    } satisfies Omit<SendMessage, 'id'>;
+    const content = JSON.stringify(payload);
     if (!submission.current || submission.current.content !== content)
       submission.current = { id: crypto.randomUUID(), content };
     setSubmitting(true);
@@ -136,7 +144,7 @@ export function ConversationComposer({
     try {
       await requestJson(`${url}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ id: submission.current.id, ...JSON.parse(content) }),
+        body: JSON.stringify({ id: submission.current.id, ...payload }),
       });
       setText('');
       onClipsChange(current => current.filter(clip => !sentClips.includes(clip)));

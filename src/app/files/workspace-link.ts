@@ -38,31 +38,26 @@ function documentPath(value: string, page?: number): ReadingContext | null {
   return { path: parts.join('/'), ...(page ? { page } : {}) };
 }
 
-export function resolveWorkspaceLink(href: string, workspaceId: string): ReadingContext | null {
+export function resolveWorkspaceLink(href: string, workspaceId: string, origin?: string): ReadingContext | null {
   const raw = href.trim();
   if (!raw || raw.startsWith('#')) return null;
   const page = pageHint(raw);
   // Keep the query string for the API URL check below; path handling strips it again.
   const value = raw.replaceAll('\\', '/');
 
-  let url: URL | null = null;
-  try {
-    url = new URL(value, 'http://workspace.local');
-  } catch {
-    url = null;
-  }
-  if (url) {
-    if (/^\/api\/workspaces\/[^/]+\/file$/.test(url.pathname)) {
+  const absoluteWeb = /^(?:https?:|\/\/)/i.test(value);
+  const url = URL.parse(value, origin ?? 'http://workspace.local');
+  if (absoluteWeb && (!origin || url?.origin !== origin)) return null;
+  if (url && /^https?:$/.test(url.protocol) && url.pathname.startsWith('/api/workspaces/')) {
+    const prefix = `/api/workspaces/${workspaceId}`;
+    if (url.pathname === `${prefix}/file`) {
       const path = url.searchParams.get('path');
-      const target = path && documentPath(decode(path), page);
-      if (target) return target;
+      return path ? documentPath(decode(path), page) : null;
     }
-    const preview = /^\/api\/workspaces\/[^/]+\/preview\/(.+)$/.exec(url.pathname);
-    if (preview) {
-      const target = documentPath(decode(preview[1]), page);
-      if (target) return target;
-    }
+    const preview = `${prefix}/preview/`;
+    return url.pathname.startsWith(preview) ? documentPath(decode(url.pathname.slice(preview.length)), page) : null;
   }
+  if (absoluteWeb || (scheme.test(value) && !/^(?:file:|[a-z]:\/)/i.test(value))) return null;
 
   // Absolute paths that pass through the workspace folder, such as C:/…/workspaces/<id>/papers/a.pdf.
   const marker = new RegExp(`/workspaces/${escapeRegExp(workspaceId)}/`, 'i').exec(normalize(value));

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -12,7 +12,8 @@ import { GET as image } from '@/app/api/workspaces/[workspaceId]/conversations/[
 import { POST as stop } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/stop/route';
 import { POST as answer } from '@/app/api/workspaces/[workspaceId]/conversations/[conversationId]/answers/route';
 import { GET as fileEvents } from '@/app/api/workspaces/[workspaceId]/files/events/route';
-import type { ConversationSnapshot } from '@/app/conversations/schema';
+import type { ConversationSnapshot, SendMessage } from '@/app/conversations/schema';
+import type { TextQuote } from '@/app/files/schema';
 
 import { startModelServer } from '../support/model-server';
 import { createTestApp, request, restartApp, workspaceContext } from '../support/app';
@@ -26,11 +27,11 @@ function context(workspaceId = app.workspace.id) {
 async function snapshot(): Promise<ConversationSnapshot> {
   return (await get(request('/conversation'), context())).json();
 }
-async function complete(status = 'completed') {
+async function waitForRun(status: 'completed' | 'cancelled' | 'failed' = 'completed') {
   await expect.poll(async () => (await snapshot()).run?.status).toBe(status);
   return snapshot();
 }
-function message(text: string, extra: object = {}) {
+function message(text: string, extra: Partial<SendMessage> = {}) {
   return send(request('/messages', 'POST', { id: randomUUID(), text, model: 'test/test-model', reading: null, ...extra }), context());
 }
 beforeEach(async () => {
@@ -50,7 +51,7 @@ test('file editing persists, duplicate sends do not repeat work, and conversatio
   await writeFile(path.join(app.config.workspaceDir, app.workspace.id, 'note.txt'), 'alpha');
   const id = randomUUID();
   expect((await message('[EDIT]', { id })).status).toBe(202);
-  const first = await complete();
+  const first = await waitForRun();
   expect(await readFile(path.join(app.config.workspaceDir, app.workspace.id, 'note.txt'), 'utf8')).toBe('beta');
   expect((await message('[EDIT]', { id })).status).toBe(202);
   expect((await snapshot()).messages).toEqual(first.messages);
@@ -76,7 +77,23 @@ test('disconnecting the event stream keeps generation alive; competing sends fai
   expect((await stop(request('/stop', 'POST', { id: run.id }), context())).status).toBe(200);
   expect((await snapshot()).run?.status).toBe('cancelled');
   expect((await message('继续讨论')).status).toBe(202);
-  expect((await complete()).messages.at(-1)?.text).toBe('测试回答');
+  expect((await waitForRun()).messages.at(-1)?.text).toBe('测试回答');
+});
+
+test('an accepted message can be retried after its reference is removed', async () => {
+  const file = path.join(app.config.workspaceDir, app.workspace.id, 'note.md');
+  await writeFile(file, '# Reading notes');
+  const extra = { id: randomUUID(), reading: { path: 'note.md' } };
+  expect((await message('Summarize the note', extra)).status).toBe(202);
+  const first = await waitForRun();
+  await unlink(file);
+
+  const retry = await message('Summarize the note', extra);
+  expect(retry.status).toBe(202);
+  expect(await retry.json()).toEqual(first.run);
+  expect((await snapshot()).messages).toEqual(first.messages);
+  expect((await message('Another question', extra)).status).toBe(409);
+  expect((await message('New request', { reading: extra.reading })).status).toBe(404);
 });
 
 test('stopping an idle conversation is harmless and a missing conversation returns not found', async () => {
@@ -86,13 +103,13 @@ test('stopping an idle conversation is harmless and a missing conversation retur
   const missing = { params: Promise.resolve({ workspaceId: app.workspace.id, conversationId: randomUUID() }) };
   expect((await get(request('/conversation'), missing)).status).toBe(404);
   expect((await message('开始讨论')).status).toBe(202);
-  expect((await complete()).messages.at(-1)?.text).toBe('测试回答');
+  expect((await waitForRun()).messages.at(-1)?.text).toBe('测试回答');
 });
 
 test('images remain downloadable from conversation history after the runtime is reloaded', async () => {
   const data = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAO0lEQVRIiWMwTptJU8QwakHaaBDNHE1FxqMZbeZoUWE8WpqmjVY4xqNVZtpoq2LmaMMrbbTpOHNQt64BpuTIPb7rfhkAAAAASUVORK5CYII=';
   await message('请看截图', { clips: [{ path: 'figure.png', data }] });
-  const saved = await complete();
+  const saved = await waitForRun();
   const url = saved.messages.find(item => item.role === 'user')!.images![0].url;
   restartApp();
   const response = await image(request(url), context());
@@ -106,7 +123,7 @@ test('images remain downloadable from conversation history after the runtime is 
 
 test('unknown models fail explicitly and unreadable references do not save a question', async () => {
   await message('hello', { model: 'test/missing' });
-  expect((await complete('failed')).error).toContain('模型不可用');
+  expect((await waitForRun('failed')).error).toContain('模型不可用');
   expect((await snapshot()).messages).toEqual([]);
   expect((await message('解释', { reading: { path: 'missing.md' } })).status).toBe(404);
   expect((await message('解释', { reading: { path: '' } })).status).toBe(400);
@@ -117,16 +134,16 @@ test('unknown models fail explicitly and unreadable references do not save a que
 
 test('a rejected model request is reported as a failure', async () => {
   await message('[FAIL]');
-  const failed = await complete('failed');
+  const failed = await waitForRun('failed');
   expect(failed.error).toContain('Test authentication failure');
 });
 
 test('current reading and quotes reach the model without altering user text, live or restored', async () => {
   await writeFile(path.join(app.config.workspaceDir, app.workspace.id, 'note.md'), '# 阅读笔记');
-  const quote = { path: 'note.md', mode: 'preview', text: '阅读笔记' };
+  const quote: TextQuote = { path: 'note.md', mode: 'preview', text: '阅读笔记' };
   const text = '[READING]\n\n<research-workbench-materials>\n这是用户自己输入的文字\n</research-workbench-materials>';
   await message(text, { reading: { path: 'note.md', page: 2 }, quotes: [quote] });
-  const live = await complete();
+  const live = await waitForRun();
   expect(live.messages.filter(item => item.role === 'user')).toEqual([expect.objectContaining({ text, quotes: [quote] })]);
   expect(JSON.parse(live.messages.find(item => item.role === 'assistant')!.text)).toEqual({
     reading: { path: 'note.md', page: 2 },
@@ -146,7 +163,7 @@ test('opening a document from a conversation tells the workspace reader which fi
   try {
     await reader.read();
     expect((await message('[OPEN]')).status).toBe(202);
-    await complete();
+    await waitForRun();
     const decoder = new TextDecoder();
     let event = '';
     while (!event.includes('event: reader\n')) {
@@ -160,7 +177,7 @@ test('opening a document from a conversation tells the workspace reader which fi
 
 test('unsupported image input fails without saving the question', async () => {
   await message('解释截图', { model: 'test/text-only', clips: [{ path: 'article.pdf', page: 2, data: Buffer.from('screenshot').toString('base64') }] });
-  const failed = await complete('failed');
+  const failed = await waitForRun('failed');
   expect(failed.error).toContain('不支持图片');
   expect(failed.messages).toEqual([]);
 });
@@ -178,7 +195,7 @@ test('questions wait for a clicked choice, survive reconnect and persist the ans
   expect((await answer(request('/answers', 'POST', { id: 'stale', answer: '当前助手' }), context())).status).toBe(409);
   expect((await answer(request('/answers', 'POST', { id: question.id, answer: '当前助手' }), context())).status).toBe(200);
   expect((await answer(request('/answers', 'POST', { id: question.id, answer: '注册模型' }), context())).status).toBe(409);
-  const finished = await complete();
+  const finished = await waitForRun();
   expect(finished.messages.filter(item => item.question)).toHaveLength(1);
   expect(finished.messages.find(item => item.question)?.question?.answer).toBe('当前助手');
   expect(finished.messages.at(-1)?.text).toContain('当前助手');
@@ -191,7 +208,7 @@ test.each(['自己的回答', null])('questions accept custom text or cancellati
   await expect.poll(async () => (await snapshot()).messages.some(item => item.question)).toBe(true);
   const question = (await snapshot()).messages.find(item => item.question)!.question!;
   expect((await answer(request('/answers', 'POST', { id: question.id, answer: value }), context())).status).toBe(200);
-  expect((await complete(value === null ? 'cancelled' : 'completed')).messages.find(item => item.question)?.question?.answer).toBe(value);
+  expect((await waitForRun(value === null ? 'cancelled' : 'completed')).messages.find(item => item.question)?.question?.answer).toBe(value);
 });
 
 test('stopping a waiting question releases the run and rejects stale replies', async () => {
@@ -203,19 +220,19 @@ test('stopping a waiting question releases the run and rejects stale replies', a
   expect((await snapshot()).run?.status).toBe('cancelled');
   expect((await answer(request('/answers', 'POST', { id: question.id, answer: '迟到的回答' }), context())).status).toBe(409);
   await message('继续');
-  await complete();
+  await waitForRun();
   const missing = { params: Promise.resolve({ workspaceId: app.workspace.id, conversationId: randomUUID() }) };
   expect((await answer(request('/answers', 'POST', { id: question.id, answer: '回答' }), missing)).status).toBe(404);
 });
 
 test('search uses hosted web results and preserves citations; unsupported protocols return command guidance', async () => {
   await message('[SEARCH]');
-  expect((await complete()).messages.at(-1)?.text).toContain('"supported":false');
+  expect((await waitForRun()).messages.at(-1)?.text).toContain('"supported":false');
   const provider = { ...model.config.providers.test, api: 'openai-responses' };
   await writeFile(path.join(app.config.piDir, 'models.json'), JSON.stringify({ providers: { test: provider } }));
   restartApp();
   await message('[SEARCH]');
-  const finished = await complete();
+  const finished = await waitForRun();
   const search = finished.messages.filter(item => item.toolName === 'web_search').at(-1)!;
   expect(search.isError).toBe(false);
   expect(search.args).toEqual({ query: 'Find the official paper' });
