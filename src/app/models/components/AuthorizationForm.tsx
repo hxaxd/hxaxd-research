@@ -11,7 +11,9 @@ import { ChoiceSelect } from '@/shared/ui/ChoiceSelect';
 import { requestJson } from '@/shared/http/request-json';
 import type { Authorization, ProviderSettings } from '../schema';
 
-function pending(authorization: Authorization | null) {
+function pending(
+  authorization: Authorization | null,
+): authorization is Authorization & { status: 'starting' | 'waiting' | 'exchanging' } {
   return authorization !== null && ['starting', 'waiting', 'exchanging'].includes(authorization.status);
 }
 
@@ -69,8 +71,8 @@ export function AuthorizationForm({ providers, initialProviderId, initialAuthori
 
   useEffect(() => () => {
     const authorization = current.current;
-    if (pending(authorization)) void requestJson(`/api/model-providers/${authorization!.providerId}/authorization`, {
-      method: 'DELETE', body: JSON.stringify({ id: authorization!.id }),
+    if (pending(authorization)) void requestJson(`/api/model-providers/${authorization.providerId}/authorization`, {
+      method: 'DELETE', body: JSON.stringify({ id: authorization.id }),
     }).catch(() => undefined);
     popup.current?.close();
   }, []);
@@ -96,7 +98,7 @@ export function AuthorizationForm({ providers, initialProviderId, initialAuthori
 
   async function close() {
     if (waiting) update(await requestJson<Authorization>(authorizationUrl, {
-      method: 'DELETE', body: JSON.stringify({ id: authorization!.id }),
+      method: 'DELETE', body: JSON.stringify({ id: authorization.id }),
     }));
     onCancel();
   }
@@ -122,7 +124,7 @@ export function AuthorizationForm({ providers, initialProviderId, initialAuthori
         <summary>{t('models.pasteCallback')}</summary>
         <form onSubmit={event => { event.preventDefault(); void act(async () => {
           update(await requestJson<Authorization>(authorizationUrl + '/callback', {
-            method: 'POST', body: JSON.stringify({ id: authorization!.id, url: callback }),
+            method: 'POST', body: JSON.stringify({ id: authorization.id, url: callback }),
           }));
           setCallback('');
         }); }}>

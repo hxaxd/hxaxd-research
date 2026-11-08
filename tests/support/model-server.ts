@@ -76,7 +76,6 @@ export async function startModelServer() {
         id: block.id, text: block.preserve ? block.text : `译文：${block.text}`,
       })) }) }, 'stop');
     } else if (prompt.includes('[REASONING]')) {
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       frame({ content: JSON.stringify({ reasoning: body.reasoning_effort }) }, 'stop');
     } else if (prompt.includes('[READING]')) {
       const context = messages.filter(message => message.role === 'user').map(message => text(message.content))

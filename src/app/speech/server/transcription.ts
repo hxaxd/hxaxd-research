@@ -73,7 +73,7 @@ async function readJson<T>(response: Response, schema: z.ZodType<T>) {
 async function mintSecret(
   target: SpeechTarget,
   signal: AbortSignal,
-  timeouts: AppConfig['timeouts'],
+  timeoutMs: number,
 ) {
   const baseUrl = target.kind === 'chatgpt' ? 'https://api.openai.com/v1' : target.baseUrl;
   const key = target.kind === 'chatgpt' ? target.token : target.key;
@@ -87,7 +87,7 @@ async function mintSecret(
         session: transcriptionSession(target.model),
       }),
     },
-    timeouts.speechSecretMs,
+    timeoutMs,
     signal,
   );
   if (!response.ok) throw failure(response.status);
@@ -95,7 +95,7 @@ async function mintSecret(
 }
 
 export async function realtimeSession(target: SpeechTarget, signal: AbortSignal, timeouts: AppConfig['timeouts']): Promise<SpeechRealtimeSession> {
-  const key = await mintSecret(target, signal, timeouts);
+  const key = await mintSecret(target, signal, timeouts.speechSecretMs);
   const baseUrl = target.kind === 'chatgpt' ? 'https://api.openai.com/v1' : target.baseUrl;
   const url = new URL(`${baseUrl}/realtime`);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -125,9 +125,9 @@ export async function fileTranscript(
   return (await readJson(response, transcriptSchema)).text;
 }
 
-function silentWav(seconds = 1) {
+function silentWav() {
   const rate = 16000;
-  const samples = Math.round(rate * seconds);
+  const samples = rate;
   const buffer = Buffer.alloc(44 + samples * 2);
   buffer.write('RIFF', 0);
   buffer.writeUInt32LE(36 + samples * 2, 4);
@@ -147,7 +147,7 @@ function silentWav(seconds = 1) {
 
 export async function testTarget(target: SpeechTarget, signal: AbortSignal, timeouts: AppConfig['timeouts']) {
   if (target.kind === 'chatgpt' || target.protocol === 'realtime') {
-    await mintSecret(target, signal, { ...timeouts, speechSecretMs: timeouts.speechProbeMs });
+    await mintSecret(target, signal, timeouts.speechProbeMs);
     return t('speech.realtimeAvailable');
   }
   await fileTranscript(target, silentWav(), 'silence.wav', signal, timeouts);

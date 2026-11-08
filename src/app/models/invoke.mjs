@@ -1,5 +1,6 @@
 import { text as t } from '../i18n/server.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createModelRuntime, modelCatalog, resolveModel, thinkingLevels } from './runtime.mjs';
 import { readAppConfig } from '../config.mjs';
@@ -36,7 +37,7 @@ async function main() {
     'pi-dir': { type: 'string' }, list: { type: 'boolean' },
     model: { type: 'string' }, input: { type: 'string' }, output: { type: 'string' },
   } });
-  const config = readAppConfig();
+  const config = readAppConfig(fileURLToPath(new URL('../../../', import.meta.url)));
   configureNetwork(config.network);
   const timeoutMs = config.timeouts.modelCatalogMs;
   if (!values['pi-dir']) throw new Error(t('errors.piDirectory'));

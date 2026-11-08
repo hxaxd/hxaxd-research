@@ -31,7 +31,7 @@ export function ModelSettings({ onModelsChanged }: { onModelsChanged: () => Prom
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [testResults, setTestResults] = useState<Record<string, SpeechTestResult>>({});
   const [chatgptModel, setChatgptModel] = useState('');
 
   useEffect(() => { if (speech) setChatgptModel(speech.chatgpt.model); }, [speech]);

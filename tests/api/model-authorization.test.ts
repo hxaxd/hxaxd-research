@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { get } from 'node:http';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { GET as catalog } from '@/app/api/models/route';
@@ -15,6 +16,19 @@ afterEach(async () => {
   const { authorization } = await state();
   if (authorization) await cancel(request('/authorization', 'DELETE', { id: authorization.id }));
   await app.cleanup();
+});
+
+test('a malformed loopback request returns 400 and leaves authorization available', async () => {
+  const { callback } = await login();
+  const status = await new Promise<number | undefined>((resolve, reject) => {
+    get({ hostname: callback.hostname, port: callback.port, path: '//%', signal: AbortSignal.timeout(5000) }, response => {
+      response.resume();
+      resolve(response.statusCode);
+    }).on('error', reject);
+  });
+  expect(status).toBe(400);
+  expect(await openCallback(callback)).toBe(200);
+  await expect.poll(async () => (await state()).authorization.status).toBe('connected');
 });
 
 test.each(['browser', 'manual'])('ChatGPT %s callback connects, survives reload and disconnects without exposing credentials', async method => {

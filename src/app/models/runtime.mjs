@@ -73,10 +73,14 @@ export async function modelCatalog(runtime, signal, timeoutMs = 15000) {
   ] };
 }
 
-/** @param {ReturnType<ModelRuntime['getModels']>[number]} model */
+/**
+ * @param {ReturnType<ModelRuntime['getModels']>[number]} model
+ * @returns {import('./schema').ThinkingLevel[]}
+ */
 export function thinkingLevels(model) {
   if (!model.reasoning) return ['off'];
-  return ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].filter(level => {
+  const levels = /** @type {const} */ (['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+  return levels.filter(level => {
     const mapped = model.thinkingLevelMap?.[level];
     return mapped !== null && (!['xhigh', 'max'].includes(level) || mapped !== undefined);
   });

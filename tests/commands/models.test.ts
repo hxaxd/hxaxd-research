@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect, test } from 'vitest';
@@ -32,8 +32,13 @@ test.each(['configuration', 'environment'])('native model requests use the %s pr
   await once(proxy, 'listening');
   const proxyUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
   try {
-    await writeFile(app.config.configFile, JSON.stringify({ dataDir: app.config.dataDir,
-      network: { proxy: source === 'configuration' ? proxyUrl : null } }));
+    const project = path.join(app.config.dataDir, 'project');
+    const runtime = path.join(project, '.runtime');
+    await mkdir(runtime, { recursive: true });
+    await cp(path.resolve('src'), path.join(project, 'src'), { recursive: true });
+    await writeFile(path.join(runtime, 'config.jsonc'), JSON.stringify({ network: {
+      proxy: source === 'configuration' ? proxyUrl : null,
+    } }));
     const configured = structuredClone(server.config);
     configured.providers.test.baseUrl = 'http://model.invalid/v1';
     const models = path.join(app.config.piDir, 'models.json');
@@ -42,16 +47,18 @@ test.each(['configuration', 'environment'])('native model requests use the %s pr
     const output = path.join(app.config.dataDir, 'output.json');
     await writeFile(input, JSON.stringify({ system: 'Test', prompt: 'Hello' }));
     const envProxy = source === 'environment' ? proxyUrl : 'http://127.0.0.1:1';
-    const env = { ...process.env, HTTP_PROXY: envProxy, HTTPS_PROXY: envProxy,
+    const env: NodeJS.ProcessEnv = { ...process.env, HTTP_PROXY: envProxy, HTTPS_PROXY: envProxy,
       http_proxy: envProxy, https_proxy: envProxy, NO_PROXY: '', no_proxy: '' };
-    const args = [path.resolve('src/app/models/invoke.mjs'), '--pi-dir', app.config.piDir,
+    delete env.APP_CONFIG_FILE;
+    const cwd = path.join(app.config.workspaceDir, app.workspace.id);
+    const args = [path.join(project, 'src/app/models/invoke.mjs'), '--pi-dir', app.config.piDir,
       '--model', 'test/test-model', '--input', input, '--output', output];
-    await execute(process.execPath, args, { env });
+    await execute(process.execPath, args, { cwd, env });
     expect(JSON.parse(await readFile(output, 'utf8'))).toMatchObject({ text: '测试回答' });
     expect(forwarded).toEqual(['model.invalid']);
     await writeFile(models, JSON.stringify(server.config));
     await unlink(output);
-    await execute(process.execPath, args, { env });
+    await execute(process.execPath, args, { cwd, env });
     expect(JSON.parse(await readFile(output, 'utf8'))).toMatchObject({ text: '测试回答' });
     expect(forwarded).toEqual(['model.invalid']);
   } finally {

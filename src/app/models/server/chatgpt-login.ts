@@ -68,7 +68,12 @@ export function chatgptLogin(authPath: string): OAuth["login"] {
     }
 
     const server = createServer((request, response) => {
-      const url = new URL(request.url!, redirectUri);
+      const url = request.url && URL.parse(request.url, redirectUri);
+      if (!url) {
+        response.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end(t('errors.callbackInvalid'));
+        return;
+      }
       if (request.method !== "GET" || url.pathname !== "/auth/callback") {
         response.writeHead(404).end();
         return;

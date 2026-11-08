@@ -97,7 +97,7 @@ export class ModelProviders {
     const catalog = await modelCatalog(await this.getRuntime(), undefined, this.config.timeouts.modelCatalogMs);
     return { ...catalog, models: catalog.models.map(model => ({
       id: `${model.provider}/${model.id}`, name: model.name, provider: model.provider,
-      input: model.input, thinkingLevels: thinkingLevels(model) as ModelCatalog['models'][number]['thinkingLevels'],
+      input: model.input, thinkingLevels: thinkingLevels(model),
     })) };
   }
 
@@ -139,7 +139,7 @@ export class ModelProviders {
         .map((provider) => ({
           id: provider.id,
           name: provider.name,
-          connected: runtime.hasConfiguredAuth(provider.id),
+          connected: true,
           subscription: runtime.isUsingSubscription(provider.id),
           canDisconnect: credentials.some(
             (credential) =>

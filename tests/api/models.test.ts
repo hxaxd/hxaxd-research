@@ -26,6 +26,25 @@ afterEach(async () => {
   await app.cleanup();
 });
 
+test('editing or deleting a connection requires a stored provider with that ID', async () => {
+  const config = path.join(app.config.piDir, 'models.json');
+  const original = '{"providers":{}}\n';
+  await writeFile(config, original);
+  for (const id of ['constructor', '__proto__']) {
+    const context = { params: Promise.resolve({ id }) };
+    const url = `/model-providers/connections/${id}`;
+    const updated = await updateConnection(request(url, 'PATCH', {
+      baseUrl: 'http://127.0.0.1:1/v1', api: 'openai-completions', models: [{ id: 'example' }],
+    }), context);
+    const removed = await removeConnection(request(url, 'DELETE'), context);
+    for (const response of [updated, removed]) {
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: 'model_connection_missing' } });
+    }
+  }
+  expect(await readFile(config, 'utf8')).toBe(original);
+});
+
 test('a failed account catalog leaves other configured providers usable', async () => {
   const server = await startModelServer();
   try {

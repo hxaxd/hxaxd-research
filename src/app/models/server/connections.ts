@@ -62,7 +62,7 @@ export function listModelConnections(config: AppConfig, runtime: ModelRuntime) {
 export async function saveModelConnection(config: AppConfig, runtime: ModelRuntime, input: ModelConnectionInput, id?: string) {
   const document = read(config);
   const connectionId = id ?? `custom-${randomUUID()}`;
-  const current = document.providers[connectionId];
+  const current = Object.hasOwn(document.providers, connectionId) ? document.providers[connectionId] : undefined;
   if (id && !current) throw new ApiError(404, 'model_connection_missing', t('errors.connectionMissing'));
   const savedUrl = current?.baseUrl ?? runtime.getModels(connectionId)[0]?.baseUrl;
   const savedKey = savedUrl && URL.parse(savedUrl)?.origin === new URL(input.baseUrl).origin ? current?.apiKey : undefined;
@@ -93,7 +93,7 @@ export async function saveModelConnection(config: AppConfig, runtime: ModelRunti
 
 export async function removeModelConnection(config: AppConfig, runtime: ModelRuntime, id: string) {
   const document = read(config);
-  if (!document.providers[id]) throw new ApiError(404, 'model_connection_missing', t('errors.connectionMissing'));
+  if (!Object.hasOwn(document.providers, id)) throw new ApiError(404, 'model_connection_missing', t('errors.connectionMissing'));
   delete document.providers[id];
   writeFileSync(path.join(config.piDir, 'models.json'), `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 });
   await runtime.refresh({ allowNetwork: false, providers: [id] });
@@ -103,11 +103,14 @@ export async function discoverModels(config: AppConfig, runtime: ModelRuntime, i
   let key = input.clearKey ? '' : input.key?.trim();
   const origin = new URL(input.baseUrl).origin;
   if (!key && !input.clearKey && input.connectionId) {
-    const provider = read(config).providers[input.connectionId];
-    const loadedUrl = runtime.getModels(input.connectionId)[0]?.baseUrl;
-    if (provider && loadedUrl && URL.parse(loadedUrl)?.origin === origin &&
-      (!provider.baseUrl || URL.parse(provider.baseUrl)?.origin === origin))
-      key = (await runtime.getAuth(input.connectionId, { signal }))?.auth.apiKey;
+    const { providers } = read(config);
+    if (Object.hasOwn(providers, input.connectionId)) {
+      const provider = providers[input.connectionId];
+      const loadedUrl = runtime.getModels(input.connectionId)[0]?.baseUrl;
+      if (loadedUrl && URL.parse(loadedUrl)?.origin === origin &&
+        (!provider.baseUrl || URL.parse(provider.baseUrl)?.origin === origin))
+        key = (await runtime.getAuth(input.connectionId, { signal }))?.auth.apiKey;
+    }
   } else if (!key && !input.clearKey && input.speechConnectionId) {
     const target = new SpeechConnections(config).resolve(input.speechConnectionId);
     if (target.kind === 'custom' && new URL(target.baseUrl).origin === origin) key = target.key;
