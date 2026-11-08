@@ -64,11 +64,13 @@ export async function saveModelConnection(config: AppConfig, runtime: ModelRunti
   const connectionId = id ?? `custom-${randomUUID()}`;
   const current = document.providers[connectionId];
   if (id && !current) throw new ApiError(404, 'model_connection_missing', t('errors.connectionMissing'));
+  const savedUrl = current?.baseUrl ?? runtime.getModels(connectionId)[0]?.baseUrl;
+  const savedKey = savedUrl && URL.parse(savedUrl)?.origin === new URL(input.baseUrl).origin ? current?.apiKey : undefined;
   document.providers[connectionId] = {
     ...current, name: input.name || new URL(input.baseUrl).hostname,
     baseUrl: input.baseUrl.replace(/\/+$/, ''), api: input.api,
     // Pi uses a placeholder key to expose unauthenticated local endpoints in its model picker.
-    apiKey: input.clearKey ? 'local' : input.key?.trim() || current?.apiKey || 'local',
+    apiKey: input.clearKey ? 'local' : input.key?.trim() || savedKey || 'local',
     models: input.models.map(model => {
       const known = knownModel(runtime, model.id, input.api, connectionId);
       const previous = { ...current?.models?.find(item => item.id === model.id) };
@@ -99,11 +101,16 @@ export async function removeModelConnection(config: AppConfig, runtime: ModelRun
 
 export async function discoverModels(config: AppConfig, runtime: ModelRuntime, input: ModelDiscoveryInput, signal: AbortSignal) {
   let key = input.clearKey ? '' : input.key?.trim();
+  const origin = new URL(input.baseUrl).origin;
   if (!key && !input.clearKey && input.connectionId) {
-    key = (await runtime.getAuth(input.connectionId, { signal }))?.auth.apiKey;
+    const provider = read(config).providers[input.connectionId];
+    const loadedUrl = runtime.getModels(input.connectionId)[0]?.baseUrl;
+    if (provider && loadedUrl && URL.parse(loadedUrl)?.origin === origin &&
+      (!provider.baseUrl || URL.parse(provider.baseUrl)?.origin === origin))
+      key = (await runtime.getAuth(input.connectionId, { signal }))?.auth.apiKey;
   } else if (!key && !input.clearKey && input.speechConnectionId) {
     const target = new SpeechConnections(config).resolve(input.speechConnectionId);
-    if (target.kind === 'custom') key = target.key;
+    if (target.kind === 'custom' && new URL(target.baseUrl).origin === origin) key = target.key;
   }
   const headers: Record<string, string> = {};
   if (input.api === 'anthropic-messages') {
@@ -114,7 +121,8 @@ export async function discoverModels(config: AppConfig, runtime: ModelRuntime, i
   let response: Response;
   try {
     response = await fetch(`${input.baseUrl.replace(/\/+$/, '')}/models`, {
-      headers, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeouts.modelCatalogMs)]),
+      headers, redirect: key ? 'error' : 'follow',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeouts.modelCatalogMs)]),
     });
   } catch {
     throw new ApiError(502, 'model_discovery_failed', t('errors.discoveryNetwork'));

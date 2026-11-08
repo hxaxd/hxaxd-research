@@ -148,11 +148,8 @@ export class SpeechConnections {
     const current = data.connections.find((item) => item.id === id);
     if (!current)
       throw new ApiError(404, 'speech_connection_missing', t('errors.speechMissing'));
-    const key = input.clearKey
-      ? undefined
-      : input.key?.trim()
-        ? input.key.trim()
-        : current.key;
+    const savedKey = new URL(current.baseUrl).origin === new URL(input.baseUrl).origin ? current.key : undefined;
+    const key = input.clearKey ? undefined : input.key?.trim() || savedKey;
     const connection: StoredConnection = {
       id,
       name: input.name || new URL(input.baseUrl).hostname,
