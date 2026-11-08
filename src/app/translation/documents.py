@@ -79,18 +79,19 @@ def block_rect(page, dimensions, block):
                         y1 / dimensions["height"] * page.rect.height)
 
 
-def translations(document, response):
+def translations(source_blocks, response):
     """Validate the external translation result once, before consuming its text."""
     items = response["blocks"]
-    source = {block["id"]: block for block in blocks(document)}
-    expected = list(source)
+    source = {block["id"]: block for block in source_blocks}
+    expected = source.keys()
     received = [item["id"] for item in items]
-    if len(set(received)) != len(received) or set(received) != set(expected):
-        raise ValueError(f"译块 ID 不完整：缺少 {sorted(set(expected) - set(received))}；多出 {sorted(set(received) - set(expected))}；请修复译文文件")
+    received_ids = set(received)
+    if len(received_ids) != len(received) or received_ids != expected:
+        raise ValueError(f"译块 ID 不完整：缺少 {sorted(expected - received_ids)}；多出 {sorted(received_ids - expected)}；请修复译文文件")
     if any(not isinstance(item["text"], str) or (source[item["id"]]["text"].strip() and not item["text"].strip()) for item in items):
         raise ValueError("译块文本必须是非空字符串；请补齐译文")
     result = {item["id"]: item["text"] for item in items}
-    for block in blocks(document):
+    for block in source_blocks:
         if block["preserve"] and result[block["id"]] != block["text"]:
             raise ValueError(f"保留块 {block['id']} 被修改，请恢复原文")
     return result
@@ -152,13 +153,13 @@ def install_math(config, output):
     shutil.copytree(source / "fonts", target / "fonts", dirs_exist_ok=True)
 
 
-def write_html(config, target, title, content, toc, language, source=""):
+def write_html(config, target, title, content, toc, language):
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     install_math(config, target.parent)
     template = (Path(config["templateDir"]) / "app/translation/skills/paper-translation/assets/paper.html").read_text(encoding="utf-8")
     values = {"TITLE": html.escape(title), "LANG": html.escape(language),
-              "CONTENT": content, "TOC": toc, "SOURCE": source}
+              "CONTENT": content, "TOC": toc, "SOURCE": ""}
     target.write_text(re.sub(r"\{\{(TITLE|LANG|CONTENT|TOC|SOURCE)\}\}",
                             lambda match: values[match[1]], template), encoding="utf-8")
 

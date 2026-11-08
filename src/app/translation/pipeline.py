@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from tempfile import mkdtemp
 
 from documents import blocks, load, load_document, normalize, render_document, render_markdown, save, translations
 
@@ -27,13 +28,19 @@ def ocr(config, source, output, title):
     return normalize(source, raw, output, title)
 
 
-def prepare(config, document, target, instructions="", glossary="", selected=None, context=None):
+def translation_source(document, target, selected=None):
     selected = blocks(document) if selected is None else selected
+    return {"title": document["title"], "target": target,
+            "blocks": [{key: block[key] for key in ("id", "label", "text", "preserve")} for block in selected]}
+
+
+def prepare(config, document, target, instructions="", glossary="", selected=None, context=None, previous=None):
     system = (Path(config["templateDir"]) / "app/translation/prompts/blocks.md").read_text(encoding="utf-8").replace("{{target}}", target)
-    payload = {"title": document["title"], "target": target, "instructions": instructions,
-               "glossary": glossary, "blocks": [{key: block[key] for key in ["id", "label", "text", "preserve"]} for block in selected]}
+    payload = {**translation_source(document, target, selected), "instructions": instructions, "glossary": glossary}
     if context:
         payload["context"] = [{"id": block["id"], "text": block["text"]} for block in context]
+    if previous:
+        payload["previousTranslations"] = previous[-2:]
     return {"system": system, "prompt": json.dumps(payload, ensure_ascii=False)}
 
 
@@ -66,7 +73,19 @@ def plan_batches(config, document, target, instructions, glossary, model):
 def translate(config, document, target, model_id, output, instructions, glossary):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    catalog_file = output / "models.json"
+    final_file = output / "translations.json"
+    if final_file.exists():
+        archive = Path(mkdtemp(prefix="previous-", dir=output)) / final_file.name
+        try:
+            final_file.rename(archive)
+        except FileNotFoundError:
+            archive.parent.rmdir()
+    run_dir = Path(mkdtemp(prefix="run-", dir=output))
+    source = translation_source(document, target)
+    result = []
+    partial_file = run_dir / "partial-translations.json"
+    save(partial_file, {"source": source, "blocks": result})
+    catalog_file = run_dir / "models.json"
     catalog = subprocess.run(config["modelsCommand"] + ["--list", "--model", model_id], check=True, capture_output=True, text=True, encoding="utf-8")
     catalog_file.write_text(catalog.stdout, encoding="utf-8")
     models = json.loads(catalog.stdout)
@@ -75,22 +94,16 @@ def translate(config, document, target, model_id, output, instructions, glossary
         raise ValueError(f"所选模型不可用：{model_id}；供应商状态见 {catalog_file}")
     batches = plan_batches(config, document, target, instructions, glossary, model)
     all_blocks = blocks(document)
-    result = []
-    save(output / "partial-translations.json", {"blocks": result})
     for index, batch in enumerate(batches):
         first = all_blocks.index(batch[0])
         last = first + len(batch)
         context = all_blocks[max(0, first - 2):first] + all_blocks[last:last + 2] if len(batches) > 1 else []
-        request = prepare(config, document, target, instructions, glossary, batch, context)
-        if result:
-            payload = json.loads(request["prompt"])
-            payload["previousTranslations"] = result[-2:]
-            request["prompt"] = json.dumps(payload, ensure_ascii=False)
+        request = prepare(config, document, target, instructions, glossary, batch, context, previous=result)
         request["maxTokens"] = min(model["maxTokens"], model["contextWindow"] - estimate(request) - 1024)
         if request["maxTokens"] <= 0:
             raise ValueError(f"块 {batch[0]['id']} 与上下文超过模型容量；请改选更大上下文的模型")
-        request_file = output / f"request-{index + 1:03}.json"
-        response_file = output / f"response-{index + 1:03}.json"
+        request_file = run_dir / f"request-{index + 1:03}.json"
+        response_file = run_dir / f"response-{index + 1:03}.json"
         save(request_file, request)
         print(json.dumps({"batch": index + 1, "batches": len(batches), "blocks": len(batch)}), flush=True)
         run(config["modelsCommand"] + ["--model", model_id, "--input", str(request_file), "--output", str(response_file)])
@@ -99,13 +112,12 @@ def translate(config, document, target, model_id, output, instructions, glossary
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         try:
             response = json.loads(raw)
-            translations({"pages": [{"blocks": batch}]}, response)
+            translations(batch, response)
         except (ValueError, KeyError, TypeError) as error:
-            raise ValueError(f"批次 {index + 1} 的模型输出需要修复：{response_file}；{error}。已完成译块保存在 partial-translations.json") from error
+            raise ValueError(f"批次 {index + 1} 的模型输出需要修复：{response_file}；{error}。已完成译块保存在 {partial_file}") from error
         result.extend(response["blocks"])
-        save(output / "partial-translations.json", {"blocks": result})
-    complete = {"blocks": result}
-    save(output / "translations.json", complete)
+        save(partial_file, {"source": source, "blocks": result})
+    partial_file.replace(final_file)
     return {item["id"]: item["text"] for item in result}
 
 
@@ -168,7 +180,10 @@ def main():
         if args.command == "translate":
             return
     else:
-        translated = translations(document, load(args.translations))
+        result = load(args.translations)
+        if "source" in result and result["source"] != translation_source(document, args.target):
+            raise ValueError("译文与当前原文或目标语言不匹配，请重新翻译")
+        translated = translations(blocks(document), result)
     render_document(config, document, translated, args.output, args.target)
     if args.layout:
         from layout import render_layout

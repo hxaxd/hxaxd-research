@@ -33,7 +33,7 @@ description: 翻译论文或科研材料；按用户要求选择 TeX、HTML 或 
 
 ## 运行入口
 
-调用 `get_workspace_context`，读取 `translation.command`、`translation.modelsCommand` 及 `translation.ocr`。命令是完整的程序及参数数组，路径为绝对路径；直接展开整个数组后追加子命令，不从脚本路径重新拼接。`translation.command` 包含独立 Python、脚本、必需的 `--config` 和配置路径。在 PowerShell 使用调用运算符，在 Bash 正确引用参数。下面的 `<translation.command>` 和 `<modelsCommand>` 表示展开整个数组，不是要输入的命令名称。
+调用 `get_workspace_context`，读取 `translation.command`、`translation.modelsCommand` 及 `translation.ocr`。命令是完整的程序及参数数组，路径为绝对路径；直接展开整个数组后追加子命令，不从脚本路径重新拼接。翻译命令默认读取应用配置；如需用 JSON 文件覆盖流水线设置，在子命令前追加 `--config <配置文件>`。在 PowerShell 使用调用运算符，在 Bash 正确引用参数。下面的 `<translation.command>` 和 `<modelsCommand>` 表示展开整个数组，不是要输入的命令名称。
 
 按所选路线检查需要的环境。`translation.configured` 和 `translation.ocr.configured` 表示对应安装登记，返回命令路径本身不代表已安装。已有可用环境直接复用；环境缺失时先说明需要安装什么及联网下载，通过 `ask_user` 询问用户是否同意，收到同意后才执行安装。本任务中已有的明确安装授权可沿用；未获同意时不安装，说明受影响的步骤。安装入口、前提和资源目录见 [运行说明](references/runtime.md)。
 
@@ -85,7 +85,7 @@ TeX 按 `document-workbench` 处理工程、编译和展示。HTML 优先将论�
 
 模型 ID 来自 `--list`，保留完整供应商前缀。默认把所有块一次发送；只有所选模型的上下文或输出容量不足时才按连续块分批，带相邻上下文并保留统一术语表。`--instructions` 和 `--glossary` 可指定用户要求、术语文件。
 
-`translate` 使用 [固定提示词](../../prompts/blocks.md)，记录每批请求和原始响应，验证外部结果的块 ID 完整性。响应损坏时读取报错所指文件，由当前助手修复格式或映射并写成完整 `translations.json`；缺少的译文需补译，不能用原文填充后宣称成功。修复后直接运行 `render`，不重复 OCR。
+`translate` 使用 [固定提示词](../../prompts/blocks.md)，在输出目录的 `run-*` 子目录记录每批请求和原始响应，验证外部结果的块 ID 完整性。重新翻译时，已有的 `translations.json` 会保存在输出目录下的 `previous-*` 子目录。命令生成的译文记录原文内容和目标语言，渲染时会核对这两项。响应损坏时读取报错所指文件，由当前助手修复格式或映射并写成完整 `translations.json`；缺少的译文需补译，不能用原文填充后宣称成功。修复后直接运行 `render`，不重复 OCR。
 
 ```text
 <translation.command> render --document translation/document.json --translations translation/translations.json --output translation --target zh-CN --layout

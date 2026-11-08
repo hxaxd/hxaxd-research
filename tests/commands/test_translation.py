@@ -67,11 +67,40 @@ class TranslationCommands(unittest.TestCase):
         progress = [json.loads(line) for line in result.stdout.splitlines()]
         self.assertGreater(len(progress), 1)
         self.assertEqual(sum(batch["blocks"] for batch in progress), 100)
-        self.assertEqual(json.loads((output / "translations.json").read_text(encoding="utf-8")), {
-            "blocks": [{"id": "b0", "text": "E=mc^2"}] + [
+        self.assertEqual(json.loads((output / "translations.json").read_text(encoding="utf-8"))["blocks"], [
+            {"id": "b0", "text": "E=mc^2"}, *[
                 {"id": f"b{index}", "text": f"译文：Paragraph {index}."} for index in range(1, 100)
             ],
-        })
+        ])
+
+    def test_failed_rerun_preserves_previous_output_but_render_rejects_it_for_changed_source(self):
+        self.config.write_text(json.dumps({"modelsCommand": [sys.executable, str(MODEL_COMMAND)]}), encoding="utf-8")
+        output = self.root / "translated"
+        command = ("translate", "--document", self.document, "--output", output, "--target", "zh-CN", "--model")
+        first = self.command(*command, "test/translator")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        final = output / "translations.json"
+        original = final.read_bytes()
+        wrong_language = self.command("render", "--document", self.document, "--translations", final,
+                                      "--output", self.root / "wrong-language", "--target", "en")
+        self.assertEqual(wrong_language.returncode, 1)
+        self.assertIn("译文与当前原文或目标语言不匹配", wrong_language.stderr)
+
+        document = json.loads(self.document.read_text(encoding="utf-8"))
+        document["pages"][0]["blocks"][1]["text"] = "A revised paragraph."
+        self.document.write_text(json.dumps(document), encoding="utf-8")
+        rerun = self.command(*command, "test/unavailable")
+        self.assertNotEqual(rerun.returncode, 0)
+        self.assertFalse(final.exists())
+        [partial] = output.glob("run-*/partial-translations.json")
+        self.assertEqual(json.loads(partial.read_text(encoding="utf-8"))["blocks"], [])
+        [previous] = output.glob("previous-*/translations.json")
+        self.assertEqual(previous.read_bytes(), original)
+
+        rendered = self.command("render", "--document", self.document, "--translations", previous,
+                                "--output", self.root / "rendered", "--target", "zh-CN")
+        self.assertEqual(rendered.returncode, 1)
+        self.assertIn("译文与当前原文或目标语言不匹配", rendered.stderr)
 
     def test_commands_use_the_configured_runtime_prompt_and_html_template(self):
         templates = self.root / "templates"
