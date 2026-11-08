@@ -6,21 +6,15 @@ requires-python = ">=3.12,<3.13"
 dependencies = ["paddleocr[doc-parser]==3.7.0", "python-docx==1.2.0"]
 
 [project.optional-dependencies]
-gpu = ["paddlepaddle-gpu==3.2.1"]
-cpu = ["paddlepaddle==3.2.1"]
+gpu = ["paddlepaddle-gpu @ https://paddle-whl.cdn.bcebos.com/stable/cu129/paddlepaddle-gpu/paddlepaddle_gpu-3.3.1-cp312-cp312-linux_x86_64.whl"]
+cpu = ["paddlepaddle==3.3.1"]
 
 [tool.uv]
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 conflicts = [[{ extra = "gpu" }, { extra = "cpu" }]]
 
 [tool.uv.sources]
-paddlepaddle-gpu = { index = "paddle-gpu" }
 paddlepaddle = { index = "paddle-cpu" }
-
-[[tool.uv.index]]
-name = "paddle-gpu"
-url = "https://www.paddlepaddle.org.cn/packages/stable/cu129/"
-explicit = true
 
 [[tool.uv.index]]
 name = "paddle-cpu"

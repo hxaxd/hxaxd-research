@@ -11,7 +11,7 @@ import { readAppConfig } from '../config.mjs';
 const projectRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const { ocrDir: ocrRoot, ocr } = readAppConfig(projectRoot);
 const ocrModel = 'PaddleOCR-VL-1.6';
-const uvVersion = '0.12.22';
+const uvVersion = '0.13.7';
 
 function linuxPath(value) {
   const absolute = path.resolve(value);
@@ -40,13 +40,15 @@ const distro = values.distro;
 if (runLinux(distro, 'uname', ['-m'], true) !== 'x86_64') throw new Error('OCR 运行环境需要 Linux x64');
 const tools = path.join(ocrRoot, 'tools');
 await mkdir(tools, { recursive: true });
-const uv = path.join(tools, 'uv-x86_64-unknown-linux-gnu/uv');
+const uvRoot = path.join(tools, `uv-${uvVersion}`);
+const uv = path.join(uvRoot, 'uv-x86_64-unknown-linux-gnu/uv');
 if (!existsSync(uv)) {
+  await mkdir(uvRoot, { recursive: true });
   const archive = path.join(tools, `uv-${uvVersion}.tar.gz`);
   const response = await fetch(`https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-x86_64-unknown-linux-gnu.tar.gz`);
   if (!response.ok) throw new Error(`uv 下载失败：${response.status}`);
   await pipeline(Readable.fromWeb(response.body), createWriteStream(archive));
-  runLinux(distro, 'tar', ['-xzf', linuxPath(archive), '-C', linuxPath(tools)]);
+  runLinux(distro, 'tar', ['-xzf', linuxPath(archive), '-C', linuxPath(uvRoot)]);
 }
 const runtime = linuxPath(ocrRoot);
 const environment = [
@@ -61,7 +63,9 @@ const environment = [
 ];
 runLinux(distro, 'env', [...environment, linuxPath(uv), 'python', 'install', '3.12.10']);
 const interpreter = runLinux(distro, 'env', [...environment, linuxPath(uv), 'python', 'find', '--managed-python', '3.12.10'], true);
-runLinux(distro, 'env', [...environment, linuxPath(uv), 'sync', '--project', linuxPath(path.join(projectRoot, 'src/app/ocr')),
+// WSL's Windows-mounted drive can deny the cache rename after extracting the GPU wheel.
+const syncOptions = process.platform === 'win32' ? ['--no-cache'] : [];
+runLinux(distro, 'env', [...environment, linuxPath(uv), 'sync', ...syncOptions, '--project', linuxPath(path.join(projectRoot, 'src/app/ocr')),
   '--locked', '--python', interpreter, '--extra', values.device === 'cpu' ? 'cpu' : 'gpu']);
 const python = `${linuxPath(ocrRoot)}/python/bin/python`;
 runLinux(distro, 'env', [...environment, python, '-c',
