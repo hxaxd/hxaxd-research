@@ -48,7 +48,7 @@
 <body>
   <nav class="tools" aria-label="阅读设置">
     {{SOURCE}}
-    <button id="original" aria-pressed="false">原文对照</button>
+    {{ORIGINAL_CONTROL}}
     <span class="spacer"></span>
     <button id="theme" aria-label="切换明暗外观">明暗外观</button>
     <button id="print">打印</button>
@@ -57,12 +57,11 @@
   <script src="assets/katex/katex.min.js"></script>
   <script src="assets/katex/auto-render.min.js"></script>
   <script>
-    document.querySelector('#original').onclick = event => {
+    document.querySelector('#original')?.addEventListener('click', event => {
       const active = event.currentTarget.getAttribute('aria-pressed') !== 'true';
       event.currentTarget.setAttribute('aria-pressed', String(active));
       document.body.dataset.original = String(active);
-    };
-    document.querySelector('#original').hidden = !document.querySelector('.original');
+    });
     document.querySelector('#theme').onclick = () => {
       const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
       document.documentElement.dataset.theme = dark ? 'light' : 'dark';

@@ -141,6 +141,16 @@ class TranslationCommands(unittest.TestCase):
         self.assertIn("data-template='workspace'", html)
         self.assertIn("中文译稿", html)
 
+    def test_render_markdown_omits_the_original_toggle_when_no_source_is_available(self):
+        source = self.root / "translation.md"
+        source.write_text("中文译稿。", encoding="utf-8")
+        output = self.root / "reading.html"
+        result = self.command("render-markdown", "--input", source, "--output", output, "--target", "zh-CN")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        html = output.read_text(encoding="utf-8")
+        self.assertIn("中文译稿。", html)
+        self.assertNotIn("原文对照", html)
+
     def test_render_accepts_complete_translations_and_reports_missing_duplicate_or_changed_formula(self):
         translated = [{"id": block["id"], "text": block["text"] if block["preserve"] else "译文"}
                       for block in self.blocks]
@@ -150,7 +160,10 @@ class TranslationCommands(unittest.TestCase):
         result = self.command("render", "--document", self.document, "--translations", source,
                               "--output", output, "--target", "zh-CN")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("译文", (output / "translated.html").read_text(encoding="utf-8"))
+        html = (output / "translated.html").read_text(encoding="utf-8")
+        self.assertIn("译文", html)
+        self.assertIn("原文对照", html)
+        self.assertIn("Paragraph 1.", html)
         self.assertIn("E=mc^2", (output / "translated.md").read_text(encoding="utf-8"))
         for case, items, error in [
             ("missing", translated[:-1], "缺少 ['b99']"),

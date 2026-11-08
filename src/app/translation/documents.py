@@ -153,14 +153,15 @@ def install_math(config, output):
     shutil.copytree(source / "fonts", target / "fonts", dirs_exist_ok=True)
 
 
-def write_html(config, target, title, content, toc, language):
+def write_html(config, target, title, content, toc, language, *, has_original=False):
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     install_math(config, target.parent)
     template = (Path(config["templateDir"]) / "app/translation/skills/paper-translation/assets/paper.html").read_text(encoding="utf-8")
+    original_control = '<button id="original" aria-pressed="false">原文对照</button>' if has_original else ""
     values = {"TITLE": html.escape(title), "LANG": html.escape(language),
-              "CONTENT": content, "TOC": toc, "SOURCE": ""}
-    target.write_text(re.sub(r"\{\{(TITLE|LANG|CONTENT|TOC|SOURCE)\}\}",
+              "CONTENT": content, "TOC": toc, "SOURCE": "", "ORIGINAL_CONTROL": original_control}
+    target.write_text(re.sub(r"\{\{(TITLE|LANG|CONTENT|TOC|SOURCE|ORIGINAL_CONTROL)\}\}",
                             lambda match: values[match[1]], template), encoding="utf-8")
 
 
@@ -169,6 +170,7 @@ def render_document(config, document, translated, output, target):
     output.mkdir(parents=True, exist_ok=True)
     parser = markdown()
     parts, source_parts, contents, toc = [], [], [], []
+    has_original = False
     for block in blocks(document):
         if block["label"] in {"header", "footer", "number", "header_image", "footer_image"}:
             continue
@@ -188,11 +190,15 @@ def render_document(config, document, translated, output, target):
             toc.append(f'<a href="#{block["id"]}">{html.escape(translated[block["id"]].lstrip("# "))}</a>')
         parts.append(f"<!-- {block['id']} page:{block['page']} -->\n{text}")
         source_parts.append(original)
-        contents.append(f'<section id="{block["id"]}" data-page="{block["page"]}">{parser.render(text)}'
-                        + (f'<div class="original">{parser.render(original)}</div>' if text != original else "") + '</section>')
+        content = parser.render(text)
+        if text != original:
+            has_original = True
+            content += f'<div class="original">{parser.render(original)}</div>'
+        contents.append(f'<section id="{block["id"]}" data-page="{block["page"]}">{content}</section>')
     (output / "translated.md").write_text("\n\n".join(table_markdown(part) if "<table" in part else part for part in parts), encoding="utf-8")
     (output / "source.md").write_text("\n\n".join(source_parts), encoding="utf-8")
-    write_html(config, output / "translated.html", document["title"], "\n".join(contents), "\n".join(toc), target)
+    write_html(config, output / "translated.html", document["title"], "\n".join(contents), "\n".join(toc), target,
+               has_original=has_original)
 
 
 def render_markdown(config, source, target, title, language):
