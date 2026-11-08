@@ -52,7 +52,14 @@ export async function importWorkspaceFiles(
       headers: { 'content-type': request.headers.get('content-type') ?? '' },
       preservePath: true,
       defParamCharset: 'utf8',
-      limits: { fileSize: limits.uploadFileBytes, files: limits.uploadFiles, fields: 1, fieldSize: 4096, parts: limits.uploadFiles + 1 },
+      limits: {
+        fileSize: limits.uploadFileBytes,
+        files: limits.uploadFiles,
+        fields: 1,
+        fieldSize: 4096,
+        // Busboy emits partsLimit at equality. Allow the files and one metadata field.
+        parts: limits.uploadFiles + 2,
+      },
     });
   } catch {
     throw new ApiError(400, 'invalid_input', t('errors.uploadFormat'));

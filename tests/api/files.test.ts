@@ -57,6 +57,31 @@ test('application configuration controls preview and upload limits through the f
   expect(await (await file(request('/file?path=imported/0.txt'), context)).text()).toBe('abcd');
 });
 
+test('batch imports accept the configured file count and reject larger batches without saving files', async () => {
+  await writeFile(app.config.configFile, JSON.stringify({
+    dataDir: app.config.dataDir,
+    files: { uploadFiles: 2 },
+  }));
+  restartApp();
+  const context = workspaceContext(app.workspace.id);
+  function upload(folderName: string, names: string[]) {
+    const form = new FormData();
+    form.set('metadata', JSON.stringify({ folderName }));
+    for (const name of names) form.append('files', new Blob([name]), name);
+    return importFiles(new Request('http://localhost/imports', { method: 'POST', body: form }), context);
+  }
+
+  const accepted = await upload('accepted', ['first.txt', 'second.txt']);
+  expect(accepted.status).toBe(201);
+  expect(await accepted.json()).toMatchObject({ path: 'accepted', files: 2 });
+  expect(await (await file(request('/file?path=accepted/first.txt'), context)).text()).toBe('first.txt');
+  expect(await (await file(request('/file?path=accepted/second.txt'), context)).text()).toBe('second.txt');
+
+  const rejected = await upload('rejected', ['first.txt', 'second.txt', 'third.txt']);
+  expect(rejected.status).toBe(413);
+  expect(await (await files(request('/files'), context)).json()).not.toContainEqual(expect.objectContaining({ name: 'rejected' }));
+});
+
 test('materials follow external filesystem changes without being registered in workspace metadata', async () => {
   const context = workspaceContext(app.workspace.id);
   const root = path.join(app.config.workspaceDir, app.workspace.id);
