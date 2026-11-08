@@ -177,7 +177,9 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
         viewer.currentPageNumber = next;
         if (!down) container.scrollTop = container.scrollHeight;
       }, { passive: false, signal: controller.signal });
-      task = library.getDocument({ url, cMapUrl: '/pdf-assets/cmaps/', cMapPacked: true,
+      // Prefetch would pull every page of a scan on open, and its pending loop reads
+      // page views that teardown has already removed.
+      task = library.getDocument({ url, cMapUrl: '/pdf-assets/cmaps/', cMapPacked: true, disableAutoFetch: true,
         standardFontDataUrl: '/pdf-assets/standard_fonts/', wasmUrl: '/pdf-assets/wasm/' });
       const pdf = await task.promise;
       if (controller.signal.aborted) return;
