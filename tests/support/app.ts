@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 
 import { POST as createWorkspace } from '@/app/api/workspaces/route';
 import { getAppRuntime } from '@/app/runtime';
+import { workspaceSchema } from '@/app/workspaces/schema';
 
 export function restartApp() {
   delete (globalThis as typeof globalThis & { researchAppRuntime?: unknown }).researchAppRuntime;
@@ -18,9 +19,11 @@ export async function createTestApp() {
   await writeFile(configFile, JSON.stringify({ dataDir }));
   vi.stubEnv('APP_CONFIG_FILE', configFile);
   const { config } = getAppRuntime();
-  const workspace = await (await createWorkspace(request('/workspaces', 'POST', {
+  const response = await createWorkspace(request('/workspaces', 'POST', {
     id: randomUUID(), name: '测试工作区',
-  }))).json() as { id: string; name: string };
+  }));
+  expect(response.status).toBe(201);
+  const workspace = workspaceSchema.parse(await response.json());
   return {
     config,
     workspace,

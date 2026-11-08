@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { ApiError, isApiError } from '@/shared/http/api-error';
+import { ApiError, isApiError, type ApiErrorResponse } from '@/shared/http/api-error';
 import { idSchema } from '@/shared/schema';
 
 export async function handleApiRequest(
@@ -14,6 +14,11 @@ export async function handleApiRequest(
 ): Promise<Response> {
   return withLocale(requestLocale(request), async () => {
     const requestId = randomUUID();
+    function errorResponse(status: number, code: string, message: string) {
+      const body: ApiErrorResponse = { error: { code, message, requestId } };
+      return Response.json(body, { status });
+    }
+
     try {
       if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
         const origin = request.headers.get('origin');
@@ -44,32 +49,11 @@ export async function handleApiRequest(
       return response;
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
-        return Response.json(
-          {
-            error: {
-              code: 'invalid_input',
-              message: t('errors.input'),
-              requestId,
-            },
-          },
-          { status: 400 },
-        );
+        return errorResponse(400, 'invalid_input', t('errors.input'));
       if (isApiError(error))
-        return Response.json(
-          { error: { code: error.code, message: error.message, requestId } },
-          { status: error.status },
-        );
+        return errorResponse(error.status, error.code, error.message);
       console.error('Request failed', requestId, error);
-      return Response.json(
-        {
-          error: {
-            code: 'internal_error',
-            message: t('errors.internal', {value0: requestId.slice(0, 8)}),
-            requestId,
-          },
-        },
-        { status: 500 },
-      );
+      return errorResponse(500, 'internal_error', t('errors.internal', {value0: requestId.slice(0, 8)}));
     }
   });
 }

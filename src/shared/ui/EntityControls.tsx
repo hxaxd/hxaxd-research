@@ -31,6 +31,7 @@ export function CreateEntityDialog({
   const open = controlledOpen ?? localOpen;
   const setOpen = onOpenChange ?? setLocalOpen;
   const [name, setName] = useState(initialName);
+  const trimmedName = name.trim();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   return (
@@ -57,11 +58,11 @@ export function CreateEntityDialog({
           <form
             onSubmit={async (event) => {
               event.preventDefault();
-              if (busy || !name.trim()) return;
+              if (busy || !trimmedName) return;
               setBusy(true);
               setError('');
               try {
-                await onSubmit(name.trim());
+                await onSubmit(trimmedName);
                 setOpen(false);
               } catch (error) {
                 setError((error as Error).message);
@@ -93,7 +94,7 @@ export function CreateEntityDialog({
               </Dialog.Close>
               <button
                 className="button primary"
-                disabled={busy || !name.trim()}
+                disabled={busy || !trimmedName}
               >
                 {busy ? t('common.saving') : t('common.save')}
               </button>

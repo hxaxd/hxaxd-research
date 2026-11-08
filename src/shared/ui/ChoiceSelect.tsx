@@ -6,7 +6,6 @@ import './ChoiceSelect.css';
 import { useTranslations } from 'use-intl';
 
 import * as Select from '@radix-ui/react-select';
-import { clsx } from 'clsx';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 export function ChoiceSelect({
@@ -15,25 +14,21 @@ export function ChoiceSelect({
   items,
   onChange,
   disabled,
-  iconOnly = false,
-  placeholder,
 }: {
   label: string;
   value: string;
-  items: { id: string; name: string; detail?: string }[];
+  items: { id: string; name: string }[];
   onChange: (id: string) => void;
   disabled?: boolean;
-  iconOnly?: boolean;
-  placeholder?: string;
 }) {
   const t = useTranslations();
   return (
     <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
       <Select.Trigger
-        className={clsx('choice-trigger', iconOnly && 'icon-only')}
+        className="choice-trigger"
         aria-label={label}
       >
-        {!iconOnly && <Select.Value placeholder={placeholder ?? t('common.select')} />}
+        <Select.Value placeholder={t('common.select')} />
         <Select.Icon>
           <ChevronDown size={14} aria-hidden="true" />
         </Select.Icon>
@@ -57,7 +52,6 @@ export function ChoiceSelect({
               >
                 <span className="choice-item-copy">
                   <Select.ItemText>{item.name}</Select.ItemText>
-                  {item.detail && <small>{item.detail}</small>}
                 </span>
                 <Select.ItemIndicator>
                   <Check size={14} />

@@ -23,17 +23,18 @@ beforeAll(async () => {
   ));
   const config = path.join(directory, 'config.jsonc');
   await writeFile(config, JSON.stringify({ dataDir: path.join(directory, 'data'), tempDir: path.join(directory, 'uploads') }));
-  server = fork(fileURLToPath(new URL('../support/next-server.mjs', import.meta.url)), [project], {
+  const child = fork(fileURLToPath(new URL('../support/next-server.mjs', import.meta.url)), [project], {
     silent: true, execArgv: [],
     env: { ...process.env, NODE_ENV: 'development', APP_CONFIG_FILE: config },
   });
+  server = child;
   let output = '';
-  server.stdout?.on('data', chunk => { output += chunk; });
-  server.stderr?.on('data', chunk => { output += chunk; });
-  closed = new Promise(resolve => server!.once('close', resolve));
+  child.stdout?.on('data', chunk => { output += chunk; });
+  child.stderr?.on('data', chunk => { output += chunk; });
+  closed = new Promise(resolve => child.once('close', resolve));
   try {
     const [address] = await Promise.race([
-      once(server, 'message', { signal: AbortSignal.timeout(30_000) }),
+      once(child, 'message', { signal: AbortSignal.timeout(30_000) }),
       closed.then(() => { throw new Error('Next.js exited before listening'); }),
     ]);
     base = address;
