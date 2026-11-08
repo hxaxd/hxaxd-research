@@ -106,4 +106,4 @@
 // 监听地址与端口使用 Next 启动参数，未重复写入平台配置：
 // npm start -- --hostname 127.0.0.1 --port 8642
 // --hostname 是监听地址字符串，--port 是可用 TCP 端口；项目脚本默认如上。
-// 文字模型、语音及浏览器偏好见 src/features/settings/skills/workbench-guide/references/configuration.md。
+// 文字模型、语音及浏览器偏好见 src/app/settings/skills/workbench-guide/references/configuration.md。
