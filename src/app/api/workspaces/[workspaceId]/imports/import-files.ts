@@ -106,7 +106,7 @@ export async function importWorkspaceFiles(
         });
         const task = (async () => {
           if (!metadata) throw new ApiError(400, 'invalid_input', t('errors.importMetadata'));
-          const relative = validateRelativePath(info.filename, false);
+          const relative = validateRelativePath(info.filename ?? '', false);
           const key = relative.toLocaleLowerCase('en-US');
           if (seen.has(key)) throw new ApiError(409, 'conflict', t('errors.duplicatePath'));
           seen.add(key);

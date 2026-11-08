@@ -289,6 +289,16 @@ test('invalid uploads are rejected as client input without adding material', asy
   const empty = new FormData();
   empty.set('metadata', JSON.stringify({ target: '' }));
   expect((await importFiles(new Request('http://localhost/imports', { method: 'POST', body: empty }), context)).status).toBe(400);
+  const unnamed = new Request('http://localhost/imports', {
+    method: 'POST',
+    headers: { 'content-type': 'multipart/form-data; boundary=import-test' },
+    body: [
+      '--import-test', 'Content-Disposition: form-data; name="metadata"', '', '{"target":""}',
+      '--import-test', 'Content-Disposition: form-data; name="files"',
+      'Content-Type: application/octet-stream', '', 'unnamed file', '--import-test--', '',
+    ].join('\r\n'),
+  });
+  expect((await importFiles(unnamed, context)).status).toBe(400);
   const repeated = new FormData();
   repeated.set('metadata', JSON.stringify({ target: '' }));
   repeated.append('files', new Blob(['first']), 'same.txt');
