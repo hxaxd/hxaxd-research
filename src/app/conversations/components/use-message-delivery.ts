@@ -10,6 +10,7 @@ export type Delivery = {
   input: SendMessage;
   status: 'sending' | 'retrying' | 'accepted' | 'stopping' | 'stopped' | 'failed';
   error?: string;
+  retryWithNewId?: boolean;
 };
 
 const retryableStatuses = [408, 429, 502, 503, 504];
@@ -91,8 +92,10 @@ export function useMessageDelivery() {
         runSchema.nullable().parse(result.data);
         update(url, id, { status: 'stopped' });
       } else {
-        messageSubmissionSchema.parse(result.data);
-        update(url, id, { status: 'accepted' });
+        const submission = messageSubmissionSchema.parse(result.data);
+        update(url, id, submission.status === 'failed'
+          ? { status: 'failed', retryWithNewId: true }
+          : submission.status === 'cancelled' ? { status: 'stopped' } : { status: 'accepted' });
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -104,9 +107,25 @@ export function useMessageDelivery() {
     }
   }
 
-  function send(url: string, input: SendMessage) {
-    setByUrl(current => ({ ...current, [url]: [...(current[url] ?? []), { input, status: 'sending' }] }));
+  function send(url: string, input: SendMessage, clearFailed = true) {
+    setByUrl(current => {
+      const items = current[url] ?? [];
+      return {
+        ...current,
+        [url]: [...(clearFailed ? items.filter(item => item.status !== 'failed' && item.status !== 'stopped') : items),
+          { input, status: 'sending' }],
+      };
+    });
     void run(url, input, false);
+  }
+
+  function retry(url: string, { input, status, retryWithNewId }: Delivery) {
+    update(url, input.id, null);
+    send(url, status === 'stopped' || retryWithNewId ? { ...input, id: crypto.randomUUID() } : input, false);
+  }
+
+  function dismiss(url: string, id: string) {
+    update(url, id, null);
   }
 
   function stop(url: string, input: SendMessage) {
@@ -125,10 +144,13 @@ export function useMessageDelivery() {
         requests.current.get(id)?.abort();
         const next = snapshot.run.status === 'failed' ? 'failed'
           : snapshot.run.status === 'cancelled' ? 'stopped' : 'accepted';
-        if (status !== next) update(url, id, { status: next });
+        if (status !== next) update(url, id, {
+          status: next,
+          ...(next === 'failed' && { error: snapshot.error ?? undefined, retryWithNewId: true }),
+        });
       }
     }
   }, [update]);
 
-  return { byUrl, send, stop, observe };
+  return { byUrl, send, retry, dismiss, stop, observe };
 }

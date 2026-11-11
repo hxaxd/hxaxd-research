@@ -66,7 +66,10 @@ export function ConversationPanel({
         </p>
       )}
       <ConversationMessages snapshot={snapshot} outgoing={outgoing} workspaceId={workspaceId}
-        onStopDelivery={input => delivery.stop(url, input)} onOpenDocument={onOpenDocument} url={url} />
+        onStopDelivery={input => delivery.stop(url, input)}
+        onRetryDelivery={item => delivery.retry(url, item)}
+        onDismissDelivery={id => delivery.dismiss(url, id)}
+        onOpenDocument={onOpenDocument} url={url} />
       <ConversationComposer
         url={url}
         skillCommands={skillCommands}

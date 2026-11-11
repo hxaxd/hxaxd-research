@@ -7,7 +7,7 @@ import './ConversationMessages.css';
 import { useTranslations } from 'use-intl';
 
 import { MessageCircle } from 'lucide-react';
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import { Markdown } from '@/shared/ui/Markdown';
 import type { ReadingContext } from '@/app/files/schema';
@@ -28,17 +28,22 @@ const deliveryLabels = {
   failed: 'conversations.sendFailed',
 } as const;
 
-export const ConversationMessages = memo(function ConversationMessages({ snapshot, outgoing, workspaceId, onStopDelivery, onOpenDocument, url }: {
+export const ConversationMessages = memo(function ConversationMessages({
+  snapshot, outgoing, workspaceId, onStopDelivery, onRetryDelivery, onDismissDelivery, onOpenDocument, url,
+}: {
   snapshot: ConversationSnapshot | null;
   outgoing?: Delivery[];
   workspaceId: string;
   onStopDelivery: (input: SendMessage) => void;
+  onRetryDelivery: (item: Delivery) => void;
+  onDismissDelivery: (id: string) => void;
   onOpenDocument: (target: ReadingContext) => void;
   url: string;
 }) {
   const t = useTranslations();
   const end = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const [dismissedRun, setDismissedRun] = useState<string | null>(null);
   const messages = snapshot?.messages ?? [];
   const pending = outgoing?.filter(({ input }) =>
     !messages.some(message => message.id === input.id) && !snapshot?.queue.some(message => message.id === input.id)) ?? [];
@@ -62,6 +67,7 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
     });
   }
   const status = snapshot?.run?.status;
+  const showRunNotice = snapshot?.run?.id !== dismissedRun && !pending.some(item => item.input.id === snapshot?.run?.id);
   const running = status === 'accepted' || status === 'running';
   const last = messages.at(-1);
   const streamingId = running && last?.role === 'assistant' ? last.id : null;
@@ -84,6 +90,8 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
       )}
       {blocks.map((message) => {
         const delivery = Array.isArray(message) ? undefined : deliveries.get(message.id);
+        const deliveryError = delivery?.error ??
+          (delivery?.status === 'failed' && delivery.input.id === snapshot?.run?.id ? snapshot.error : null);
         return Array.isArray(message) ? (
             <ToolExecutionGroup key={message[0].id} messages={message} />
           ) : message.question ? (
@@ -125,12 +133,25 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
               </div>
               {delivery && <div className="message-delivery">
                 <span role={delivery.status === 'failed' ? 'alert' : 'status'}>
-                  {t(deliveryLabels[delivery.status])}{delivery.error ? ` · ${delivery.error}` : ''}
+                  {t(deliveryLabels[delivery.status])}{deliveryError ? ` · ${deliveryError}` : ''}
                 </span>
                 {(delivery.status === 'sending' || delivery.status === 'retrying' || delivery.status === 'accepted') &&
                   <button type="button" className="text-action" onClick={() => onStopDelivery(delivery.input)}>
                     {t('common.stop')}
                   </button>}
+                {(delivery.status === 'failed' || delivery.status === 'stopped') && (
+                  <div className="message-delivery-actions">
+                    <button type="button" className="text-action" onClick={() => onRetryDelivery(delivery)}>
+                      {t('conversations.resendMessage')}
+                    </button>
+                    <button type="button" className="text-action" onClick={() => {
+                      if (snapshot?.run?.id === delivery.input.id) setDismissedRun(delivery.input.id);
+                      onDismissDelivery(delivery.input.id);
+                    }}>
+                      {t('conversations.dismissDelivery')}
+                    </button>
+                  </div>
+                )}
               </div>}
             </article>
           );
@@ -144,15 +165,15 @@ export const ConversationMessages = memo(function ConversationMessages({ snapsho
               : status === 'accepted' ? t('conversations.preparing') : t('conversations.responding')}
         </div>
       )}
-      {status === 'cancelled' && (
+      {showRunNotice && status === 'cancelled' && (
         <p className="run-notice">{t('conversations.cancelled')}</p>
       )}
-      {status === 'failed' && !snapshot?.error && (
+      {showRunNotice && status === 'failed' && !snapshot?.error && (
         <p role="alert" className="error-message">
           {t('conversations.failed')}
         </p>
       )}
-      {snapshot?.error && (
+      {showRunNotice && snapshot?.error && (
         <p role="alert" className="error-message">
           {snapshot.error}
         </p>
