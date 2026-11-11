@@ -107,17 +107,21 @@ export function useMessageDelivery() {
     }
   }
 
-  function send(url: string, input: SendMessage) {
-    setByUrl(current => ({
-      ...current,
-      [url]: [...(current[url] ?? []).filter(item => item.status !== 'failed' && item.status !== 'stopped'),
-        { input, status: 'sending' }],
-    }));
+  function send(url: string, input: SendMessage, clearFailed = true) {
+    setByUrl(current => {
+      const items = current[url] ?? [];
+      return {
+        ...current,
+        [url]: [...(clearFailed ? items.filter(item => item.status !== 'failed' && item.status !== 'stopped') : items),
+          { input, status: 'sending' }],
+      };
+    });
     void run(url, input, false);
   }
 
   function retry(url: string, { input, status, retryWithNewId }: Delivery) {
-    send(url, status === 'stopped' || retryWithNewId ? { ...input, id: crypto.randomUUID() } : input);
+    update(url, input.id, null);
+    send(url, status === 'stopped' || retryWithNewId ? { ...input, id: crypto.randomUUID() } : input, false);
   }
 
   function dismiss(url: string, id: string) {
