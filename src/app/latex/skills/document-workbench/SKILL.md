@@ -48,7 +48,7 @@ $env:FONTCONFIG_FILE = '<tex.root>/fonts.conf'
 
 ## 展示产物
 
-成功生成文档后调用 `open_document`，请求阅读区展示结果。它确认文件存在并发出展示请求，不代表浏览器已经渲染成功，也不会代替编译、脚本执行或交互验收；报告中区分实际做过的检查与尚待用户查看的效果。
+成功生成文档后在回复中提供工作区链接。用户明确要求在阅读区展示结果时调用 `open_document`。工具确认文件存在并发出展示请求，浏览器渲染和交互效果需要单独验证。
 
 ```json
 {"path":"papers/example/build/main.pdf","page":1}
@@ -60,7 +60,7 @@ $env:FONTCONFIG_FILE = '<tex.root>/fonts.conf'
 
 适合重排阅读的材料可输出为 `.md`。支持标题、表格、代码块、相对图片和数学公式；行内公式用 `$...$`，独立公式用 `$$...$$`。保留必要的章节对应和来源信息，复杂 TeX 宏应改成明确的数学表达，不能把任意 LaTeX 工程直接当成 Markdown。
 
-完成后用 `open_document` 打开 `.md` 的预览。
+完成后提供 `.md` 的工作区链接。用户明确要求打开时用 `open_document` 展示预览。
 
 ## HTML
 

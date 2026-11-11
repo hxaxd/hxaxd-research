@@ -13,7 +13,7 @@ export function openDocumentTool(root: string, workspaceId: string, conversation
   return defineTool({
     name: 'open_document',
     label: t('tools.openDocument'),
-    description: '请求当前对话的中间阅读区显示一个已存在的工作区文件。path 是相对路径，不接受网页 URL；不会生成、编译或检查页面运行结果。Markdown／HTML 可选择源码或预览；PDF 可指定页码。HTML 脚本需要用户在阅读器中确认运行，操作见 document-workbench 技能。',
+    description: '切换用户当前的阅读位置。仅在用户本轮明确要求在阅读区打开文件、切换预览模式或跳页时调用。普通问答和交付文件使用后台读取与工作区链接。path 是已存在的工作区文件相对路径。Markdown／HTML 可选择源码或预览，PDF 可指定页码。HTML 脚本需要用户在阅读器中确认运行，操作见 document-workbench 技能。',
     parameters: Type.Object({
       path: Type.String(),
       mode: Type.Optional(Type.Union([Type.Literal('source'), Type.Literal('preview')])),

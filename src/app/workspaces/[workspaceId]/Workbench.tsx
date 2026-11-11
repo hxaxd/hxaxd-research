@@ -344,6 +344,7 @@ export function Workbench({
           }}
           mode={viewMode}
           pageRequest={pdfPageRequest}
+          onOpenDocument={openDocument}
           onOpenFile={openFile}
           onBrowse={() => layout.setOpen('materials', true)}
           onCapture={async clip => {

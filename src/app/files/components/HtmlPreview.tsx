@@ -4,15 +4,49 @@ import { Play, Square } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { useEffect, useRef, useState } from 'react';
 
+import type { ReadingContext } from '../schema';
+import { resolveWorkspaceLink } from '../workspace-link';
 import { ReaderToolbar } from './ReaderToolbar';
 
-export function HtmlPreview({ url }: { url: string }) {
+export function HtmlPreview({ url, workspaceId, onOpenDocument }: {
+  url: string;
+  workspaceId: string;
+  onOpenDocument: (target: ReadingContext) => void;
+}) {
   const t = useTranslations();
+  const frame = useRef<HTMLIFrameElement>(null);
   const pending = useRef<AbortController | null>(null);
   const [interactive, setInteractive] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   useEffect(() => () => pending.current?.abort(), []);
+
+  useEffect(() => {
+    const element = frame.current!;
+    let doc: Document | null = null;
+    function clicked(event: MouseEvent) {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
+      if (!link || link.hasAttribute('download') || link.getAttribute('href')!.trim().startsWith('#')) return;
+      if (new URL(link.href).searchParams.has('download')) return;
+      const target = resolveWorkspaceLink(link.href, workspaceId, window.location.origin);
+      if (!target) return;
+      event.preventDefault();
+      onOpenDocument(target);
+    }
+    function loaded() {
+      doc?.removeEventListener('click', clicked);
+      // A link may navigate the frame to another origin.
+      doc = element.contentDocument;
+      doc?.addEventListener('click', clicked);
+    }
+    element.addEventListener('load', loaded);
+    loaded();
+    return () => {
+      element.removeEventListener('load', loaded);
+      doc?.removeEventListener('click', clicked);
+    };
+  }, [url, workspaceId, onOpenDocument, interactive]);
 
   async function runScripts() {
     if (!window.confirm(t('files.trustHtml'))) return;
@@ -49,7 +83,7 @@ export function HtmlPreview({ url }: { url: string }) {
       </button>
     </ReaderToolbar>
     {error && <p role="alert" className="error-message">{t('files.htmlRunFailed')}</p>}
-    <iframe key={interactive === null ? 'preview' : 'interactive'} className="html-preview" title={t('files.htmlPreview')}
+    <iframe ref={frame} key={interactive === null ? 'preview' : 'interactive'} className="html-preview" title={t('files.htmlPreview')}
       src={interactive === null ? url : undefined} srcDoc={interactive ?? undefined}
       sandbox={interactive === null ? 'allow-same-origin' : 'allow-same-origin allow-scripts allow-forms allow-downloads allow-popups'}
       allowFullScreen referrerPolicy="no-referrer" />

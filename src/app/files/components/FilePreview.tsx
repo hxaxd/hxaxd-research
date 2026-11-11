@@ -16,7 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
-import type { ImageClip, PdfPageRequest, ViewMode, TextQuote } from '../schema';
+import type { ImageClip, PdfPageRequest, ReadingContext, ViewMode, TextQuote } from '../schema';
 
 import { PdfViewer } from './PdfViewer';
 import { TextPreview } from './TextPreview';
@@ -57,6 +57,7 @@ export function FilePreview({
   mode,
   pageRequest,
   onOpenFile,
+  onOpenDocument,
   onCapture,
   onQuote,
 }: {
@@ -69,6 +70,7 @@ export function FilePreview({
   mode: ViewMode;
   pageRequest: PdfPageRequest | null;
   onOpenFile: (path: string) => void;
+  onOpenDocument: (target: ReadingContext) => void;
   onCapture: (clip: ImageClip) => Promise<void>;
   onQuote: (quote: TextQuote) => Promise<void>;
 }) {
@@ -106,7 +108,7 @@ export function FilePreview({
             onCapture={clip => onCapture({ ...clip, path })}
             fileActions={<FileMenuItems url={url} onReload={onReload} />} />
         ) : html && mode === 'preview' ? (
-          <HtmlPreview url={`${previewUrl}?revision=${revision}`} />
+          <HtmlPreview url={`${previewUrl}?revision=${revision}`} workspaceId={workspaceId} onOpenDocument={onOpenDocument} />
         ) : markdown && mode === 'preview' ? (
           <TextPreview url={url} markdown={{ workspaceId, path, onOpenFile }} />
         ) : html || markdown || textExtensions.has(extension) || textPath === path ? (

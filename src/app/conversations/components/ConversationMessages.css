@@ -82,3 +82,9 @@
   color: var(--muted);
   font-size: 0.857143rem;
 }
+
+.message-delivery-actions {
+  display: flex;
+  gap: 4px;
+  margin-inline-start: auto;
+}

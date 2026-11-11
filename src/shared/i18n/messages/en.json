@@ -263,6 +263,8 @@
     "stoppingSend": "Stopping send",
     "sendStopped": "Sending stopped",
     "sendFailed": "Failed to send",
+    "resendMessage": "Resend",
+    "dismissDelivery": "Dismiss",
     "sendMessage": "Send message",
     "queueMessage": "Queue message",
     "queuedMessages": "Queued messages",
