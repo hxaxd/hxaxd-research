@@ -63,6 +63,8 @@ Read, ask questions, and make decisions on your mobile device. AI handles files 
 
 ## Quick start
 
+Agents asked to install, configure, or maintain this workbench should read the [maintenance skill](src/maintenance/skills/workbench-maintenance/SKILL.md) first.
+
 Install **Node.js 24+** and Git on the computer that will run the workbench.
 
 ```sh

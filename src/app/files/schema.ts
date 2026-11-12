@@ -62,9 +62,9 @@ export const textFileSchema = z.object({
 });
 export type FileEntry = z.infer<typeof fileEntrySchema>;
 export type ReadingContext = z.infer<typeof readingContextSchema>;
-export const maxTextQuotes = 12;
-const textQuoteSchema = readingContextSchema.extend({ text: z.string().trim().min(1).max(10000) });
-export const textQuotesSchema = z.array(textQuoteSchema).max(maxTextQuotes);
+export const maxQuoteLength = 10000;
+export const quoteTextSchema = z.string().trim().min(1).max(maxQuoteLength);
+export const textQuoteSchema = readingContextSchema.extend({ text: quoteTextSchema });
 export type TextQuote = z.infer<typeof textQuoteSchema>;
 export const maxImageClips = 6;
 export const imageClipSchema = z.object({

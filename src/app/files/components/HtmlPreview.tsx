@@ -1,9 +1,11 @@
 'use client';
 
+import renderMathInElement from 'katex/contrib/auto-render';
 import { Play, Square } from 'lucide-react';
 import { useTranslations } from 'use-intl';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
+import { useAppearance } from '@/app/settings/components/use-appearance';
 import type { ReadingContext } from '../schema';
 import { resolveWorkspaceLink } from '../workspace-link';
 import { ReaderToolbar } from './ReaderToolbar';
@@ -14,12 +16,18 @@ export function HtmlPreview({ url, workspaceId, onOpenDocument }: {
   onOpenDocument: (target: ReadingContext) => void;
 }) {
   const t = useTranslations();
+  const { resolvedMode } = useAppearance();
   const frame = useRef<HTMLIFrameElement>(null);
   const pending = useRef<AbortController | null>(null);
   const [interactive, setInteractive] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const setPaperTheme = useEffectEvent((doc: Document | null | undefined) => {
+    const root = doc?.documentElement;
+    if (root?.hasAttribute('data-workbench-paper')) root.dataset.theme = resolvedMode;
+  });
   useEffect(() => () => pending.current?.abort(), []);
+  useEffect(() => setPaperTheme(frame.current?.contentDocument), [resolvedMode]);
 
   useEffect(() => {
     const element = frame.current!;
@@ -27,7 +35,11 @@ export function HtmlPreview({ url, workspaceId, onOpenDocument }: {
     function clicked(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
-      if (!link || link.hasAttribute('download') || link.getAttribute('href')!.trim().startsWith('#')) return;
+      if (!link || link.hasAttribute('download')) return;
+      if (link.getAttribute('href')!.trim().startsWith('#')) {
+        if (doc?.documentElement.hasAttribute('data-workbench-paper')) link.closest('details.contents')?.removeAttribute('open');
+        return;
+      }
       if (new URL(link.href).searchParams.has('download')) return;
       const target = resolveWorkspaceLink(link.href, workspaceId, window.location.origin);
       if (!target) return;
@@ -39,6 +51,20 @@ export function HtmlPreview({ url, workspaceId, onOpenDocument }: {
       // A link may navigate the frame to another origin.
       doc = element.contentDocument;
       doc?.addEventListener('click', clicked);
+      setPaperTheme(doc);
+      const paper = interactive === null ? doc?.querySelector<HTMLElement>('[data-workbench-paper] article') : null;
+      if (paper && !paper.dataset.mathRendered) {
+        renderMathInElement(paper, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '$', right: '$', display: false },
+          ],
+          throwOnError: false,
+        });
+        paper.dataset.mathRendered = 'true';
+      }
     }
     element.addEventListener('load', loaded);
     loaded();

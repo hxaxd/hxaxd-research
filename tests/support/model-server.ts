@@ -85,7 +85,9 @@ export async function startModelServer() {
     } else if (prompt.includes('[READING]')) {
       const context = messages.filter(message => message.role === 'user').map(message => text(message.content))
         .findLast(content => content.startsWith('<research-workbench-materials>'))!;
-      const [reading, ...quotes] = context.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+      const entries = context.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+      const reading = entries.find(entry => !entry.kind);
+      const quotes = entries.filter(entry => entry.kind?.endsWith('-quote'));
       frame({ content: JSON.stringify({ reading, quotes }) }, 'stop');
     } else {
       frame({ role: 'assistant', content: '测试回答' }, 'stop');

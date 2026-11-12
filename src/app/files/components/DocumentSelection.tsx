@@ -1,10 +1,8 @@
 'use client';
 
-import { useTranslations } from 'use-intl';
-
-import { Quote, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { QuoteSelectionActions } from '@/app/conversations/components/QuoteSelectionActions';
 import type { ReadingContext, TextQuote } from '../schema';
 
 export function DocumentSelection({ reading, onQuote, children }: {
@@ -12,12 +10,9 @@ export function DocumentSelection({ reading, onQuote, children }: {
   onQuote: (quote: TextQuote) => Promise<void>;
   children: ReactNode;
 }) {
-  const t = useTranslations();
   const root = useRef<HTMLDivElement>(null);
   const nativeSelection = useRef<Selection | null>(null);
   const [quote, setQuote] = useState<TextQuote | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const { path, mode } = reading;
   useEffect(() => {
     const element = root.current!;
@@ -38,7 +33,6 @@ export function DocumentSelection({ reading, onQuote, children }: {
         selectedDocument = doc;
         const page = parent?.closest<HTMLElement>('.page[data-page-number]')?.dataset.pageNumber;
         setQuote(text ? { path, ...(mode ? { mode } : {}), ...(page ? { page: Number(page) } : {}), text } : null);
-        setError(text.length > 10000 ? t('errors.quoteLength') : '');
       };
       doc.addEventListener('selectionchange', update);
       doc.addEventListener('pointerup', update);
@@ -66,21 +60,11 @@ export function DocumentSelection({ reading, onQuote, children }: {
     element.addEventListener('load', loaded, true);
     loaded();
     return () => { unbind(); unbindFrame?.(); element.removeEventListener('load', loaded, true); };
-  }, [path, mode, t]);
+  }, [path, mode]);
 
   return <div className="resource-body" ref={root}>
     {children}
-    {quote && <div className="selection-actions" role="group" aria-label={t('files.selection')}>
-      <span title={quote.text}>{error || quote.text}</span>
-      <button className="button" disabled={busy || quote.text.length > 10000}
-        onPointerDown={event => event.preventDefault()} onClick={async () => {
-          setBusy(true);
-          setError('');
-          try { await onQuote(quote); nativeSelection.current?.removeAllRanges(); setQuote(null); }
-          catch (error) { setError((error as Error).message); }
-          finally { setBusy(false); }
-        }}><Quote size={16} aria-hidden="true" />{busy ? t('files.attaching') : t('files.quote')}</button>
-      <button className="icon-button" aria-label={t('files.cancelQuote')} onClick={() => setQuote(null)}><X size={17} /></button>
-    </div>}
+    {quote && <QuoteSelectionActions key={quote.text} text={quote.text} onClear={() => setQuote(null)}
+      onAttach={async () => { await onQuote(quote); nativeSelection.current?.removeAllRanges(); setQuote(null); }} />}
   </div>;
 }

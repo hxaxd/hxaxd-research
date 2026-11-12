@@ -1,0 +1,36 @@
+.selection-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: var(--floating-shadow);
+  transform-origin: bottom right;
+  animation: surface-in var(--duration-fast) var(--ease-out);
+}
+
+.selection-actions > span {
+  min-width: 0;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.857143rem;
+}
+
+.selection-actions button {
+  flex: none;
+  min-height: 44px;
+}
+
+.selection-actions .icon-button {
+  min-width: 44px;
+}

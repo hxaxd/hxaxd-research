@@ -158,7 +158,7 @@ def write_html(config, target, title, content, toc, language, *, has_original=Fa
     target.parent.mkdir(parents=True, exist_ok=True)
     install_math(config, target.parent)
     template = (Path(config["templateDir"]) / "app/translation/skills/paper-translation/assets/paper.html").read_text(encoding="utf-8")
-    original_control = '<button id="original" aria-pressed="false">原文对照</button>' if has_original else ""
+    original_control = '<label class="original-control"><input type="checkbox" id="original">原文对照</label>' if has_original else ""
     values = {"TITLE": html.escape(title), "LANG": html.escape(language),
               "CONTENT": content, "TOC": toc, "SOURCE": "", "ORIGINAL_CONTROL": original_control}
     target.write_text(re.sub(r"\{\{(TITLE|LANG|CONTENT|TOC|SOURCE|ORIGINAL_CONTROL)\}\}",
@@ -204,6 +204,11 @@ def render_document(config, document, translated, output, target):
 def render_markdown(config, source, target, title, language):
     parser = markdown()
     tokens = parser.parse(Path(source).read_text(encoding="utf-8-sig"))
+    if tokens and tokens[0].type == "heading_open" and tokens[0].tag == "h1":
+        heading = tokens[1].content
+        if not title or title == heading:
+            title = heading
+            tokens = tokens[3:]
     toc = []
     for index, token in enumerate(tokens):
         if token.type == "heading_open":

@@ -262,6 +262,24 @@ test('current reading and quotes reach the model without altering user text, liv
   expect((await snapshot()).messages).toEqual(live.messages);
 });
 
+test('assistant excerpts reach the model and retain their source after a restart', async () => {
+  await message('先解释一下');
+  const first = await waitForRun();
+  const reply = first.messages.find(item => item.role === 'assistant')!;
+  const quote = { messageId: reply.id, text: '测试' };
+  expect((await message('引用不存在的消息', { quotes: [{ ...quote, messageId: 'missing' }] })).status).toBe(404);
+
+  const text = '[READING] 这句话是什么意思？';
+  expect((await message(text, { quotes: [quote] })).status).toBe(202);
+  const second = await waitForRun();
+  expect(second.messages.filter(item => item.role === 'user').at(-1)).toMatchObject({ text, quotes: [quote] });
+  expect(JSON.parse(second.messages.at(-1)!.text)).toEqual({
+    quotes: [{ kind: 'assistant-quote', ...quote }],
+  });
+  restartApp();
+  expect((await snapshot()).messages).toEqual(second.messages);
+});
+
 test('opening a document from a conversation tells the workspace reader which file and page to display', async () => {
   await writeFile(path.join(app.config.workspaceDir, app.workspace.id, 'paper.pdf'), '%PDF-1.7');
   const stream = await fileEvents(

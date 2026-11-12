@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { maxImageClips, imageClipSchema, readingContextSchema, textQuotesSchema } from '@/app/files/schema';
+import { maxImageClips, imageClipSchema, readingContextSchema, quoteTextSchema, textQuoteSchema } from '@/app/files/schema';
 import { thinkingLevelSchema } from '@/app/models/schema';
 import { createNamedSchema, idSchema } from '@/shared/schema';
 
@@ -10,6 +10,11 @@ export const conversationSchema = createConversationSchema.extend({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+const assistantQuoteSchema = z.object({ messageId: z.string().min(1).max(128), text: quoteTextSchema });
+export const maxTextQuotes = 12;
+export const textQuotesSchema = z.array(z.union([assistantQuoteSchema, textQuoteSchema])).max(maxTextQuotes);
+export type AssistantQuote = z.infer<typeof assistantQuoteSchema>;
+export type ConversationQuote = z.infer<typeof textQuotesSchema>[number];
 export const sendMessageSchema = z.object({
   id: idSchema,
   text: z.string().trim().min(1).max(100000),

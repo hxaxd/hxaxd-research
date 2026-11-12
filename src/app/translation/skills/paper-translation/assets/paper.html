@@ -1,72 +1,119 @@
 <!doctype html>
-<html lang="{{LANG}}">
+<html lang="{{LANG}}" data-workbench-paper>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{TITLE}}</title>
   <link rel="stylesheet" href="assets/katex/katex.min.css">
   <style>
-    :root { color-scheme: light dark; --paper: #fff; --ground: #f3f5f7; --ink: #222b38; --muted: #687487; --line: #e4e8ee; --accent: #315ca7; }
-    @media (prefers-color-scheme: dark) { :root { --paper: #20242b; --ground: #191c22; --ink: #e0e5ed; --muted: #a0adbf; --line: #363d48; --accent: #a1bdf6; } }
-    :root[data-theme="light"] { color-scheme: light; --paper: #fff; --ground: #f3f5f7; --ink: #222b38; --muted: #687487; --line: #e4e8ee; --accent: #315ca7; }
-    :root[data-theme="dark"] { color-scheme: dark; --paper: #20242b; --ground: #191c22; --ink: #e0e5ed; --muted: #a0adbf; --line: #363d48; --accent: #a1bdf6; }
+    :root {
+      color-scheme: light;
+      --paper: #fdfcf8; --ink: #252722; --muted: #585d54;
+      --accent: #325b4a; --line: #dedfd5; --soft: #f1f1e9;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --paper: #20231f; --ink: #e5e6dd; --muted: #b0b6aa;
+      --accent: #a7cdb7; --line: #3e473e; --soft: #2a3029;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) {
+        color-scheme: dark;
+        --paper: #20231f; --ink: #e5e6dd; --muted: #b0b6aa;
+        --accent: #a7cdb7; --line: #3e473e; --soft: #2a3029;
+      }
+    }
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
-    body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.85 Charter, "Iowan Old Style", "Noto Serif SC", "Songti SC", serif; overflow-wrap: anywhere; }
-    .tools { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 8px 18px; background: var(--paper); border-bottom: 1px solid var(--line); font: 13px/1.4 system-ui, sans-serif; }
-    .tools a, button { min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; text-decoration: none; }
-    button[aria-pressed="true"] { background: var(--ground); color: var(--accent); }
+    html { scroll-padding-block-start: 1.5rem; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 1.0625rem/1.85 Spectral, Georgia, "Noto Serif SC", "Songti SC", SimSun, serif;
+      overflow-wrap: anywhere;
+    }
+    .reading { max-inline-size: 48rem; margin-inline: auto; padding: clamp(1.5rem, 6vw, 4.25rem) clamp(1rem, 5vw, 2.5rem) 5rem; }
+    .paper-title {
+      margin: 0;
+      padding-block-end: 1.4rem;
+      border-block-end: 1px solid var(--line);
+      font-size: clamp(1.85rem, 4.5vw, 2.9rem);
+      line-height: 1.22;
+      text-wrap: balance;
+    }
+    .tools { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1.15rem; margin: .35rem 0 1.25rem; }
+    .tools:has(.contents-links:empty):not(:has(.original-control, .print:not([hidden]))),
+    :root[data-theme] .tools:has(.contents-links:empty):not(:has(.original-control)) { display: none; }
+    .tools, figcaption, caption { font: .875rem/1.6 system-ui, sans-serif; color: var(--muted); }
+    .tools summary, .original-control, .print {
+      min-block-size: 44px;
+      padding-block: .65rem;
+      color: var(--accent);
+      cursor: pointer;
+    }
+    .contents { position: relative; }
+    .contents:has(.contents-links:empty) { display: none; }
+    .contents-links {
+      position: absolute; z-index: 1; inset-block-start: 100%; inset-inline-start: 0;
+      display: grid; inline-size: min(20rem, 80vw); max-block-size: 55vh; overflow: auto;
+      padding: .5rem .9rem; border: 1px solid var(--line); background: var(--paper);
+      box-shadow: 0 6px 20px rgb(0 0 0 / .12);
+    }
+    .contents-links a { display: grid; align-content: center; min-block-size: 44px; }
+    .original-control { display: inline-flex; align-items: center; gap: .45rem; }
+    .original-control input { accent-color: var(--accent); }
+    .print { border: 0; background: transparent; font: inherit; }
+    :root[data-theme] .print { display: none; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .tools .spacer { flex: 1; }
-    .reading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 76ch) minmax(0, 1fr); gap: 28px; max-width: 1420px; padding: 44px 32px 96px; margin: auto; }
-    article { grid-column: 2; min-width: 0; }
-    h1 { font-size: clamp(26px, 3vw, 36px); line-height: 1.4; letter-spacing: -.025em; margin: 0 0 2em; font-weight: 650; }
-    h2, h3, h4 { line-height: 1.5; margin: 1.9em 0 .8em; font-weight: 650; }
-    h2 { font-size: 1.34em; } h3 { font-size: 1.14em; }
-    p { margin: .8em 0; }
-    a { color: var(--accent); text-underline-offset: 3px; }
-    aside { grid-column: 1; grid-row: 1; align-self: start; position: sticky; top: 86px; font: 12px/1.65 system-ui, sans-serif; max-height: calc(100dvh - 110px); overflow: auto; }
-    aside:empty { display: none; }
-    aside a { display: block; color: var(--muted); text-decoration: none; padding: 8px 4px; border-radius: 4px; }
-    aside a:hover { color: var(--accent); background: var(--ground); }
-    img, svg { max-width: 100%; height: auto; display: block; margin: 1.4em auto; }
-    table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; margin: 1.5em auto; font-size: .9em; font-variant-numeric: tabular-nums; }
-    th, td { padding: .5em .8em; border-bottom: 1px solid var(--line); text-align: start; }
-    th { border-top: 1.5px solid var(--ink); border-bottom-color: var(--ink); }
-    .math-display, .katex-display { overflow-x: auto; overflow-y: hidden; padding: .2em 0; }
-    .katex { font-size: 1.06em; }
-    pre { overflow: auto; padding: 16px; border-radius: 8px; background: var(--ground); font-size: .82em; line-height: 1.65; }
-    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: .88em; }
-    blockquote { margin: 1.5em 0; padding: 0 1em; border-left: 2px solid var(--line); color: var(--muted); }
-    .original { display: none; color: var(--muted); font-size: .9em; border-left: 2px solid var(--line); padding-left: 1em; margin: 1em 0 1.8em; }
-    body[data-original="true"] .original { display: block; }
-    @media (max-width: 1100px) { .reading { display: block; max-width: 86ch; padding: 30px 28px 80px; } aside { display: none; } }
-    @media print { .tools, aside, .original { display: none !important; } .reading { display: block; padding: 0; } body { font-size: 11pt; color: #111; background: white; } h2, h3 { break-after: avoid; } img, table { break-inside: avoid; } }
-    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    h1, h2, h3, h4 { line-height: 1.35; margin: 2rem 0 .65rem; }
+    h2 { font-size: 1.55rem; } h3 { font-size: 1.2rem; }
+    p, ul, ol { margin-block: .85em; }
+    li + li { margin-block-start: .25em; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    figure { margin: 1.75rem 0; }
+    img { display: block; max-inline-size: 100%; block-size: auto; margin: 1.5rem auto .6rem; }
+    figcaption, caption { margin-block: .65rem; text-align: start; }
+    table { display: block; inline-size: fit-content; max-inline-size: 100%; overflow-x: auto; border-collapse: collapse; margin: 1.5rem auto; font: .9em/1.6 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+    th, td { padding: .5em .75em; border-block-end: 1px solid var(--line); text-align: start; overflow-wrap: normal; }
+    th { border-block-start: 1px solid var(--line); background: var(--soft); }
+    .math-display, .katex-display { overflow-x: auto; overflow-y: hidden; padding-block: .25em; }
+    pre { overflow: auto; padding: 1rem; border: 1px solid var(--line); background: var(--soft); font-size: .86em; line-height: 1.6; }
+    code { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .88em; }
+    blockquote, .original { border-inline-start: 2px solid var(--line); margin: 1.3em 0; padding-inline-start: 1em; color: var(--muted); }
+    .original { display: none; font-size: .94em; }
+    body:has(#original:checked) .original { display: block; }
+    @media print {
+      :root:root { color-scheme: light; --paper: white; --ink: #222; --muted: #555; --line: #ddd; --soft: #f5f5f5; --accent: #333; }
+      .tools, .original { display: none !important; }
+      .reading { max-inline-size: none; padding: 0; }
+      body { font-size: 11pt; }
+      h2, h3 { break-after: avoid; }
+      img, table { break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
-  <nav class="tools" aria-label="阅读设置">
-    {{SOURCE}}
-    {{ORIGINAL_CONTROL}}
-    <span class="spacer"></span>
-    <button id="theme" aria-label="切换明暗外观">明暗外观</button>
-    <button id="print">打印</button>
-  </nav>
-  <div class="reading"><aside aria-label="目录">{{TOC}}</aside><article><h1>{{TITLE}}</h1>{{CONTENT}}</article></div>
+  <main class="reading">
+    <article>
+      <h1 class="paper-title">{{TITLE}}</h1>
+      <nav class="tools" aria-label="阅读设置">
+        <details class="contents"><summary>目录</summary><div class="contents-links">{{TOC}}</div></details>
+        {{SOURCE}}
+        {{ORIGINAL_CONTROL}}
+        <button type="button" class="print" hidden>打印</button>
+      </nav>
+      {{CONTENT}}
+    </article>
+  </main>
   <script src="assets/katex/katex.min.js"></script>
   <script src="assets/katex/auto-render.min.js"></script>
   <script>
-    document.querySelector('#original')?.addEventListener('click', event => {
-      const active = event.currentTarget.getAttribute('aria-pressed') !== 'true';
-      event.currentTarget.setAttribute('aria-pressed', String(active));
-      document.body.dataset.original = String(active);
+    const printButton = document.querySelector('.print');
+    printButton.hidden = false;
+    printButton.onclick = () => print();
+    document.querySelectorAll('.contents-links a').forEach(link => {
+      link.addEventListener('click', () => { link.closest('details').open = false; });
     });
-    document.querySelector('#theme').onclick = () => {
-      const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.dataset.theme = dark ? 'light' : 'dark';
-    };
-    document.querySelector('#print').onclick = () => print();
     renderMathInElement(document.querySelector('article'), { delimiters: [
       { left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true },
       { left: '\\(', right: '\\)', display: false }, { left: '$', right: '$', display: false }

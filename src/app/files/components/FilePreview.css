@@ -45,18 +45,51 @@
 
 .document-markdown {
   flex: 1;
-  padding: 20px clamp(16px, 4%, 40px);
   overflow: auto;
+  padding: clamp(24px, 6cqi, 56px) clamp(16px, 5%, 40px) 64px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 1.15rem/1.85 Spectral, Georgia, "Noto Serif SC", "Songti SC", SimSun, serif;
 }
 
 .document-markdown > * {
-  max-width: 820px;
+  max-width: 45rem;
   margin-inline: auto;
 }
 
+.document-markdown h1 {
+  margin: 0 0 1.2em;
+  padding-block-end: .55em;
+  border-block-end: 1px solid var(--line);
+  font-size: clamp(1.85rem, 5cqi, 2.8rem);
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.document-markdown h2,
+.document-markdown h3 {
+  margin: 1.7em 0 .55em;
+  line-height: 1.35;
+}
+
+.document-markdown h2 { font-size: 1.55rem; }
+.document-markdown h3 { font-size: 1.25rem; }
+.document-markdown p + p { margin-block-start: .85em; }
+
 .document-markdown img {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  margin: 1.45em auto .6em;
+}
+
+.document-markdown th {
+  background: var(--ground);
+}
+
+.document-markdown th,
+.document-markdown td {
+  border-width: 0 0 1px;
+  font: .9em/1.6 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 .html-preview {
@@ -64,7 +97,7 @@
   height: 100%;
   flex: 1;
   border: 0;
-  background: white;
+  background: var(--paper);
 }
 
 .text-preview {
@@ -88,41 +121,4 @@
   color: var(--muted);
   background: var(--ground);
   font-size: 0.857143rem;
-}
-
-.selection-actions {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: calc(100% - 24px);
-  padding: 6px 8px;
-  border: 1px solid var(--control-line);
-  border-radius: 12px;
-  background: var(--raised);
-  box-shadow: var(--floating-shadow);
-  transform-origin: bottom right;
-  animation: surface-in var(--duration-fast) var(--ease-out);
-}
-
-.selection-actions > span {
-  min-width: 0;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 0.857143rem;
-}
-
-.selection-actions button {
-  flex: none;
-  min-height: 44px;
-}
-
-.selection-actions .icon-button {
-  min-width: 44px;
 }

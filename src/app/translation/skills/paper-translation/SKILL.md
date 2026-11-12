@@ -60,7 +60,9 @@ TeX 按 `document-workbench` 处理工程、编译和展示。HTML 优先将论�
 
 读取 `response.json` 中的 `text`，保存为译稿。长工程按实际容量组织章节，保留术语与引用一致性；不能截断输入或忽略输出上限。
 
-重排阅读默认先完成 Markdown，再用 `<translation.command> render-markdown --input translated.md --output translated.html --title "论文标题" --target zh-CN` 生成 HTML，复用基础模板和本地数学渲染资源。模板支持目录、明暗外观、原文对照及打印。用户要求定制页面时，读取 `assets/paper.html` 并调整输出页面。长期修改默认模板时，编辑 `projectRoot/src/app/translation/skills/paper-translation/assets/paper.html`，再执行 `node <projectRoot>/src/app/install.mjs` 更新运行副本。
+重排译稿使用 Markdown 的分级标题、列表、引用、管道表格、围栏代码块和链接。公式用 `$…$` 或 `$$…$$`。将图片与译稿放在同一目录树，用 `![图的描述](assets/figure-1.png)` 嵌入，图注另起一段。需要跨行、跨列表格时，在重排网页中保留 HTML 表格结构。
+
+默认用 `<translation.command> render-markdown --input translated.md --output translated.html --title "论文标题" --target zh-CN` 生成阅读版。阅读版与 Markdown 保存在同一目录以复用相对资源路径，使用 [论文模板](assets/paper.html) 和本地公式资源。工作台内跟随全局明暗外观，独立打开时跟随系统。原文对照仅在有对应原文的译稿中提供。
 
 ## PDF OCR 与块翻译
 

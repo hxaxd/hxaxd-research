@@ -2,10 +2,9 @@ import 'server-only';
 
 import { parseSkillBlock, type AgentSessionEvent, type SessionMessageEntry } from '@earendil-works/pi-coding-agent';
 
-import type { ChatMessage } from '../schema';
+import type { ChatMessage, ConversationQuote } from '../schema';
 import { questionSchema } from '../schema';
 import { skillCommandPrefix } from '../skill-command';
-import type { TextQuote } from '@/app/files/schema';
 
 type PiMessage = SessionMessageEntry['message'];
 
@@ -59,7 +58,7 @@ export function mapPiEvent(
   messages: ChatMessage[],
   liveId: string,
   imageBase: string,
-  quotes?: TextQuote[],
+  quotes?: ConversationQuote[],
 ): ChatMessage[] {
   if (
     event.type === 'message_start' ||

@@ -13,7 +13,6 @@ import {
   File,
   FileText,
   FolderOpen,
-  RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ImageClip, PdfPageRequest, ReadingContext, ViewMode, TextQuote } from '../schema';
@@ -23,6 +22,7 @@ import { TextPreview } from './TextPreview';
 import { DocumentSelection } from './DocumentSelection';
 import { ImagePreview } from './ImagePreview';
 import { HtmlPreview } from './HtmlPreview';
+import { FileMenuItems } from './FileMenuItems';
 
 const textExtensions = new Set([
   'tex',
@@ -104,9 +104,9 @@ export function FilePreview({
       <DocumentSelection key={`${path}:${mode}:${revision}`}
         reading={{ path, ...((markdown || html) ? { mode } : {}) }} onQuote={onQuote}>
         {extension === 'pdf' ? (
-          <PdfViewer url={url} onPageChange={onPageChange} pageRequest={pageRequest?.path === path ? pageRequest : null}
+          <PdfViewer url={url} name={name} onPageChange={onPageChange} pageRequest={pageRequest?.path === path ? pageRequest : null}
             onCapture={clip => onCapture({ ...clip, path })}
-            fileActions={<FileMenuItems url={url} onReload={onReload} />} />
+            onReload={onReload} />
         ) : html && mode === 'preview' ? (
           <HtmlPreview url={`${previewUrl}?revision=${revision}`} workspaceId={workspaceId} onOpenDocument={onOpenDocument} />
         ) : markdown && mode === 'preview' ? (
@@ -133,18 +133,6 @@ export function FilePreview({
       </DocumentSelection>
     </section>
   );
-}
-
-function FileMenuItems({ url, onReload }: { url: string; onReload: () => void }) {
-  const t = useTranslations();
-  return <>
-    <Menu.Item className="menu-item" onSelect={onReload}>
-      <RefreshCw size={16} aria-hidden="true" />{t('files.reload')}
-    </Menu.Item>
-    <Menu.Item className="menu-item" asChild>
-      <a href={`${url}&download=1`}><Download size={16} aria-hidden="true" />{t('files.download')}</a>
-    </Menu.Item>
-  </>;
 }
 
 export function FilePreviewHeader({ workspaceId, path, mode, onModeChange, onReload, toolbarRef }: {

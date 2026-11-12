@@ -5,11 +5,11 @@ import '../conversations.css';
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
-import type { ImageClip, ReadingContext, TextQuote } from '@/app/files/schema';
+import type { ImageClip, ReadingContext } from '@/app/files/schema';
 import { ModelSelector } from '@/app/models/components/ModelSelector';
 import type { ConfiguredModel, ThinkingLevel } from '@/app/models/schema';
 
-import type { Conversation } from '../schema';
+import type { AssistantQuote, Conversation, ConversationQuote } from '../schema';
 import type { SkillCommand } from '../skill-command';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationMessages } from './ConversationMessages';
@@ -29,6 +29,7 @@ export function ConversationPanel({
   onClipsChange,
   quotes,
   onQuotesChange,
+  onQuote,
   onOpenDocument,
 }: {
   workspaceId: string;
@@ -41,8 +42,9 @@ export function ConversationPanel({
   reading: ReadingContext | null;
   clips: ImageClip[];
   onClipsChange: Dispatch<SetStateAction<ImageClip[]>>;
-  quotes: TextQuote[];
-  onQuotesChange: Dispatch<SetStateAction<TextQuote[]>>;
+  quotes: ConversationQuote[];
+  onQuotesChange: Dispatch<SetStateAction<ConversationQuote[]>>;
+  onQuote: (quote: AssistantQuote) => Promise<void>;
   onOpenDocument: (target: ReadingContext) => void;
 }) {
   const [preferences, setPreferences] = useState<Record<string, ThinkingLevel>>(() =>
@@ -65,11 +67,13 @@ export function ConversationPanel({
           {error}
         </p>
       )}
-      <ConversationMessages snapshot={snapshot} outgoing={outgoing} workspaceId={workspaceId}
-        onStopDelivery={input => delivery.stop(url, input)}
-        onRetryDelivery={item => delivery.retry(url, item)}
-        onDismissDelivery={id => delivery.dismiss(url, id)}
-        onOpenDocument={onOpenDocument} url={url} />
+      <div className="conversation-history">
+        <ConversationMessages snapshot={snapshot} outgoing={outgoing} workspaceId={workspaceId}
+          onStopDelivery={input => delivery.stop(url, input)}
+          onRetryDelivery={item => delivery.retry(url, item)}
+          onDismissDelivery={id => delivery.dismiss(url, id)}
+          onOpenDocument={onOpenDocument} onQuote={onQuote} url={url} />
+      </div>
       <ConversationComposer
         url={url}
         skillCommands={skillCommands}

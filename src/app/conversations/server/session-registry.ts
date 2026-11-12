@@ -152,7 +152,7 @@ export class PiSessionRegistry {
     if (!queueIfBusy) this.requireIdle(key);
     let context: string | null;
     try {
-      context = await buildReadingContext(root, workspaceId, input.reading, input.clips, input.quotes);
+      context = await buildReadingContext(root, workspaceId, manager, input.reading, input.clips, input.quotes);
     } catch (error) {
       const existing = this.existingSubmission(key, input.id, requestDigest);
       if (existing) return existing;

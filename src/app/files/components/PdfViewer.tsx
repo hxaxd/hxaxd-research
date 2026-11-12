@@ -12,11 +12,13 @@ import { Check, ChevronLeft, ChevronRight, Ellipsis, FileText, ListTree, Minus, 
 import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist';
 import { clsx } from 'clsx';
 import type { PDFViewer as Viewer, PDFLinkService } from 'pdfjs-dist/web/pdf_viewer.mjs';
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 
 import { useAppearance } from '@/app/settings/components/use-appearance';
 import type { ImageClip, PdfPageRequest } from '../schema';
 import { PdfRegionSelection } from './PdfRegionSelection';
+import { FileMenuItems } from './FileMenuItems';
+import { downloadDarkPdf, pdfDarkFilter } from './download-dark-pdf';
 
 type Outline = NonNullable<Awaited<ReturnType<PDFDocumentProxy['getOutline']>>>;
 type Engine = { viewer: Viewer; links: PDFLinkService };
@@ -58,12 +60,13 @@ function PdfMenuChoice({ value, disabled, children }: { value: string; disabled?
   </Menu.RadioItem>;
 }
 
-export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActions }: {
+export function PdfViewer({ url, name, onPageChange, pageRequest, onCapture, onReload }: {
   url: string;
+  name: string;
   onPageChange: (page: number, request?: PdfPageRequest) => void;
   pageRequest: PdfPageRequest | null;
   onCapture: (clip: Omit<ImageClip, 'path'>) => Promise<void>;
-  fileActions: ReactNode;
+  onReload: () => void;
 }) {
   const t = useTranslations();
   const { resolvedMode } = useAppearance();
@@ -75,10 +78,13 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
   const [outline, setOutline] = useState<Outline | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [error, setError] = useState('');
+  const [exportError, setExportError] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const pages = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
+  const exportTask = useRef<AbortController | null>(null);
   const pageKey = `research-pdf-page:${url}`;
   const currentRequest = useEffectEvent(() => pageRequest);
   const reportPage = useEffectEvent((pageNumber: number, request?: PdfPageRequest) => {
@@ -92,6 +98,25 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
   });
   const colorMode = colors === 'light' || colors === 'dark' ? colors : 'appearance';
   const inverted = (colorMode === 'appearance' ? resolvedMode : colorMode) === 'dark';
+
+  async function exportDarkPdf() {
+    const source = engine.current?.viewer.pdfDocument;
+    if (!source || exportTask.current) return;
+    const task = new AbortController();
+    exportTask.current = task;
+    setExportError(false);
+    setExporting(true);
+    try {
+      await downloadDarkPdf(source, name, task.signal);
+    } catch {
+      if (!task.signal.aborted) setExportError(true);
+    } finally {
+      exportTask.current = null;
+      if (!task.signal.aborted) setExporting(false);
+    }
+  }
+
+  useEffect(() => () => exportTask.current?.abort(), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -268,7 +293,8 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
   const colorLabel = colorChoices.find(item => item.id === colorMode)!.name;
 
   return (
-    <div className={clsx('pdf-viewer', `pdf-mode-${mode}`, inverted && 'pdf-inverted')}>
+    <div className={clsx('pdf-viewer', `pdf-mode-${mode}`, inverted && 'pdf-inverted')}
+      style={{ '--pdf-dark-filter': pdfDarkFilter } as CSSProperties}>
       <ReaderToolbar>
       <div className="pdf-controls" role="toolbar" aria-label={t('files.pdfTools')} inert={selecting}>
         <button className="icon-button pdf-toolbar-extra" aria-label={t('files.outline')} title={t('files.outline')} aria-expanded={outlineOpen} disabled={!count}
@@ -329,7 +355,8 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
                 </Menu.Portal>
               </Menu.Sub>
               <Menu.Separator className="menu-separator" />
-              {fileActions}
+              <FileMenuItems url={url} onReload={onReload} onDownload={inverted || exporting ? exportDarkPdf : undefined}
+                downloadDisabled={!count || exporting} />
             </Menu.Content>
           </Menu.Portal>
         </Menu.Root>
@@ -352,6 +379,8 @@ export function PdfViewer({ url, onPageChange, pageRequest, onCapture, fileActio
           <div className="pdfViewer" ref={pages} />
         </div>
         {!count && !error && <div className="pdf-loading" role="status"><FileText size={28} /><span>{t('files.pdfLoading')}</span></div>}
+        {exporting && <p role="status" className="pdf-download-status">{t('files.pdfExporting')}</p>}
+        {exportError && <p role="alert" className="pdf-download-status error-message">{t('files.pdfExportFailed')}</p>}
         {error && <p role="alert" className="pdf-error error-message">{error}</p>}
         {selecting && <PdfRegionSelection getPage={page => engine.current!.viewer.pdfDocument!.getPage(page)} scroll={scroll} onCapture={onCapture} onClose={() => setSelecting(false)} />}
       </div>

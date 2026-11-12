@@ -13,11 +13,12 @@ import { Markdown } from '@/shared/ui/Markdown';
 import type { ReadingContext } from '@/app/files/schema';
 import { resolveWorkspaceLink } from '@/app/files/workspace-link';
 
-import type { ChatMessage, ConversationSnapshot, SendMessage } from '../schema';
+import type { AssistantQuote, ChatMessage, ConversationSnapshot, SendMessage } from '../schema';
 import type { Delivery } from './use-message-delivery';
 import { ToolExecutionGroup } from './ToolExecutionMessage';
 import { ImageAttachment } from './ImageAttachment';
 import { QuestionMessage } from './QuestionMessage';
+import { QuoteSelectionActions } from './QuoteSelectionActions';
 
 const deliveryLabels = {
   sending: 'conversations.sending',
@@ -29,7 +30,7 @@ const deliveryLabels = {
 } as const;
 
 export const ConversationMessages = memo(function ConversationMessages({
-  snapshot, outgoing, workspaceId, onStopDelivery, onRetryDelivery, onDismissDelivery, onOpenDocument, url,
+  snapshot, outgoing, workspaceId, onStopDelivery, onRetryDelivery, onDismissDelivery, onOpenDocument, onQuote, url,
 }: {
   snapshot: ConversationSnapshot | null;
   outgoing?: Delivery[];
@@ -38,11 +39,14 @@ export const ConversationMessages = memo(function ConversationMessages({
   onRetryDelivery: (item: Delivery) => void;
   onDismissDelivery: (id: string) => void;
   onOpenDocument: (target: ReadingContext) => void;
+  onQuote: (quote: AssistantQuote) => Promise<void>;
   url: string;
 }) {
   const t = useTranslations();
   const end = useRef<HTMLDivElement>(null);
+  const history = useRef<HTMLDivElement>(null);
   const following = useRef(true);
+  const [selection, setSelection] = useState<AssistantQuote | null>(null);
   const [dismissedRun, setDismissedRun] = useState<string | null>(null);
   const messages = snapshot?.messages ?? [];
   const pending = outgoing?.filter(({ input }) =>
@@ -74,9 +78,36 @@ export const ConversationMessages = memo(function ConversationMessages({
   useEffect(() => {
     if (following.current) end.current?.scrollIntoView({ block: 'end' });
   }, [snapshot?.revision, outgoing]);
-  return (
+  useEffect(() => {
+    function updateSelection() {
+      const selected = document.getSelection();
+      const text = selected?.toString().trim();
+      const node = selected?.rangeCount ? selected.getRangeAt(0).commonAncestorContainer : null;
+      const parent = node instanceof Element ? node : node?.parentElement;
+      const reply = parent?.closest<HTMLElement>('[data-reply-id]');
+      const messageId = reply?.dataset.replyId;
+      setSelection(text && messageId && reply && history.current?.contains(reply) ? { text, messageId } : null);
+    }
+    document.addEventListener('selectionchange', updateSelection);
+    document.addEventListener('pointerup', updateSelection);
+    return () => {
+      document.removeEventListener('selectionchange', updateSelection);
+      document.removeEventListener('pointerup', updateSelection);
+    };
+  }, []);
+
+  function jumpToReply(messageId: string) {
+    const reply = history.current?.querySelector<HTMLElement>(`[data-reply-id="${CSS.escape(messageId)}"]`);
+    if (!reply) return;
+    following.current = false;
+    reply.focus({ preventScroll: true });
+    reply.scrollIntoView({ block: 'center' });
+  }
+
+  return <>
     <div
       className="conversation-messages"
+      ref={history}
       onScroll={(event) => {
         const el = event.currentTarget;
         following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
@@ -103,12 +134,16 @@ export const ConversationMessages = memo(function ConversationMessages({
                 <ImageAttachment key={index} src={image.url} label={t('conversations.imageNumber', {value0: index + 1})} />
               ))}</div>}
               {!!message.quotes?.length && <div className="message-quotes" aria-label={t('conversations.quotedText')}>
-                {message.quotes.map((quote, index) => <button className="quote-card" key={index} onClick={() => onOpenDocument(quote)}>
-                  <small>{quote.path}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}</small>
+                {message.quotes.map((quote, index) => <button type="button" className="quote-card" key={index}
+                  onClick={() => 'messageId' in quote ? jumpToReply(quote.messageId) : onOpenDocument(quote)}>
+                  <small>{'messageId' in quote ? t('conversations.assistant') : <>
+                    {quote.path}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}
+                  </>}</small>
                   <blockquote>{quote.text}</blockquote>
                 </button>)}
               </div>}
-              <div className="markdown">
+              <div className="markdown" tabIndex={message.role === 'assistant' ? -1 : undefined}
+                data-reply-id={message.role === 'assistant' && !message.id.startsWith('live:') ? message.id : undefined}>
                 <Markdown
                   components={{
                     a: ({ href, children }) => {
@@ -180,5 +215,7 @@ export const ConversationMessages = memo(function ConversationMessages({
       )}
       <div ref={end} />
     </div>
-  );
+    {selection && <QuoteSelectionActions key={selection.text} text={selection.text} onClear={() => setSelection(null)}
+      onAttach={async () => { await onQuote(selection); document.getSelection()?.removeAllRanges(); setSelection(null); }} />}
+  </>;
 });

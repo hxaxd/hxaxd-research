@@ -9,7 +9,7 @@ import { idSchema } from '@/shared/schema';
 
 import { openConversation } from './conversations';
 import { mapPiMessage, toolCallArgs } from './pi-events';
-import { textQuotesSchema, type TextQuote } from '@/app/files/schema';
+import { textQuotesSchema, type ConversationQuote } from '../schema';
 
 export const submissionEntryType = 'workbench-submission';
 const submissionEntrySchema = z.object({ id: idSchema, digest: z.string() });
@@ -27,7 +27,7 @@ export function savedSubmissionDigest(manager: SessionManager, id: string) {
 }
 
 export function readConversationHistory(root: string, workspaceId: string, id: string) {
-  let quotes: TextQuote[] = [];
+  let quotes: ConversationQuote[] = [];
   let submissionId: string | undefined;
   const args = new Map<string, Record<string, unknown>>();
   return openConversation(root, workspaceId, id)

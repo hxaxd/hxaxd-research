@@ -63,6 +63,8 @@
 
 ## 快速开始
 
+智能体接到安装、配置或维护请求时，请先阅读[维护技能](src/maintenance/skills/workbench-maintenance/SKILL.md)。
+
 在运行工作台的电脑上准备 **Node.js 24+** 和 Git。
 
 ```sh

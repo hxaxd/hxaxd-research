@@ -20,7 +20,7 @@ import { ConversationPanel } from '@/app/conversations/components/ConversationPa
 import { useMessageDelivery } from '@/app/conversations/components/use-message-delivery';
 import type { SkillCommand } from '@/app/conversations/skill-command';
 import { CreateConversationDialog } from '@/app/conversations/components/CreateConversationDialog';
-import type { Conversation } from '@/app/conversations/schema';
+import { maxTextQuotes, type Conversation, type ConversationQuote } from '@/app/conversations/schema';
 import { FilePreview, FilePreviewHeader } from '@/app/files/components/FilePreview';
 import { FileBrowser } from '@/app/files/components/FileBrowser';
 import { FileBrowserToolbar } from '@/app/files/components/FileBrowserToolbar';
@@ -28,14 +28,12 @@ import { ReaderToolbarProvider } from '@/app/files/components/ReaderToolbar';
 import {
   fileChangeSchema,
   maxImageClips,
-  maxTextQuotes,
   readerRequestSchema,
   type ReadingContext,
   type PdfPageRequest,
   type ReaderRequest,
   type ViewMode,
   type ImageClip,
-  type TextQuote,
 } from '@/app/files/schema';
 import { ModelSettingsButton } from '@/app/models/components/ModelSettingsButton';
 import { modelsChangedEvent } from '@/app/models/components/model-events';
@@ -106,7 +104,7 @@ export function Workbench({
   const [models, setModels] = useState<ConfiguredModel[]>([]);
   const [model, setModel] = useState('');
   const [clips, setClips] = useState<Record<string, ImageClip[]>>({});
-  const [quotes, setQuotes] = useState<Record<string, TextQuote[]>>({});
+  const [quotes, setQuotes] = useState<Record<string, ConversationQuote[]>>({});
   const delivery = useMessageDelivery();
   const [modelError, setModelError] = useState('');
   const [modelIssues, setModelIssues] = useState<ModelCatalog['issues']>([]);
@@ -125,6 +123,13 @@ export function Workbench({
   const currentConversation = conversations.find(
     (item) => item.id === conversationId,
   );
+  async function attachQuote(quote: ConversationQuote) {
+    const id = await referenceConversation();
+    if ((quotes[id]?.length ?? 0) >= maxTextQuotes) throw new Error(t('errors.quoteCount', {value0: maxTextQuotes}));
+    setQuotes(current => ({ ...current, [id]: [...(current[id] ?? []), quote] }));
+    layout.setOpen('conversation', true);
+  }
+
   const openDocument = useCallback((target: ReadingContext) => {
     setFile(target.path);
     setViewMode(target.mode ?? 'preview');
@@ -354,12 +359,7 @@ export function Workbench({
             setClips(current => ({ ...current, [target]: [...(current[target] ?? []), clip] }));
             layout.setOpen('conversation', true);
           }}
-          onQuote={async quote => {
-            const id = await referenceConversation();
-            if ((quotes[id]?.length ?? 0) >= maxTextQuotes) throw new Error(t('errors.quoteCount', {value0: maxTextQuotes}));
-            setQuotes(current => ({ ...current, [id]: [...(current[id] ?? []), quote] }));
-            layout.setOpen('conversation', true);
-          }}
+          onQuote={attachQuote}
         />
         </ReaderToolbarProvider>
         <div
@@ -399,6 +399,7 @@ export function Workbench({
                 onClipsChange={value => setClips(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
                 quotes={quotes[currentConversation.id] ?? []}
                 onQuotesChange={value => setQuotes(current => ({ ...current, [currentConversation.id]: typeof value === 'function' ? value(current[currentConversation.id] ?? []) : value }))}
+                onQuote={attachQuote}
                 onOpenDocument={openDocument}
               />
             ) : (

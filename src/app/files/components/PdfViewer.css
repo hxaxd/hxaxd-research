@@ -137,7 +137,7 @@
 }
 
 .pdf-inverted .pdfViewer .page {
-  filter: invert(90%) hue-rotate(180deg);
+  filter: var(--pdf-dark-filter);
 }
 
 .pdf-controls[inert] {
@@ -212,6 +212,16 @@
   position: absolute;
   inset: 10px 10px auto;
   z-index: 2;
+}
+
+.pdf-download-status {
+  position: absolute;
+  inset: auto 12px 12px auto;
+  z-index: 3;
+  padding: 8px 12px;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  background: var(--raised);
 }
 
 .pdf-outline {

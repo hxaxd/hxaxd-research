@@ -18,7 +18,7 @@ import {
 import { clsx } from 'clsx';
 import { useId, useRef, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
 
-import type { ImageClip, ReadingContext, TextQuote } from '@/app/files/schema';
+import type { ImageClip, ReadingContext } from '@/app/files/schema';
 import {
   activeSpeech,
   speechUnavailable,
@@ -29,7 +29,7 @@ import { requestJson } from '@/shared/http/request-json';
 
 import type { ThinkingLevel } from '@/app/models/schema';
 
-import type { ConversationRun, QueuedMessage, SendMessage } from '../schema';
+import type { ConversationQuote, ConversationRun, QueuedMessage, SendMessage } from '../schema';
 import { skillCommandPrefix, type SkillCommand } from '../skill-command';
 import { ImageAttachment } from './ImageAttachment';
 import { useVoiceInput } from './use-voice-input';
@@ -69,8 +69,8 @@ export function ConversationComposer({
   onSend: (input: SendMessage) => void;
   clips: ImageClip[];
   onClipsChange: Dispatch<SetStateAction<ImageClip[]>>;
-  quotes: TextQuote[];
-  onQuotesChange: Dispatch<SetStateAction<TextQuote[]>>;
+  quotes: ConversationQuote[];
+  onQuotesChange: Dispatch<SetStateAction<ConversationQuote[]>>;
   supportsImages: boolean;
   modelControl: ReactNode;
 }) {
@@ -223,7 +223,9 @@ export function ConversationComposer({
       </section>}
       {!!quotes.length && <div className="composer-quotes" aria-label={t('conversations.pendingQuotes')}>
         {quotes.map((quote, index) => <div className="quote-card" key={index}>
-          <div><small>{quote.path.split('/').pop()}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}</small>
+          <div><small>{'messageId' in quote ? t('conversations.assistant') : <>
+            {quote.path.split('/').pop()}{quote.page ? t('files.pageSuffix', {value0: quote.page}) : ''}{quote.mode === 'source' ? t('files.sourceSuffix') : ''}
+          </>}</small>
             <blockquote>{quote.text}</blockquote></div>
           <button className="icon-button" aria-label={t('conversations.removeQuote', {value0: index + 1})} disabled={submitting}
             onClick={() => onQuotesChange(current => current.filter((_, i) => i !== index))}><X size={17} /></button>
